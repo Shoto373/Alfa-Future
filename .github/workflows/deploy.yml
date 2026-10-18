@@ -29,8 +29,6 @@ jobs:
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          # For user repos the image is ghcr.io/<user>/<repo>; for org repos the
-          # token can't be lowercase, so build from the lowercased owner separately.
           tags: |
             ghcr.io/dvajf/alfa:latest
             ghcr.io/dvajf/alfa:${{ github.sha }}
@@ -41,25 +39,34 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v4
+
+      - name: Prepare SSH key
+        env:
+          SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Fingerprint proves which key GitHub actually hands to the runner.
+          ssh-keygen -lf ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
       - name: Upload compose + deploy script
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "docker-compose.prod.yml,deploy/deploy.sh"
-          target: "~/app"
-          strip_components: 0
+        env:
+          HOST: ${{ secrets.SERVER_HOST }}
+          USER: ${{ secrets.SERVER_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$USER@$HOST" 'mkdir -p ~/app'
+          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
+            docker-compose.prod.yml deploy/deploy.sh "$USER@$HOST:~/app/"
+
       - name: Remote deploy
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            chmod +x ~/app/deploy/deploy.sh
-            IMAGE=ghcr.io/dvajf/alfa:${{ github.sha }} \
-            OWNER=${{ github.repository_owner }} \
-            ACTOR=${{ github.actor }} \
-            GHCR_TOKEN=${{ secrets.GITHUB_TOKEN }} \
-            bash ~/app/deploy/deploy.sh
+        env:
+          HOST: ${{ secrets.SERVER_HOST }}
+          USER: ${{ secrets.SERVER_USER }}
+          IMAGE: ghcr.io/dvajf/alfa:${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$USER@$HOST" \
+            "cd ~/app && chmod +x deploy/deploy.sh && IMAGE=$IMAGE ACTOR=$ACTOR GHCR_TOKEN=$GHCR_TOKEN bash deploy/deploy.sh"
