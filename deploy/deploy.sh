@@ -4,8 +4,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."          # ~/app, where docker-compose.prod.yml lives
 
 : "${IMAGE:?IMAGE not set}"
-: "${OWNER:?OWNER not set}"
 : "${GHCR_TOKEN:?GHCR_TOKEN not set}"
+
+touch .env
 
 echo "==> Deploying $IMAGE"
 echo "$GHCR_TOKEN" | docker login ghcr.io -u "${ACTOR:-ci}" --password-stdin

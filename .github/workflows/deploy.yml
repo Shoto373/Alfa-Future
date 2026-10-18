@@ -36,7 +36,9 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    environment: production
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
 
@@ -56,9 +58,11 @@ jobs:
           HOST: ${{ secrets.SERVER_HOST }}
           USER: ${{ secrets.SERVER_USER }}
         run: |
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$USER@$HOST" 'mkdir -p ~/app'
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$USER@$HOST" 'mkdir -p ~/app/deploy'
           scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
-            docker-compose.prod.yml deploy/deploy.sh "$USER@$HOST:~/app/"
+            docker-compose.prod.yml "$USER@$HOST:~/app/"
+          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
+            deploy/deploy.sh "$USER@$HOST:~/app/deploy/"
 
       - name: Remote deploy
         env:
@@ -69,4 +73,4 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$USER@$HOST" \
-            "cd ~/app && chmod +x deploy/deploy.sh && IMAGE=$IMAGE ACTOR=$ACTOR GHCR_TOKEN=$GHCR_TOKEN bash deploy/deploy.sh"
+            "cd ~/app && chmod +x deploy/deploy.sh && IMAGE=$IMAGE ACTOR=$ACTOR OWNER=$ACTOR GHCR_TOKEN=$GHCR_TOKEN bash deploy/deploy.sh"
