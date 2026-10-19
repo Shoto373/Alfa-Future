@@ -53,18 +53,14 @@ jobs:
           ssh-keygen -lf ~/.ssh/deploy_key
           ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: Upload compose + deploy script
+      - name: Upload deploy script
         env:
           HOST: ${{ secrets.SERVER_HOST }}
           USER: ${{ secrets.SERVER_USER }}
         run: |
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$USER@$HOST" 'mkdir -p ~/app/deploy ~/app/nginx'
-          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
-            docker-compose.prod.yml "$USER@$HOST:~/app/"
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$USER@$HOST" 'mkdir -p ~/app/deploy'
           scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
             deploy/deploy.sh "$USER@$HOST:~/app/deploy/"
-          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
-            nginx/nginx.conf "$USER@$HOST:~/app/nginx/"
 
       - name: Remote deploy
         env:

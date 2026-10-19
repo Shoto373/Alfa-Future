@@ -10,14 +10,24 @@ touch .env
 
 echo "==> Deploying $IMAGE"
 echo "$GHCR_TOKEN" | docker login ghcr.io -u "${ACTOR:-ci}" --password-stdin
-export IMAGE
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d
 
-# Wait until the container reports healthy before cleaning up old images.
+docker pull "$IMAGE"
+docker stop alfa-app 2>/dev/null || true
+docker rm alfa-app 2>/dev/null || true
+docker stop alfa-nginx 2>/dev/null || true
+docker rm alfa-nginx 2>/dev/null || true
+
+docker run -d \
+  --name alfa-app \
+  --restart unless-stopped \
+  -p 80:8000 \
+  -p 8000:8000 \
+  --env-file .env \
+  "$IMAGE"
+
+# Wait until the container reports running before cleaning up old images.
 for i in $(seq 1 30); do
-  cid=$(docker compose -f docker-compose.prod.yml ps -q app)
-  status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$cid" 2>/dev/null || echo starting)
+  status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' alfa-app 2>/dev/null || echo starting)
   [ "$status" = "healthy" ] && break
   [ "$status" = "running" ] && [ "$i" -ge 3 ] && break
   sleep 2
@@ -25,7 +35,7 @@ done
 
 if [ "$status" != "healthy" ] && [ "$status" != "running" ]; then
   echo "!! Container not healthy (status=$status), logs:"
-  docker compose -f docker-compose.prod.yml logs --tail=50
+  docker logs --tail=50 alfa-app
   exit 1
 fi
 
