@@ -11,19 +11,9 @@ touch .env
 echo "==> Deploying $IMAGE"
 echo "$GHCR_TOKEN" | docker login ghcr.io -u "${ACTOR:-ci}" --password-stdin
 
-docker pull "$IMAGE"
-docker stop alfa-app 2>/dev/null || true
-docker rm alfa-app 2>/dev/null || true
-docker stop alfa-nginx 2>/dev/null || true
-docker rm alfa-nginx 2>/dev/null || true
-
-docker run -d \
-  --name alfa-app \
-  --restart unless-stopped \
-  -p 80:8000 \
-  -p 8000:8000 \
-  --env-file .env \
-  "$IMAGE"
+export IMAGE
+docker compose pull
+docker compose up -d --remove-orphans
 
 # Wait until the container reports running before cleaning up old images.
 for i in $(seq 1 30); do
