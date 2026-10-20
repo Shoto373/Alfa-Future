@@ -12,3 +12,10 @@ dist/
 build/
 *.log
 
+# Docs, images and temporary specs
+*.docx
+*.png
+*.conf
+extracted_spec.txt
+generate_word_report.py
+TZ_AND_PROMPTS_ALFA_PULSE.md
