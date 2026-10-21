@@ -3,6 +3,9 @@ name: CD
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, closed]
   workflow_dispatch:
 
 concurrency:
@@ -10,7 +13,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test:
+    # Запускаем тесты для push, workflow_dispatch и активных либо смердженных PR
+    if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r backend/requirements.txt
+
+      - name: Run backend tests
+        run: |
+          python -m pytest backend/tests -v
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
