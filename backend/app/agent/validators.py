@@ -10,11 +10,12 @@ import re
 from app.news.store import similarity
 
 _NUM = re.compile(r"\d+(?:[.,]\d+)?")
+_THOUSANDS = re.compile(r"(?<=\d)[  ](?=\d{3}(?!\d))")
 
 
 def _norm_numbers(text: str) -> set[str]:
     return {n.replace(",", ".").rstrip("0").rstrip(".") if "." in n.replace(",", ".") else n
-            for n in _NUM.findall(text.replace(" ", " ").replace(" ", ""))}
+            for n in _NUM.findall(_THOUSANDS.sub("", text))}
 
 
 def _claims(draft: dict) -> list[tuple[str, dict]]:

@@ -1,56 +1,24 @@
-# Инфраструктура и окружение (SPR1-04)
+# Инфраструктура
 
-В рамках первого спринта архитектура разворачивается через единый файл `compose.yaml`, состоящий ровно из двух сервисов монолита: `backend` и `frontend`.
+## Локально — `compose.yaml`
 
-## 1. Состав сервисов и порты
-
-| Сервис | Описание | Порт на хосте | Внутренний порт |
-|---|---|---|---|
-| `backend` | Python / FastAPI монолит (Uvicorn) | `127.0.0.1:8000` | `8000` |
-| `frontend` | TypeScript / React / Next.js | `127.0.0.1:3000` | `3000` |
-
-* Все порты публикуются исключительно на `127.0.0.1` (localhost).
-* Контекст сборки Docker для обоих сервисов — корень репозитория.
-
-## 2. Переменные окружения и конфигурация
-
-* `FIXTURES_DIR`: каталог с синтетическими фикстурами (`/app/contracts/examples`), монтируется в `backend` в режиме только для чтения (`:ro`).
-* `FRONTEND_ORIGIN`: разрешенный адрес для CORS (`http://localhost:3000`).
-* `ANALYSIS_TIMEOUT_SECONDS`: предельное время ожидания вызова внутреннего анализа (5 секунд).
-* `NEXT_PUBLIC_API_BASE_URL`: передается в `frontend` на этапе сборки как build argument (`http://localhost:8000`). Браузер клиента обращается к API напрямую на localhost, не используя внутренние имена Docker-сети.
-
-## 3. Проверка работоспособности (Readiness & Healthchecks)
-
-* **Backend Healthcheck:**
-  Выполняется встроенным Python-скриптом (urllib), проверяющим `GET /healthz`. Не зависит от наличия утилиты `curl` в slim-образе.
-* **Frontend Healthcheck:**
-  Выполняется через Node.js `fetch('http://127.0.0.1:3000/')`.
-* `frontend` ожидает успешного состояния `service_healthy` от `backend` перед запуском.
-
-## 4. Команды для сборки и запуска
+Два сервиса: `backend` на 127.0.0.1:8000 и `frontend` на 127.0.0.1:3000. Контекст сборки — корень репозитория.
 
 ```bash
-# 1. Валидация конфигурации Compose
-docker compose config --quiet
-
-# 2. Сборка и фоновый запуск двух сервисов
-docker compose up --build -d
-
-# 3. Проверка статуса контейнеров
-docker compose ps
-
-# 4. Проверка доступности backend
-curl -fsS http://localhost:8000/healthz
-
-# 5. Проверка доступности frontend
-curl -fsS http://localhost:3000/
-
-# 6. Остановка сервисов (без удаления томов)
-docker compose stop
+docker compose -f compose.yaml up --build -d
+CASE_DATA_DIR=./контекст/data BANK_PDF_HOST_DIR=./контекст/<pdf> docker compose -f compose.yaml up --build -d   # реальные данные кейса
 ```
 
-## 5. Ограничения первого спринта
+- `/data/case` (только чтение) — CSV кейса. Если CSV нет, используется синтетика из образа.
+- `/data/bank_pdf` (только чтение) — PDF аналитики банка.
+- Том `runtime` — профили, новости, карточки, отзывы, аудит. Переживает перезапуск. Не удаляйте его через `down -v` без необходимости.
+- Healthcheck backend: `start_period` 120 с, потому что первая сборка профилей на полном наборе данных занимает около 20 с.
+- `.env` подхватывается backend'ом: ключ LLM, RSS.
 
-* Нет внешних баз данных (PostgreSQL), Redis и очередей сообщений (Celery/RabbitMQ).
-* Синтетические данные читаются исключительно из локальных фикстур `contracts/examples/`.
-* Вызовы внешних LLM API отсутствуют, LLM-ключи в окружении не используются.
+## Прод — `docker-compose.yml` (pointers-team.online)
+
+Сервисы `backend`, `frontend` и `nginx` (HTTPS, Let's Encrypt). nginx отправляет `/api/`, `/healthz`, `/docs` и `/openapi.json` в backend, остальное — во frontend. Frontend собирается с `NEXT_PUBLIC_API_BASE_URL=https://pointers-team.online`.
+
+CD (`.github/workflows/deploy.yml`) собирает образы `ghcr.io/dvajf/alfa:backend-<sha>` и `frontend-<sha>`, копирует compose, nginx и `deploy.sh` на сервер, затем `deploy.sh` выполняет pull, `up` и ждёт состояния healthy.
+
+Данные кейса на сервере лежат вне репозитория: `~/app/case-data/csv` и `~/app/case-data/pdf`. Каталоги монтируются через `CASE_DATA_DIR` и `BANK_PDF_HOST_DIR`, по умолчанию берутся эти пути. Ключ LLM хранится в `~/app/.env`.

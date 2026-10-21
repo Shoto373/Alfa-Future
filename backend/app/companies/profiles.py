@@ -7,6 +7,7 @@ RUNTIME_DIR/companies.json. Экспозиции — объяснимые при
 
 import json
 import logging
+import os
 import threading
 from functools import lru_cache
 
@@ -31,22 +32,39 @@ def _load() -> dict:
         if _cache is not None:
             return _cache
         path = config.profiles_path()
-        if not path.exists():
-            data_dir = config.data_dir()
-            if not (data_dir / "df_Uid_data_hack.csv").exists():
+        data_dir = config.data_dir()
+        if not (data_dir / "df_Uid_data_hack.csv").exists():
+            fallback = config.fallback_data_dir()
+            logger.warning("no case CSV in %s, falling back to %s", data_dir, fallback)
+            data_dir = fallback
+        signature = _signature(data_dir)
+        data = None
+        if path.exists():
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                data = None
+        explicit = bool(os.environ.get("PROFILES_PATH"))
+        if data is None or (not explicit and signature and data.get("signature") != signature):
+            if not signature:
                 raise ProfilesError(f"Нет данных: {data_dir}/df_Uid_data_hack.csv")
             logger.info("building company profiles from %s", data_dir)
-            result = etl.build_profiles(data_dir)
+            data = etl.build_profiles(data_dir)
+            data["signature"] = signature
+            data["synthetic"] = (data_dir / "SYNTHETIC").exists()
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
-            raise ProfilesError("Файл профилей поврежден") from exc
+            path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         data["by_id"] = {c["company_id"]: c for c in data["companies"]}
         _cache = data
         exposures.cache_clear()
         return _cache
+
+
+def _signature(data_dir) -> str | None:
+    files = [data_dir / n for n in ("df_Uid_data_hack.csv", "df_Uid_payment_hack.csv", "df_Fid_Uid_link_hack.csv")]
+    if not files[0].exists():
+        return None
+    return "|".join(f"{f.name}:{f.stat().st_size}:{int(f.stat().st_mtime)}" for f in files if f.exists())
 
 
 def reset_cache() -> None:
@@ -57,7 +75,8 @@ def reset_cache() -> None:
 
 def meta() -> dict:
     d = _load()
-    return {k: d[k] for k in ("generated_at", "source_dir", "total_companies", "selection_rule")} | {"profiles": len(d["companies"])}
+    return {k: d.get(k) for k in ("generated_at", "source_dir", "total_companies", "selection_rule")} | {
+        "profiles": len(d["companies"]), "synthetic": bool(d.get("synthetic", True))}
 
 
 def list_companies(query: str = "", sector: str | None = None, limit: int = 50, offset: int = 0) -> tuple[int, list[dict]]:

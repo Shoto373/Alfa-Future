@@ -1,20 +1,20 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import { SessionProvider } from "@/lib/session";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Альфа.Пульс — демо",
-  description: "Демонстрационный макет новостной аналитики на синтетических данных",
+  title: "Альфа.Пульс — новостная аналитика для бизнеса",
+  description: "Прототип хакатона: персонализированные бизнес-инсайты из новостей и аналитики Альфа-Банка",
 };
+
+export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#EF3124" };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ru">
       <body>
-        <div className="demo-banner" role="note">
-          Демонстрационный макет хакатона. Не является действующим сервисом банка. Все данные искусственные.
-        </div>
-        {children}
+        <SessionProvider>{children}</SessionProvider>
       </body>
     </html>
   );

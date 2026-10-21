@@ -1,96 +1,81 @@
-import { mockMode, mockRequest } from "./mock";
-import type { CompanyProfile, ErrorResponse, Insight, InsightRequest } from "./types";
+import type {
+  Answer, BankDocument, CompanyProfile, CompanySummary, Exposure, FeedItem, Insight, Meta, NewsBrief, Role,
+} from "./types";
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
-export const BROWSER_TIMEOUT_MS = 10_000;
-
 export class ApiError extends Error {
-  constructor(
-    message: string,
-    readonly code: string,
-    readonly retryable: boolean,
-    readonly status?: number,
-    readonly requestId?: string,
-  ) {
+  constructor(message: string, readonly code: string, readonly retryable: boolean, readonly status?: number, readonly requestId?: string) {
     super(message);
   }
 }
 
-/** Ошибка, вызванная отменой запроса пользователем (смена выбора). Не показывается. */
+/** Отмена запроса (смена компании, роли или уход со страницы) — не показывается пользователю. */
 export class AbortedError extends Error {}
 
-function isErrorResponse(value: unknown): value is ErrorResponse {
-  const error = (value as ErrorResponse | null)?.error;
-  return typeof error?.code === "string" && typeof error?.message === "string";
-}
-
-async function request<T>(path: string, init: RequestInit, signal?: AbortSignal): Promise<T> {
+async function request<T>(path: string, init: RequestInit = {}, opts: { signal?: AbortSignal; timeoutMs?: number } = {}): Promise<T> {
   const controller = new AbortController();
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
     controller.abort();
-  }, BROWSER_TIMEOUT_MS);
+  }, opts.timeoutMs ?? 15_000);
   const onAbort = () => controller.abort();
-  signal?.addEventListener("abort", onAbort);
-
+  opts.signal?.addEventListener("abort", onAbort);
   try {
-    if (mockMode) {
-      return (await mockRequest(path, init, controller.signal)) as T;
-    }
-
-    let response: Response;
+    let res: Response;
     try {
-      response = await fetch(`${API_BASE_URL}${path}`, { ...init, signal: controller.signal });
+      res = await fetch(`${API_BASE_URL}${path}`, { ...init, signal: controller.signal });
     } catch {
-      if (timedOut) {
-        throw new ApiError("Сервер не ответил за 10 секунд", "BROWSER_TIMEOUT", true);
-      }
-      if (signal?.aborted) {
-        throw new AbortedError();
-      }
-      throw new ApiError("Нет связи с сервером. Проверьте, что backend запущен.", "NETWORK_ERROR", true);
+      if (timedOut) throw new ApiError("Сервер не ответил вовремя", "BROWSER_TIMEOUT", true);
+      if (opts.signal?.aborted) throw new AbortedError();
+      throw new ApiError("Нет связи с сервером. Проверьте подключение и повторите.", "NETWORK_ERROR", true);
     }
-
-    const body: unknown = await response.json().catch(() => null);
-    if (!response.ok) {
-      if (isErrorResponse(body)) {
-        const { code, message, retryable, request_id } = body.error;
-        throw new ApiError(message, code, retryable, response.status, request_id);
-      }
-      throw new ApiError(`Ошибка сервера (HTTP ${response.status})`, "HTTP_ERROR", response.status >= 500, response.status);
-    }
-    if (body === null) {
-      throw new ApiError("Сервер вернул некорректный ответ", "INVALID_RESPONSE", true, response.status);
+    const body: unknown = await res.json().catch(() => null);
+    if (!res.ok) {
+      const err = (body as { error?: { code: string; message: string; retryable: boolean; request_id: string } } | null)?.error;
+      if (err) throw new ApiError(err.message, err.code, err.retryable, res.status, err.request_id);
+      throw new ApiError(`Ошибка сервера (HTTP ${res.status})`, "HTTP_ERROR", res.status >= 500, res.status);
     }
     return body as T;
-  } catch (error) {
-    if (signal?.aborted && !timedOut) {
-      throw new AbortedError();
-    }
-    if (timedOut && !(error instanceof ApiError)) {
-      throw new ApiError("Сервер не ответил за 10 секунд", "BROWSER_TIMEOUT", true);
-    }
-    throw error;
+  } catch (e) {
+    if (opts.signal?.aborted && !timedOut) throw new AbortedError();
+    throw e;
   } finally {
     clearTimeout(timer);
-    signal?.removeEventListener("abort", onAbort);
+    opts.signal?.removeEventListener("abort", onAbort);
   }
 }
 
-export async function fetchCompanies(signal?: AbortSignal): Promise<CompanyProfile[]> {
-  const body = await request<{ items: CompanyProfile[] }>("/api/v1/companies", { method: "GET" }, signal);
-  if (!Array.isArray(body.items)) {
-    throw new ApiError("Сервер вернул некорректный список компаний", "INVALID_RESPONSE", true);
-  }
-  return body.items;
-}
+const json = (method: string, data: unknown): RequestInit => ({
+  method,
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(data),
+});
 
-export async function createInsight(payload: InsightRequest, signal?: AbortSignal): Promise<Insight> {
-  return request<Insight>(
-    "/api/v1/insights",
-    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) },
-    signal,
-  );
-}
+export const api = {
+  meta: (signal?: AbortSignal) => request<Meta>("/api/v1/meta", {}, { signal }),
+  companies: (q: string, limit = 20, signal?: AbortSignal) =>
+    request<{ total: number; items: CompanySummary[] }>(`/api/v1/companies?q=${encodeURIComponent(q)}&limit=${limit}`, {}, { signal }),
+  company: (id: string, signal?: AbortSignal) =>
+    request<{ profile: CompanyProfile; exposures: Exposure[] }>(`/api/v1/companies/${encodeURIComponent(id)}`, {}, { signal }),
+  feed: (companyId: string, role: Role, topic?: string, signal?: AbortSignal) =>
+    request<{ items: FeedItem[] }>(
+      `/api/v1/feed?company_id=${encodeURIComponent(companyId)}&role=${role}${topic ? `&topic=${topic}` : ""}`, {}, { signal }),
+  insight: (companyId: string, role: Role, newsId: string, force = false, signal?: AbortSignal) =>
+    request<Insight>("/api/v1/insights", json("POST", { company_id: companyId, role, news_id: newsId, force_refresh: force }),
+      { signal, timeoutMs: 120_000 }),
+  ask: (insightId: string, question: string) =>
+    request<Answer>(`/api/v1/insights/${insightId}/questions`, json("POST", { question }), { timeoutMs: 60_000 }),
+  feedback: (insightId: string, rating: 1 | -1, section: string, role: Role, comment?: string) =>
+    request<{ status: string }>("/api/v1/feedback", json("POST", { insight_id: insightId, rating, section, role, comment: comment || null })),
+  addNews: (payload: { title?: string; text?: string; url?: string }) =>
+    request<{ created: boolean; duplicate_of: string | null; news: NewsBrief }>("/api/v1/news", json("POST", payload), { timeoutMs: 30_000 }),
+  refreshNews: () =>
+    request<{ added: number; duplicates: number; sources: { name: string; fetched: number; error: string | null }[] }>(
+      "/api/v1/news/refresh", { method: "POST" }, { timeoutMs: 90_000 }),
+  analytics: () => request<{ documents: BankDocument[] }>("/api/v1/analytics"),
+  metrics: () => request<Record<string, any>>("/api/v1/metrics"),
+  audit: () => request<{ items: Record<string, any>[] }>("/api/v1/audit?limit=60"),
+  pdfUrl: (docId: string, page?: number | null) => `${API_BASE_URL}/api/v1/analytics/${docId}/pdf${page ? `#page=${page}` : ""}`,
+};

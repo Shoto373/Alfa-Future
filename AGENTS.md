@@ -1,17 +1,18 @@
 # Правила для участников и агентов
 
-Архитектура спринта 1: Next.js (`frontend/`) → один FastAPI backend (`backend/`) → внутренний модуль анализа (вызов Python-функции). Без отдельного ML-сервиса, БД, LLM и авторизации. Только синтетические данные.
+Архитектура: Next.js (`frontend/`) → один FastAPI backend (`backend/`): профили компаний, новости, база знаний банка, ранжирование и агент — модули одного процесса. LLM — только модели кейса и только через `backend/app/agent/llm.py`. Данные кейса (`контекст/`, реальные CSV/PDF) в Git не попадают.
 
 ## Владение файлами
 
 | Зона | Файлы | Владелец |
 |---|---|---|
 | Каркас и контракты (SPR1-00) | `backend/app/main.py`, `backend/app/schemas.py`, `backend/app/errors.py`, `backend/requirements.txt`, `backend/.python-version`, `contracts/**`, `AGENTS.md`, `.gitignore`, `backend/tests/test_contracts.py` | владелец каркаса |
-| API и компании (SPR1-01) | `backend/app/api/**`, `backend/app/companies/**`, `backend/tests/test_api.py`, `backend/tests/test_companies.py` | SPR1-01 |
+| API и данные компаний | `backend/app/api/**`, `backend/app/companies/**`, `backend/tests/test_api.py`, `backend/tests/test_data_pipeline.py` | API / данные |
+| Новости и база знаний | `backend/app/news/**`, `backend/app/knowledge/**`, `backend/tests/test_news.py` | контент |
 | Интерфейс (SPR1-02) | `frontend/**`, кроме `frontend/Dockerfile` и `frontend/.dockerignore` | SPR1-02 |
-| Анализ (SPR1-03) | `backend/app/analysis/**`, `backend/tests/test_analysis.py` | SPR1-03 |
+| Агент и ранжирование | `backend/app/agent/**`, `backend/app/ranking.py`, `backend/app/storage.py`, `backend/tests/test_agent.py` | AI |
 | Docker и окружение (SPR1-04) | `infra/**`, `compose.yaml`, `.env.example`, `.dockerignore`, `backend/Dockerfile`, `backend/.dockerignore`, `frontend/Dockerfile`, `frontend/.dockerignore` | SPR1-04 |
-| Приемка и документация (SPR1-05) | `tests/e2e/**`, `docs/sprint-01/**`, `README.md`, `THIRD_PARTY_NOTICES` | SPR1-05 |
+| Приемка и документация | `tests/e2e/**`, `docs/**`, `README.md`, `THIRD_PARTY_NOTICES` | QA |
 
 Файлы каркаса после baseline меняет только их владелец через интегратора. Изменение вне своей зоны — точный запрос интегратору.
 

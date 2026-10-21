@@ -28,3 +28,9 @@ backend/tests
 # Contracts Fixtures preservation
 contracts/examples/
 !contracts/examples/**
+
+# Case data and runtime state never go into images
+контекст
+data/runtime
+data/processed
+**/.venv

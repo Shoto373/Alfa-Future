@@ -1,8 +1,10 @@
-"""Сквозной smoke-тест backend спринта 1 (только стандартная библиотека).
+"""Сквозной smoke-тест backend (только стандартная библиотека).
 
     python tests/e2e/smoke.py --base-url http://localhost:8000
 
-Любая непройденная проверка дает ненулевой код выхода.
+Проходит основной сценарий кейса: компании -> персональная лента ->
+разбор новости агентом -> уточняющий вопрос -> обратная связь -> метрики,
+плюс новость, которой нет в демо-ленте, и ошибки API.
 """
 
 import argparse
@@ -12,127 +14,127 @@ import time
 import urllib.error
 import urllib.request
 
-COMPANIES = ("demo_company_001", "demo_company_002")
-ROLES = ("ceo", "cfo")
-EVENT_ID = "demo_event_001"
-INSIGHT_FIELDS = {
-    "schema_version": str, "request_id": str, "company_id": str, "event_id": str, "role": str,
-    "status": str, "is_mock": bool, "title": str, "facts": list, "company_relevance": str,
-    "risks": list, "opportunities": list, "actions": list, "bank_position": type(None),
-    "model_conclusion": str, "sources": list, "uncertainty": list,
-}
-
 
 class Checker:
     def __init__(self):
-        self.failures: list[str] = []
-        self.passed = 0
+        self.failures, self.passed = [], 0
 
-    def check(self, condition: bool, name: str, detail: object = "") -> bool:
-        if condition:
+    def check(self, ok: bool, name: str, detail: object = "") -> bool:
+        if ok:
             self.passed += 1
             print(f"  ok   {name}")
         else:
             self.failures.append(name)
-            print(f"  FAIL {name} {detail}")
-        return condition
+            print(f"  FAIL {name} {str(detail)[:300]}")
+        return ok
 
 
-def call(base: str, method: str, path: str, body: object = None, timeout: float = 15):
+def call(base, method, path, body=None, timeout=120):
     data = None if body is None else json.dumps(body).encode()
-    req = urllib.request.Request(base + path, data=data, method=method,
-                                 headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(base + path, data=data, method=method, headers={"Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.status, json.loads(resp.read() or b"null")
-    except urllib.error.HTTPError as err:
-        raw = err.read()
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status, json.loads(r.read() or b"null")
+    except urllib.error.HTTPError as e:
+        raw = e.read()
         try:
-            return err.code, json.loads(raw)
+            return e.code, json.loads(raw)
         except ValueError:
-            return err.code, raw.decode(errors="replace")
+            return e.code, raw.decode(errors="replace")
 
 
-def wait_healthy(base: str, seconds: float) -> bool:
-    deadline = time.monotonic() + seconds
-    while time.monotonic() < deadline:
+def wait(base, seconds):
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
         try:
-            status, body = call(base, "GET", "/healthz", timeout=3)
-            if status == 200:
+            if call(base, "GET", "/healthz", timeout=3)[0] == 200:
                 return True
-        except (urllib.error.URLError, OSError):
+        except OSError:
             pass
         time.sleep(1)
     return False
 
 
-def check_error(c: Checker, name: str, result, status: int, code: str):
-    got_status, body = result
-    error = body.get("error", {}) if isinstance(body, dict) else {}
-    c.check(got_status == status and error.get("code") == code, f"{name}: {status} {code}", (got_status, body))
-    c.check(isinstance(error.get("request_id"), str) and error.get("request_id"), f"{name}: request_id в ошибке")
-    c.check(error.get("retryable") is (status in (503, 504)), f"{name}: retryable")
+def check_insight(c: Checker, label: str, ins: dict, company_id: str, role: str, news_id: str):
+    c.check((ins.get("company_id"), ins.get("role"), ins.get("news_id")) == (company_id, role, news_id), f"{label}: контекст запроса сохранен")
+    c.check(ins.get("schema_version") == "1.0.0", f"{label}: schema_version 1.0.0")
+    c.check(bool(ins.get("headline")) and ins.get("headline") != ins.get("title"), f"{label}: вывод не повторяет заголовок")
+    for sec in ("why_important", "actions"):
+        c.check(bool(ins.get(sec)), f"{label}: раздел {sec} заполнен")
+    c.check(bool(ins.get("risks") or ins.get("opportunities")), f"{label}: есть риски или возможности")
+    ids = {s["source_id"] for s in ins.get("sources", [])}
+    claims = [cl for sec in ("why_important", "risks", "opportunities", "actions") for cl in ins.get(sec, [])]
+    c.check(all(cl["source_ids"] and set(cl["source_ids"]) <= ids for cl in claims), f"{label}: каждый вывод связан с источником")
+    bank = ins.get("bank_view", {})
+    c.check(all(t["origin"] == "bank" for t in bank.get("theses", [])), f"{label}: позиция банка отделена от выводов AI")
+    stages = [s["stage"] for s in ins.get("trace", [])]
+    c.check({"plan", "tool", "check", "finalize"} <= set(stages), f"{label}: трасса агента", stages)
+    c.check(ins.get("quality", {}).get("passed") is True, f"{label}: самопроверка пройдена", ins.get("quality"))
 
 
-def run(base: str, wait: float) -> int:
+def run(base: str, wait_s: float) -> int:
     c = Checker()
     print(f"Smoke {base}")
-
-    if not c.check(wait_healthy(base, wait), "backend отвечает на /healthz"):
+    if not c.check(wait(base, wait_s), "backend отвечает на /healthz"):
         return finish(c)
-    status, body = call(base, "GET", "/healthz")
-    c.check(status == 200 and body == {"status": "ok", "service": "backend"}, "healthz тело", body)
 
-    status, body = call(base, "GET", "/api/v1/companies")
-    items = body.get("items") if isinstance(body, dict) else None
-    c.check(status == 200 and isinstance(items, list), "список компаний", (status, body))
-    ids = [i.get("company_id") for i in items or []]
-    for company_id in COMPANIES:
-        c.check(company_id in ids, f"компания {company_id} в списке", ids)
-    c.check(all(i.get("is_synthetic") is True for i in items or []), "все компании синтетические")
+    status, meta = call(base, "GET", "/api/v1/meta")
+    c.check(status == 200 and meta["data"]["profiles"] > 0, "профили компаний построены", meta)
+    c.check(meta["knowledge"]["documents"] >= 9, "база знаний банка загружена")
 
-    relevance: dict[str, set[str]] = {}
-    request_ids = set()
-    for company_id in COMPANIES:
-        for role in ROLES:
-            label = f"{company_id}/{role}"
-            payload = {"company_id": company_id, "role": role, "event_id": EVENT_ID}
-            status, card = call(base, "POST", "/api/v1/insights", payload)
-            if not c.check(status == 200 and isinstance(card, dict), f"{label}: 200", (status, card)):
-                continue
-            missing = [k for k, t in INSIGHT_FIELDS.items() if not isinstance(card.get(k), t)]
-            extra = set(card) - set(INSIGHT_FIELDS)
-            c.check(not missing and not extra, f"{label}: поля и типы карточки", (missing, extra))
-            c.check((card.get("company_id"), card.get("event_id"), card.get("role")) == (company_id, EVENT_ID, role),
-                    f"{label}: company_id/event_id/role")
-            c.check(card.get("schema_version") == "0.1.0", f"{label}: schema_version")
-            c.check(card.get("status") == "completed", f"{label}: status")
-            c.check(card.get("is_mock") is True, f"{label}: is_mock=true")
-            c.check("bank_position" in card and card["bank_position"] is None, f"{label}: bank_position=null")
-            c.check(bool(card.get("request_id")) and card["request_id"] not in request_ids,
-                    f"{label}: уникальный request_id")
-            request_ids.add(card.get("request_id"))
-            c.check("LLM" in card.get("model_conclusion", ""), f"{label}: model_conclusion сообщает про LLM")
-            sources = card.get("sources") or []
-            c.check(any(s.get("kind") == "synthetic_fixture" and s.get("source_id") == EVENT_ID for s in sources),
-                    f"{label}: источник synthetic_fixture")
-            relevance.setdefault(company_id, set()).add(card.get("company_relevance"))
+    status, companies = call(base, "GET", "/api/v1/companies?limit=50")
+    items = companies.get("items", []) if isinstance(companies, dict) else []
+    c.check(status == 200 and len(items) >= 2, "список компаний")
+    if len(items) < 2:
+        return finish(c)
+    a, b = items[0]["company_id"], next(i["company_id"] for i in items if i["sector"] != items[0]["sector"])
 
-    a, b = (relevance.get(cid, set()) for cid in COMPANIES)
-    c.check(bool(a) and bool(b) and a.isdisjoint(b), "две компании дают различимый company_relevance")
+    _, fa = call(base, "GET", f"/api/v1/feed?company_id={a}&role=cfo")
+    _, fb = call(base, "GET", f"/api/v1/feed?company_id={b}&role=ceo")
+    la, lb = fa.get("items", []), fb.get("items", [])
+    c.check(bool(la) and bool(lb), "лента строится для двух компаний")
+    c.check([i["relevance"]["score"] for i in la] == sorted([i["relevance"]["score"] for i in la], reverse=True), "лента отсортирована по релевантности")
+    c.check(all(i["relevance"]["reasons"] for i in la[:3]), "у топ-новостей есть объяснение релевантности")
+    c.check([(i["news"]["news_id"], i["relevance"]["score"]) for i in la[:5]] != [(i["news"]["news_id"], i["relevance"]["score"]) for i in lb[:5]],
+            "ленты разных компаний и ролей отличаются")
 
-    base_req = {"company_id": COMPANIES[0], "role": "cfo", "event_id": EVENT_ID}
-    check_error(c, "неизвестная компания", call(base, "POST", "/api/v1/insights", {**base_req, "company_id": "unknown"}),
-                404, "COMPANY_NOT_FOUND")
-    check_error(c, "неизвестное событие", call(base, "POST", "/api/v1/insights", {**base_req, "event_id": "unknown"}),
-                404, "EVENT_NOT_FOUND")
-    check_error(c, "неверная роль", call(base, "POST", "/api/v1/insights", {**base_req, "role": "cto"}),
-                400, "INVALID_REQUEST")
-    check_error(c, "лишнее поле", call(base, "POST", "/api/v1/insights", {**base_req, "extra": 1}),
-                400, "INVALID_REQUEST")
-    check_error(c, "тело больше 64 КиБ", call(base, "POST", "/api/v1/insights", {**base_req, "pad": "x" * 70000}),
-                413, "REQUEST_TOO_LARGE")
+    news_id = la[0]["news"]["news_id"]
+    status, ins = call(base, "POST", "/api/v1/insights", {"company_id": a, "role": "cfo", "news_id": news_id})
+    if c.check(status == 200, "разбор новости агентом", ins):
+        check_insight(c, "разбор A/cfo", ins, a, "cfo", news_id)
+        _, other = call(base, "POST", "/api/v1/insights", {"company_id": b, "role": "ceo", "news_id": news_id})
+        c.check(other.get("headline") != ins.get("headline") or other.get("why_important") != ins.get("why_important"),
+                "одна новость по-разному интерпретирована для разных компаний")
+        status, ans = call(base, "POST", f"/api/v1/insights/{ins['insight_id']}/questions", {"question": "Какие источники использованы?"})
+        c.check(status == 200 and ans.get("sources"), "уточняющий вопрос: ответ с источниками", ans)
+        status, ans = call(base, "POST", f"/api/v1/insights/{ins['insight_id']}/questions", {"question": "Покажи в разрезе контрагентов"})
+        c.check(status == 200 and ans.get("claims"), "уточняющий вопрос: другой разрез данных", ans)
+        status, _ = call(base, "POST", "/api/v1/feedback", {"insight_id": ins["insight_id"], "rating": 1, "section": "risks"})
+        c.check(status == 200, "обратная связь сохранена")
 
+    status, added = call(base, "POST", "/api/v1/news", {"text": "Правительство одобрило снижение экспортных пошлин на удобрения и зерно "
+                                                                 "с 1 декабря 2026 года, что должно поддержать поставки в Китай и Турцию."})
+    if c.check(status == 200 and added["news"]["topics"], "новость пользователя классифицирована", added):
+        nid = added["news"]["news_id"]
+        status, ins2 = call(base, "POST", "/api/v1/insights", {"company_id": a, "role": "ceo", "news_id": nid})
+        if c.check(status == 200, "ранее не показанная новость разобрана", ins2):
+            check_insight(c, "новая новость", ins2, a, "ceo", nid)
+
+    status, m = call(base, "GET", "/api/v1/metrics")
+    c.check(status == 200 and m["content"]["insights"] >= 1, "метрики качества доступны")
+    status, audit = call(base, "GET", "/api/v1/audit")
+    c.check(status == 200 and any(x["tool"] == "search_bank_analytics" for x in audit["items"]), "журнал обращений к инструментам")
+
+    for name, path, body, code, exp in [
+        ("неизвестная компания", "/api/v1/insights", {"company_id": "nope", "role": "cfo", "news_id": news_id}, 404, "COMPANY_NOT_FOUND"),
+        ("неизвестная новость", "/api/v1/insights", {"company_id": a, "role": "cfo", "news_id": "nope"}, 404, "NEWS_NOT_FOUND"),
+        ("неверная роль", "/api/v1/insights", {"company_id": a, "role": "intern", "news_id": news_id}, 400, "INVALID_REQUEST"),
+        ("тело больше 64 КиБ", "/api/v1/news", {"text": "x" * 70000}, 413, "REQUEST_TOO_LARGE"),
+        ("SSRF по ссылке", "/api/v1/news", {"url": "http://127.0.0.1:8000/healthz"}, 422, "FETCH_FAILED"),
+    ]:
+        status, body_ = call(base, "POST", path, body)
+        err = body_.get("error", {}) if isinstance(body_, dict) else {}
+        c.check(status == code and err.get("code") == exp and err.get("request_id"), f"{name}: {code} {exp}", (status, body_))
     return finish(c)
 
 
@@ -141,11 +143,11 @@ def finish(c: Checker) -> int:
     return 1 if c.failures else 0
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--base-url", default="http://localhost:8000")
-    parser.add_argument("--wait", type=float, default=60, help="сколько секунд ждать /healthz")
-    args = parser.parse_args()
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--base-url", default="http://localhost:8000")
+    p.add_argument("--wait", type=float, default=180)
+    args = p.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
     sys.exit(run(args.base_url.rstrip("/"), args.wait))
 

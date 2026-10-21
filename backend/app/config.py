@@ -31,6 +31,10 @@ def data_dir() -> Path:
     return Path(_env("DATA_DIR", str(REPO_ROOT / "data" / "synthetic")))
 
 
+def fallback_data_dir() -> Path:
+    return Path(_env("FALLBACK_DATA_DIR", str(REPO_ROOT / "data" / "synthetic")))
+
+
 def runtime_dir() -> Path:
     path = Path(_env("RUNTIME_DIR", str(REPO_ROOT / "data" / "runtime")))
     path.mkdir(parents=True, exist_ok=True)

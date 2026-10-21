@@ -2,56 +2,66 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Alfa Pulse (Альфа.Пульс) — hackathon project (deadline 2026-10-26). Sprint 1 is a technical skeleton: Next.js frontend → one Python/FastAPI backend that calls an in-process analysis function. Synthetic fixtures only; no DB, no LLM, no auth. Project docs, user-facing text and commit bodies are in Russian.
+Alfa Pulse (Альфа.Пульс) — hackathon prototype (Alfa-Bank case, deadline 2026-10-26): a Next.js "Alfa-Business" UI plus one FastAPI backend. The backend turns news and Alfa-Bank research into personalized insights for large companies. UI text, docs and commit bodies are in Russian. The full case and data live in the gitignored `контекст/` folder (task PDF, bank research PDFs, client CSVs). Never commit anything from it.
 
 ## Commands
 
-Backend (run from `backend/`; Python 3.11 in Docker, pinned deps in `backend/requirements.txt`):
+Backend (run from `backend/`; Python 3.11 in Docker, pinned `requirements.txt`):
 ```bash
-python -m pip install -r requirements.txt
-python -m pytest -q                                   # all backend tests
-python -m pytest tests/test_api.py -q                 # one file
-python -m pytest tests/test_api.py::test_list_companies -q   # one test
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+python -m pytest -q                                  # all tests (use synthetic data via conftest)
+python -m pytest tests/test_agent.py::test_questions -q
+python -m uvicorn app.main:app --port 8000
+python -m app.companies.etl --data-dir ../data/synthetic --out /tmp/companies.json
+python scripts/gen_contracts.py                      # regenerate contracts/ after changing schemas.py or routes
+python scripts/make_synthetic_data.py --out ../data/synthetic
 ```
 CI runs `python -m pytest backend/tests -v` from the repo root; that must keep working too.
 
-Frontend (run from `frontend/`; Node ≥ 20.9, exact versions + `package-lock.json`):
+Frontend (`frontend/`, Next 16 — see `frontend/AGENTS.md`: check `node_modules/next/dist/docs` before using Next APIs):
 ```bash
-npm ci
-npm run typecheck     # tsc --noEmit
-npm run build
-npm run dev           # 0.0.0.0:3000
-NEXT_PUBLIC_API_MOCK=empty npm run dev   # local test double: ok | empty | error | slow
+npm ci && npm run build && npm run typecheck   # typecheck needs .next types, so build first after route changes
+npm run dev
 ```
 
-Full stack and end-to-end:
+Stack and end-to-end:
 ```bash
-docker compose -f compose.yaml up --build -d     # exactly two services: backend :8000, frontend :3000 (127.0.0.1 only)
-python tests/e2e/smoke.py --base-url http://localhost:8000   # stdlib only, non-zero exit on failure
+docker compose -f compose.yaml up --build -d   # always pass -f: root docker-compose.yml is production (nginx)
+CASE_DATA_DIR=./контекст/data BANK_PDF_HOST_DIR=./контекст/drive-download-20261021T181704Z-1-001 docker compose -f compose.yaml up --build -d
+python tests/e2e/smoke.py --base-url http://localhost:8000
+python tests/e2e/ui_check.py --front http://localhost:3000   # needs playwright + chromium
 ```
-The root also has `docker-compose.yml` (production: legacy `app/` + nginx/HTTPS). Docker picks `compose.yaml` with a warning, so pass `-f compose.yaml` explicitly.
 
 ## Architecture
 
-**The contract is the source of truth.** `backend/app/schemas.py` (Pydantic, all fields required, `extra="forbid"`) ↔ `contracts/schemas/common.json` ↔ `contracts/openapi.yaml` ↔ `contracts/examples/*.json` ↔ `frontend/lib/types.ts`. `backend/tests/test_contracts.py` regenerates JSON Schema from the models via `pydantic.json_schema.models_json_schema` and fails when `common.json` drifts. It also checks that the routes in `openapi.yaml` match the real `app.openapi()`. If you change a model, regenerate the schema and examples (see `contracts/README.md`) and update the TS types.
+**Data flow.**
+- `companies/etl.py` (stdlib only) turns the case CSVs from `DATA_DIR` into large-business profiles. It caches them in `RUNTIME_DIR/companies.json` and rebuilds when the CSV size or mtime signature changes. If `DATA_DIR` has no CSVs, it falls back to `data/synthetic`.
+- `profiles.exposures()` derives explainable `{topic, sign, weight, feature, why, origin}` rows from three sources: the sector sensitivity table (`sectors.SECTOR_SENSITIVITY`), product flags, and the counterparty sectors in the payment data.
+- Exposures drive `ranking.score()`, the agent composer and the UI. A new sector or topic therefore usually needs entries in `sectors.py`, `news/taxonomy.py` and `agent/composer.py` (`DIRECTION_VALUE`, `TOPIC_EFFECT`, `ACTIONS`).
 
-**Request flow for `POST /api/v1/insights`** (`backend/app/api/router.py`):
-1. `RequestContextMiddleware` (`api/setup.py`) assigns `request.state.request_id`, enforces the 64 KiB body limit (by Content-Length and by streamed bytes), and logs only metadata.
-2. The fixtures repository (`app/companies/repository.py`) reads `FIXTURES_DIR` (default `contracts/examples`) on every call. Corrupt fixtures raise `FixturesError` → 500. They are never replaced by an empty list.
-3. `analysis_service.generate_insight(company, role, event, request_id)` is wrapped in `asyncio.wait_for(ANALYSIS_TIMEOUT_SECONDS)`. It is called through the module attribute (`app.analysis.service`), so tests can `monkeypatch.setattr(analysis_service, "generate_insight", ...)`. Keep it that way.
-4. The result is re-validated as `Insight`, and `request_id/company_id/event_id/role` must match the request. Otherwise → 500 `INVALID_ANALYSIS_RESULT`.
+**Direction semantics.**
+- The classifier gives a per-topic direction (`topic_directions`); credit tightening means `down`.
+- Composer effect = `exposure.sign × DIRECTION_VALUE[topic][direction]`, where `up` is the topic's "more of it" direction (weaker ruble for `fx`, rate up for `key_rate`).
+- Keep the signs in `SECTOR_SENSITIVITY` and `profiles.exposures` consistent with that convention. Mixing conventions silently flips risks and opportunities.
 
-**Errors.** Every error uses `{"error":{code,message,request_id,retryable}}` from `app/api/errors.py`. Raise `ApiError("CODE")`. FastAPI's 422 is remapped to 400 `INVALID_REQUEST`. `retryable` is true only for 503/504. The analysis module signals failure with `AnalysisUnavailable` / `InvalidAnalysisResult` from `app/errors.py`. There is intentionally no runtime flag or endpoint for simulating failure: failures are tested by substituting the function.
+**Agent** (`agent/orchestrator.run`): plan (LLM or rules) → `ToolRunner` calls (read-only registry, typed args, call budget, `audit.jsonl`) → `ctx` → draft (LLM JSON merged over the rules draft, or rules only) → `validators.check` → `apply_fix` / broaden search (at most 2 rounds) → `Insight` with trace.
+- Every claim has an `origin` (`fact|client_data|bank|ai`) and `source_ids` that must exist in `sources`.
+- `bank` claims may cite only `bank:*` ids.
+- Numbers in `ai` and fact claims must appear in the grounding text (`_grounding_text`). If you add templated numbers to composer actions, add them to the grounding text too, or the validator will drop the claim.
 
-**Middleware order matters.** `CORSMiddleware` is added last (outermost), so 413 responses from the context middleware still get CORS headers. Only `FRONTEND_ORIGIN` is allowed.
+**LLM** (`agent/llm.py`): OpenAI-compatible, enabled only when `LLM_BASE_URL` and `LLM_API_KEY` are set. Model names must match `config.ALLOWED_MODELS` (the case allowlist). Any `LLMError` falls back to rules and is logged in the trace. Tests mock `llm.httpx.post`.
 
-**Analysis module** (`app/analysis/service.py`) is deterministic and pure. It must not look up companies, read files or open HTTP. Card content depends on `has_credit` / `has_deposit`; `null` means "unknown" (goes to `uncertainty`), not false. The role changes the emphasis: CFO → checking contract terms, CEO → financing plans. The output always has `is_mock=true` and `bank_position=null`, and `model_conclusion` states that no LLM was called.
+**Knowledge base:** `knowledge/bank_analytics.json` holds hand-extracted theses (the PDFs are scanned images) with doc, page and stance. Search is BM25 over 5-char stems plus topic and sector boosts plus recency. Stale docs (the 2021 steel report) are excluded unless `include_stale`.
 
-**Frontend** (`frontend/components/NewsAnalytics.tsx`) calls FastAPI directly from the browser via `NEXT_PUBLIC_API_BASE_URL`. It is baked in at build time and passed as a Docker build arg. There are no Next.js API routes. Stale responses are dropped with a sequence ref plus `AbortController`. Changing the company or role clears the card. `lib/api.ts` applies a 10 s browser timeout and maps network failures to a retryable `NETWORK_ERROR`, because a stopped backend produces no HTTP 503. `next-env.d.ts` is gitignored; `global.d.ts` provides the Next types so `typecheck` works before the first build.
+**API:** errors via `ApiError(code)` → `{"error": {...}}`; 422 is remapped to 400 and also stripped from OpenAPI. `RequestContextMiddleware` sets `request.state.request_id` and the 64 KiB body limit. CORS is the outermost middleware. Insights are cached per (company, role, news) in `storage.py`.
 
-## Ownership and rules (from AGENTS.md)
+**Frontend:**
+- The `app/(bank)` route group is wrapped in `Shell` (sidebar, company switcher, role select), and the session lives in localStorage (`lib/session.tsx`).
+- `lib/hooks.useLoad` aborts on dependency change; the insight page guards against stale responses with a sequence ref.
+- `NEXT_PUBLIC_API_BASE_URL` is baked in at build time.
 
-- Each sprint task owns specific paths (see the table in `AGENTS.md`). Skeleton files — `main.py`, `schemas.py`, `errors.py`, `requirements.txt`, `.python-version`, `contracts/` — change only through their owner/integrator. API wiring goes through `configure_api(app)` in `api/setup.py`, not by editing `main.py` ad hoc.
-- Legacy production files (`app/`, root `Dockerfile`, root `requirements.txt`, `docker-compose.yml`, `nginx/`, `deploy/`, `.github/`) are not deleted without agreement. Note that `.github/workflows/deploy.yml` deploys the legacy root `Dockerfile` and runs on every PR to `main`, not only on merges.
-- Don't merge into `main`, force-push, `reset --hard` or `git clean`; work on `task/spr1-*` branches. Never commit `.env`, real CSV/PDF data or `phone1.conf` (a VPN config). The sprint spec `.docx`/`TZ_*.md` files are intentionally gitignored.
+## Rules
+
+- File ownership and process rules are in `AGENTS.md`.
+- Legacy files `app/`, the root `Dockerfile` and root `requirements.txt` are unused; don't delete them without agreement.
+- CD (`deploy.yml`) runs on every PR to `main`, not only on merge, and deploys to the production server.
+- Don't merge into `main` or force-push without being asked. Never commit `.env`, `контекст/`, real CSV/PDF or `phone1.conf`.

@@ -1,54 +1,170 @@
-// Типы публичного контракта 0.1.0 (contracts/schemas/common.json).
+// Типы публичного контракта 1.0.0 (contracts/schemas/common.json).
 
-export type Role = "ceo" | "cfo";
+export type Role = "owner" | "ceo" | "cfo" | "accountant" | "treasurer" | "clevel";
+export type Origin = "fact" | "client_data" | "bank" | "ai";
 
-export interface CompanyProfile {
-  company_id: string;
-  display_name: string;
-  industry_name: string;
-  region: string | null;
-  has_credit: boolean | null;
-  has_deposit: boolean | null;
-  is_synthetic: true;
+export interface Claim {
+  text: string;
+  origin: Origin;
+  source_ids: string[];
+  features: string[];
 }
 
 export interface Source {
   source_id: string;
-  kind: "synthetic_fixture";
+  kind: "news" | "bank_analytics" | "client_data" | "bank_product";
   title: string;
+  url: string | null;
+  doc_id: string | null;
+  page: number | null;
+  date: string | null;
+  excerpt: string | null;
+}
+
+export interface RelevanceReason {
+  kind: string;
+  feature: string;
+  origin: string;
+  weight: number;
+  text: string;
+  topic?: string | null;
+}
+
+export interface Relevance {
+  score: number;
+  reasons: RelevanceReason[];
+}
+
+export interface TraceStep {
+  step: number;
+  stage: "plan" | "tool" | "compose" | "check" | "adapt" | "finalize";
+  name: string;
+  detail: string;
+  status: "ok" | "warning" | "error" | "skipped";
+  duration_ms: number;
 }
 
 export interface Insight {
-  schema_version: "0.1.0";
+  schema_version: "1.0.0";
+  insight_id: string;
   request_id: string;
   company_id: string;
-  event_id: string;
   role: Role;
-  status: "completed";
-  is_mock: true;
+  news_id: string;
+  created_at: string;
+  mode: "llm" | "rules";
+  model: string | null;
   title: string;
-  facts: string[];
-  company_relevance: string;
-  risks: string[];
-  opportunities: string[];
-  actions: string[];
-  bank_position: null;
-  model_conclusion: string;
+  headline: string;
+  what_happened: { summary: string; facts: Claim[]; actors: string[]; dates: string[]; assumptions: Claim[] };
+  why_important: Claim[];
+  risks: Claim[];
+  opportunities: Claim[];
+  actions: Claim[];
+  questions: string[];
+  bank_view: { available: boolean; summary: string | null; theses: Claim[]; conflicts: string[] };
+  products: { product_id: string; title: string; text: string; reason: string }[];
+  features_used: { name: string; label: string; value: string }[];
+  relevance: Relevance;
   sources: Source[];
-  uncertainty: string[];
+  quality: { passed: boolean; attempts: number; checks: { name: string; passed: boolean; detail: string }[] };
+  trace: TraceStep[];
+  disclaimer: string;
 }
 
-export interface InsightRequest {
+export interface Answer {
+  insight_id: string;
+  question: string;
+  answer: string;
+  claims: Claim[];
+  sources: Source[];
+  mode: "llm" | "rules";
+  refused: boolean;
+}
+
+export interface CompanySummary {
   company_id: string;
-  role: Role;
-  event_id: string;
+  display_name: string;
+  sector: string;
+  sector_name: string;
+  okved_code: string | null;
+  okved_name: string | null;
+  region: string | null;
+  revenue: number | null;
+  client_type: string | null;
+  fts_countries: string[];
 }
 
-export interface ErrorResponse {
-  error: {
-    code: string;
-    message: string;
-    request_id: string;
-    retryable: boolean;
-  };
+export interface Counterparties {
+  total_amount: number;
+  counterparties: number;
+  top1_share: number | null;
+  intra_group_share: number | null;
+  by_sector: { sector: string; share: number }[];
+}
+
+export interface CompanyProfile extends CompanySummary {
+  ownership: string | null;
+  age_years: string | null;
+  stage: string | null;
+  workers_fns: string | null;
+  products: Record<string, boolean | null>;
+  fts_flag: boolean | null;
+  market: { okved_peers: number | null; okved_rank: number | null; okved_share: number | null; sector_share: number | null; note: string };
+  group: { group_id: string | null; members: number | null; revenue: number | null; reliable: boolean | null };
+  suppliers: Counterparties;
+  customers: Counterparties;
+  linked_persons: number;
+  affiliated_companies: number;
+  data_quality: string[];
+}
+
+export interface Exposure {
+  topic: string;
+  weight: number;
+  sign: number;
+  feature: string;
+  why: string;
+  origin: string;
+}
+
+export interface NewsBrief {
+  news_id: string;
+  title: string;
+  lead: string;
+  source: string;
+  url: string | null;
+  kind: "seed" | "rss" | "user" | "external";
+  published_at: string;
+  topics: { topic: string; name: string }[];
+  sectors: string[];
+  countries: string[];
+  direction: string | null;
+  duplicates: number;
+}
+
+export interface FeedItem {
+  news: NewsBrief;
+  relevance: Relevance;
+  cached_insight_id: string | null;
+}
+
+export interface Meta {
+  data: { profiles: number; total_companies: number; selection_rule: string; source_dir: string };
+  knowledge: { documents: number; theses: number };
+  news: number;
+  llm: { connected: boolean; allowed_models: string[]; usage: { tokens: number; limit: number; calls: number } };
+  roles: { role: Role; name: string }[];
+  topics: { topic: string; name: string }[];
+  sectors: { sector: string; name: string }[];
+}
+
+export interface BankDocument {
+  doc_id: string;
+  title: string;
+  date: string;
+  author: string;
+  stale?: boolean;
+  pdf_available: boolean;
+  theses: { id: string; page: number; text: string; topics: string[]; stance?: string }[];
 }

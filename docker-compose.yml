@@ -12,18 +12,26 @@ services:
     expose:
       - "8000"
     environment:
-      FIXTURES_DIR: /app/contracts/examples
+      DATA_DIR: /data/case
+      RUNTIME_DIR: /app/runtime
+      BANK_PDF_DIR: /data/bank_pdf
       FRONTEND_ORIGIN: ${PUBLIC_ORIGIN:-https://pointers-team.online}
-      ANALYSIS_TIMEOUT_SECONDS: "5"
+      ANALYSIS_TIMEOUT_SECONDS: "90"
+      RSS_REFRESH_MINUTES: ${RSS_REFRESH_MINUTES:-60}
     env_file:
       - path: .env
         required: false
+    volumes:
+      # На сервере данные кейса лежат вне репозитория: ~/case-data/{csv,pdf}
+      - ${CASE_DATA_DIR:-./case-data/csv}:/data/case:ro
+      - ${BANK_PDF_HOST_DIR:-./case-data/pdf}:/data/bank_pdf:ro
+      - runtime:/app/runtime
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
       interval: 10s
       timeout: 3s
       retries: 3
-      start_period: 5s
+      start_period: 180s
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
@@ -80,3 +88,6 @@ services:
 networks:
   app-network:
     driver: bridge
+
+volumes:
+  runtime:

@@ -52,20 +52,25 @@ def check_url(url: str) -> str:
     return url
 
 
-def _get(url: str) -> str:
-    check_url(url)
+def _get(url: str, max_redirects: int = 3) -> str:
+    # Редиректы проходим вручную: каждый адрес заново проверяется на SSRF.
     with httpx.Client(timeout=TIMEOUT, follow_redirects=False, headers={"User-Agent": USER_AGENT}) as client:
-        with client.stream("GET", url) as resp:
-            if resp.status_code != 200:
-                raise FetchError(f"Источник ответил HTTP {resp.status_code}")
-            chunks, size = [], 0
-            for chunk in resp.iter_bytes():
-                size += len(chunk)
-                if size > MAX_BYTES:
-                    raise FetchError("Ответ источника слишком большой")
-                chunks.append(chunk)
-            raw = b"".join(chunks)
-            return raw.decode(resp.encoding or "utf-8", errors="replace")
+        for _ in range(max_redirects + 1):
+            check_url(url)
+            with client.stream("GET", url) as resp:
+                if resp.status_code in (301, 302, 303, 307, 308) and resp.headers.get("location"):
+                    url = str(httpx.URL(url).join(resp.headers["location"]))
+                    continue
+                if resp.status_code != 200:
+                    raise FetchError(f"Источник ответил HTTP {resp.status_code}")
+                chunks, size = [], 0
+                for chunk in resp.iter_bytes():
+                    size += len(chunk)
+                    if size > MAX_BYTES:
+                        raise FetchError("Ответ источника слишком большой")
+                    chunks.append(chunk)
+                return b"".join(chunks).decode(resp.encoding or "utf-8", errors="replace")
+    raise FetchError("Слишком много перенаправлений")
 
 
 def parse_rss(xml_text: str, source: str) -> list[dict]:
@@ -111,13 +116,16 @@ def fetch_article(url: str) -> dict:
 
 def refresh() -> dict:
     """Опрашивает настроенные RSS-ленты. Ошибки источников не прерывают сбор."""
-    report = {"added": 0, "duplicates": 0, "sources": []}
+    report = {"added": 0, "duplicates": 0, "skipped": 0, "sources": []}
     for source in config.rss_sources():
         entry = {"name": source["name"], "url": source["url"], "fetched": 0, "error": None}
         try:
             items = fetch_rss(source)[: config.rss_max_items()]
             entry["fetched"] = len(items)
             for item in items:
+                if not item["classification"]["topics"]:
+                    report["skipped"] += 1  # не относится к бизнес-темам таксономии
+                    continue
                 _, created = store.add(item)
                 report["added" if created else "duplicates"] += 1
         except (FetchError, httpx.HTTPError, ET.ParseError) as exc:

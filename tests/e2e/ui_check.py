@@ -1,167 +1,167 @@
-"""UI-проверки чек-листа docs/sprint-01/acceptance.md в headless Chromium.
-
-Необязательный инструмент приемки, не входит в зависимости проекта:
+"""Проверка пользовательского сценария в headless Chromium (Playwright, необязательный инструмент).
 
     python -m pip install playwright==1.55.0 && python -m playwright install chromium
-    docker compose -f compose.yaml up --build -d
-    (cd frontend && NEXT_PUBLIC_API_MOCK=empty npx next dev -p 3001)   # для шага 11
-    python tests/e2e/ui_check.py http://localhost:3001
+    python tests/e2e/ui_check.py --front http://localhost:3000 [--shots ./shots]
 
-Шаги 8-10 останавливают и снова запускают контейнер backend.
+Сценарий: вход демо-пользователем -> главная с точкой входа -> лента ->
+разбор новости -> ход анализа -> уточняющий вопрос -> оценка -> смена роли
+и компании -> своя новость -> аналитика банка -> качество -> мобильная ширина.
 """
-import subprocess
+
+import argparse
 import sys
-import time
 from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
 
-FRONT = "http://localhost:3000"
-MOCK_FRONT = sys.argv[1] if len(sys.argv) > 1 else None
 results = []
 
 
-def step(n, name, fn):
+def step(name, fn):
     try:
         fn()
-        results.append((n, name, "OK", ""))
+        results.append((name, "OK", ""))
     except Exception as exc:  # noqa: BLE001
-        results.append((n, name, "FAIL", str(exc).splitlines()[0][:200]))
+        results.append((name, "FAIL", str(exc).splitlines()[0][:220]))
 
 
-def compose(*args):
-    subprocess.run(["docker", "compose", "-f", "compose.yaml", *args], cwd=Path(__file__).resolve().parents[2],
-                   check=True, capture_output=True)
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--front", default="http://localhost:3000")
+    ap.add_argument("--shots", default=None)
+    args = ap.parse_args()
+    shots = Path(args.shots) if args.shots else None
+    if shots:
+        shots.mkdir(parents=True, exist_ok=True)
+    F = args.front.rstrip("/")
+
+    def shot(page, name):
+        if shots:
+            page.screenshot(path=str(shots / f"{name}.png"), full_page=True)
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 900}, locale="ru-RU")
+        print("browser:", browser.version)
+
+        def login():
+            page.goto(F + "/")
+            page.wait_for_url("**/login")
+            expect(page.get_by_text("Вход для проверки")).to_be_visible()
+            shot(page, "01_login")
+            page.locator(".login-user").first.click()
+            page.wait_for_url(F + "/")
+
+        def home():
+            expect(page.get_by_role("link", name="Открыть ленту")).to_be_visible()
+            expect(page.locator(".nav-item.accent")).to_contain_text("Альфа.Пульс")
+            expect(page.locator(".pulse-hero .news-card").first).to_be_visible(timeout=15000)
+            shot(page, "02_home")
+
+        def feed():
+            page.get_by_role("link", name="Открыть ленту").click()
+            page.wait_for_url("**/pulse")
+            expect(page.locator(".feed .news-card").first).to_be_visible(timeout=15000)
+            expect(page.locator(".company-panel")).to_be_visible(timeout=15000)
+            assert page.locator(".feed .reason").count() > 0
+            shot(page, "03_feed")
+
+        state = {}
+
+        def insight():
+            state["first_title"] = page.locator(".feed .news-card h3").first.inner_text()
+            page.locator(".feed .news-card .btn-primary").first.click()
+            page.wait_for_url("**/pulse/n/**")
+            expect(page.locator(".insight-head h1")).to_be_visible(timeout=60000)
+            for t in ["1. Что произошло", "2. Почему это важно для компании", "3. Какие последствия возможны",
+                      "4. Что можно сделать", "5. Как это оценивает Альфа-Банк", "6. На чем основан вывод"]:
+                expect(page.get_by_role("heading", name=t)).to_be_visible()
+            assert page.locator(".origin-bank").count() > 0, "нет утверждений банка"
+            assert page.locator(".origin-ai").count() > 0, "нет выводов AI"
+            assert page.locator(".sources li").count() >= 2
+            shot(page, "04_insight")
+
+        def trace():
+            page.get_by_role("button", name="Как получен вывод").click()
+            expect(page.locator(".trace li").first).to_be_visible()
+            assert page.locator(".trace li").count() >= 6
+            shot(page, "05_trace")
+
+        def chat():
+            page.get_by_role("button", name="Покажи в разрезе контрагентов").click()
+            expect(page.locator(".chat-a").first).to_be_visible(timeout=30000)
+            expect(page.locator(".chat-a").first).to_contain_text("контрагент")
+            page.locator(".chat-form input").fill("Какие источники использованы?")
+            page.get_by_role("button", name="Спросить").click()
+            expect(page.locator(".chat-a")).to_have_count(2, timeout=30000)
+            page.locator(".chat").scroll_into_view_if_needed()
+            shot(page, "06_chat")
+
+        def feedback():
+            page.locator(".feedback button[aria-label='Полезно']").first.click()
+            expect(page.get_by_text("Спасибо за оценку").first).to_be_visible()
+
+        def role_switch():
+            before = page.locator(".insight-head h1").inner_text()
+            page.locator(".role-select select").select_option("treasurer")
+            expect(page.locator(".insight-head h1")).to_be_visible(timeout=60000)
+            page.wait_for_timeout(800)
+            page.goto(F + "/pulse")
+            expect(page.locator(".feed .news-card").first).to_be_visible(timeout=15000)
+            assert "Руководитель казначейства" in page.locator(".page-head").inner_text()
+            state["role_before"] = before
+
+        def company_switch():
+            name_before = page.locator(".switcher-name").inner_text()
+            page.locator(".switcher-btn").click()
+            page.locator(".switcher-pop li button").nth(3).click()
+            expect(page.locator(".switcher-name")).not_to_have_text(name_before)
+            expect(page.locator(".feed .news-card").first).to_be_visible(timeout=15000)
+
+        def own_news():
+            page.locator("textarea").fill("Правительство одобрило снижение экспортных пошлин на удобрения и зерно с 1 декабря 2026 года, "
+                                          "что поддержит поставки в Китай и Турцию и расчеты в юанях.")
+            page.get_by_role("button", name="Разобрать").click()
+            page.wait_for_url("**/pulse/n/**")
+            expect(page.locator(".insight-head h1")).to_be_visible(timeout=60000)
+            shot(page, "07_own_news")
+
+        def analytics():
+            page.goto(F + "/pulse/analytics")
+            expect(page.locator(".docs .card").first).to_be_visible(timeout=15000)
+            assert page.locator(".docs .card").count() == 9
+            shot(page, "08_analytics")
+
+        def quality():
+            page.goto(F + "/pulse/quality")
+            expect(page.get_by_text("Журнал обращений к инструментам")).to_be_visible(timeout=15000)
+            assert page.locator(".table tbody tr").count() > 0
+            shot(page, "09_quality")
+
+        def mobile():
+            m = browser.new_page(viewport={"width": 375, "height": 812}, locale="ru-RU")
+            m.goto(F + "/login")
+            m.locator(".login-user").first.click()
+            m.wait_for_url(F + "/")
+            m.goto(F + "/pulse")
+            expect(m.locator(".feed .news-card").first).to_be_visible(timeout=15000)
+            assert m.evaluate("document.documentElement.scrollWidth <= 375"), "горизонтальная прокрутка"
+            if shots:
+                m.screenshot(path=str(shots / "10_mobile.png"), full_page=False)
+
+        for name, fn in [("вход демо-пользователем", login), ("главная: точка входа и топ-новости", home),
+                         ("персональная лента и контекст компании", feed), ("разбор: 6 разделов, банк отделен от AI", insight),
+                         ("ход анализа агента", trace), ("уточняющие вопросы", chat), ("оценка раздела", feedback),
+                         ("смена роли", role_switch), ("смена компании", company_switch), ("своя новость", own_news),
+                         ("аналитика банка", analytics), ("качество и аудит", quality), ("мобильная ширина 375px", mobile)]:
+            step(name, fn)
+        browser.close()
+
+    sys.stdout.reconfigure(encoding="utf-8")
+    for name, status, err in results:
+        print(f"{status:4} {name} {err}")
+    sys.exit(any(r[1] != "OK" for r in results))
 
 
-def wait_backend():
-    import urllib.request
-    for _ in range(60):
-        try:
-            urllib.request.urlopen("http://localhost:8000/healthz", timeout=2)
-            return
-        except OSError:
-            time.sleep(1)
-    raise RuntimeError("backend not healthy")
-
-
-with sync_playwright() as p:
-    browser = p.chromium.launch()
-    page = browser.new_page()
-    # Задержка ответа /insights внутри браузера: window.__delayMs задается тестом.
-    page.add_init_script("""
-      const orig = window.fetch;
-      window.__delayMs = 0;
-      window.fetch = async (...args) => {
-        const res = await orig(...args);
-        if (String(args[0]).includes('/api/v1/insights') && window.__delayMs) {
-          await new Promise(r => setTimeout(r, window.__delayMs));
-        }
-        return res;
-      };
-    """)
-    print("browser:", browser.version)
-
-    def s1():
-        page.goto(FRONT)
-        expect(page.get_by_text("Демонстрационный макет хакатона")).to_be_visible()
-        page.get_by_role("link", name="Открыть новостную аналитику").click()
-        page.wait_for_url("**/analytics")
-
-    def s2():
-        expect(page.locator("select option")).to_have_count(2, timeout=10000)
-
-    def s3():
-        hdr = page.locator(".analytics-header")
-        expect(hdr.get_by_text("Тестовые данные")).to_be_visible()
-        expect(hdr.get_by_text("Анализ без LLM")).to_be_visible()
-
-    def s4():
-        page.select_option("select", "demo_company_001")
-        page.get_by_label("CFO — финансовый директор").check()
-        page.evaluate("window.__delayMs = 1500")
-        page.get_by_role("button", name="Запустить анализ").click()
-        expect(page.get_by_role("button", name="Анализируем…")).to_be_disabled()
-        card = page.get_by_role("article", name="Карточка анализа")
-        expect(card).to_be_visible(timeout=10000)
-        page.evaluate("window.__delayMs = 0")
-        for h in ["Факты", "Риски", "Возможности", "Действия", "Неопределенность", "Источники"]:
-            expect(card.get_by_role("heading", name=h)).to_be_visible()
-        expect(card.get_by_text("Аналитика банка еще не подключена")).to_be_visible()
-        expect(card).to_contain_text("кредитные обязательства")
-
-    def s5():
-        page.select_option("select", "demo_company_002")
-        page.get_by_label("CEO — генеральный директор").check()
-        page.get_by_role("button", name="Запустить анализ").click()
-        card = page.get_by_role("article", name="Карточка анализа")
-        expect(card).to_contain_text("депозитные инструменты", timeout=10000)
-        expect(card).to_contain_text("планы финансирования")
-
-    def s6():
-        page.get_by_label("CFO — финансовый директор").check()
-        expect(page.get_by_role("article", name="Карточка анализа")).to_have_count(0)
-
-    def s7():
-        page.select_option("select", "demo_company_001")
-        page.evaluate("window.__delayMs = 2000")
-        page.get_by_role("button", name="Запустить анализ").click()
-        page.wait_for_timeout(300)
-        page.select_option("select", "demo_company_002")
-        page.wait_for_timeout(3000)
-        page.evaluate("window.__delayMs = 0")
-        expect(page.get_by_role("article", name="Карточка анализа")).to_have_count(0)
-        expect(page.get_by_role("button", name="Запустить анализ")).to_be_enabled()
-
-    def s8():
-        compose("stop", "backend")
-        page.get_by_role("button", name="Запустить анализ").click()
-        alert = page.locator(".state-error")
-        expect(alert).to_contain_text("Нет связи с сервером", timeout=12000)
-        expect(alert.get_by_role("button", name="Повторить")).to_be_visible()
-
-    def s10():
-        page.reload()
-        alert = page.locator(".state-error")
-        expect(alert).to_contain_text("Не удалось загрузить компании", timeout=12000)
-        expect(alert.get_by_role("button", name="Повторить")).to_be_visible()
-
-    def s9():
-        compose("start", "backend")
-        wait_backend()
-        page.locator(".state-error").get_by_role("button", name="Повторить").click()
-        expect(page.locator("select option")).to_have_count(2, timeout=10000)
-        page.get_by_role("button", name="Запустить анализ").click()
-        expect(page.get_by_role("article", name="Карточка анализа")).to_be_visible(timeout=10000)
-
-    def s11():
-        mp = browser.new_page()
-        mp.goto(MOCK_FRONT + "/analytics")
-        expect(mp.get_by_text("Список компаний пуст")).to_be_visible(timeout=60000)
-        expect(mp.get_by_text("Локальный mock API: empty")).to_be_visible()
-
-    def phone():
-        m = browser.new_page(viewport={"width": 375, "height": 800})
-        m.goto(FRONT + "/analytics")
-        expect(m.locator("select option")).to_have_count(2, timeout=10000)
-        assert m.evaluate("document.documentElement.scrollWidth <= 375"), "horizontal scroll"
-
-    step(1, "главная, баннер, переход", s1)
-    step(2, "загрузка списка, две компании", s2)
-    step(3, "постоянные метки", s3)
-    step(4, "001/CFO: блокировка кнопки, разделы, позиция банка", s4)
-    step(5, "002/CEO: другая проекция", s5)
-    step(6, "смена роли очищает карточку", s6)
-    step(7, "смена выбора во время запроса", s7)
-    step(8, "backend остановлен: ошибка и повтор", s8)
-    step(10, "перезагрузка без backend: ошибка списка", s10)
-    step(9, "backend запущен: повтор работает", s9)
-    if MOCK_FRONT:
-        step(11, "пустой список (mock empty)", s11)
-    step(12, "ширина 375px без горизонтальной прокрутки", phone)
-    browser.close()
-
-sys.stdout.reconfigure(encoding="utf-8")
-for n, name, status, err in sorted(results):
-    print(f"{n:>2} {status:4} {name} {err}")
-sys.exit(any(r[2] != "OK" for r in results))
+if __name__ == "__main__":
+    main()

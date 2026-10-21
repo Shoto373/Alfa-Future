@@ -1,40 +1,32 @@
-# Контракт 0.1.0
+# Контракт 1.0.0
 
-Публичный контракт:
+Контракт генерируется из кода (`cd backend && python scripts/gen_contracts.py`), а `backend/tests/test_contracts.py` проверяет, что файлы не расходятся с кодом:
 
-- `openapi.yaml` — маршруты и коды ответов;
-- `schemas/common.json` — JSON Schema тел (генерируется из `backend/app/schemas.py`, сверяется в `backend/tests/test_contracts.py`);
-- `examples/` — валидные примеры: `companies.json`, `event.json`, `insight_request.json`, `insight.json`, `error.json`. Каталог используется как `FIXTURES_DIR`.
+- `openapi.json` — маршруты, параметры, коды ответов (интерактивно — `/docs` на backend);
+- `schemas/common.json` — JSON Schema моделей из `backend/app/schemas.py`;
+- `examples/` — реальные ответы агента на синтетических данных.
 
-Фактический `/openapi.json` backend должен содержать те же маршруты и методы.
+## Маршруты
 
-## Внутренние сигнатуры
+| Метод | Путь | Назначение |
+|---|---|---|
+| GET | `/healthz` | готовность |
+| GET | `/api/v1/meta` | данные, база знаний, статус LLM, роли, темы |
+| GET | `/api/v1/companies?q=&sector=&limit=&offset=` | поиск по профилям крупного бизнеса |
+| GET | `/api/v1/companies/{id}` | профиль и экспозиции |
+| GET | `/api/v1/feed?company_id=&role=&topic=` | персональная лента с причинами релевантности |
+| GET/POST | `/api/v1/news/{id}`, `/api/v1/news` | новость; добавить текст или ссылку |
+| POST | `/api/v1/news/refresh` | опрос RSS |
+| POST | `/api/v1/insights` | разбор новости агентом (кэшируется; `force_refresh` пересчитывает) |
+| GET | `/api/v1/insights/{id}` | карточка |
+| POST | `/api/v1/insights/{id}/questions` | уточняющий вопрос |
+| POST | `/api/v1/feedback` | оценка раздела |
+| GET | `/api/v1/metrics`, `/api/v1/audit` | метрики качества, журнал инструментов |
+| GET | `/api/v1/analytics`, `/api/v1/analytics/{doc}/pdf` | материалы банка, первоисточник |
 
-```python
-# backend/app/schemas.py
-Role = Literal["ceo", "cfo"]
-class CompanyProfile, Event, InsightRequest, Source, Insight, ErrorDetail, ErrorResponse
+## Ключевые правила
 
-# backend/app/errors.py
-class AnalysisUnavailable(Exception)    # API -> 503 ANALYSIS_UNAVAILABLE
-class InvalidAnalysisResult(Exception)  # API -> 500 INVALID_ANALYSIS_RESULT
-
-# backend/app/analysis/service.py
-async def generate_insight(company: CompanyProfile, role: Role, event: Event, request_id: str) -> Insight
-
-# backend/app/companies/repository.py
-def get_company(company_id: str) -> CompanyProfile | None
-def get_event(event_id: str) -> Event | None
-```
-
-`generate_insight` вызывается только внутри процесса. Модуль анализа не ищет компании, не читает fixtures и не открывает HTTP endpoint. API создает `request_id`, ограничивает вызов `ANALYSIS_TIMEOUT_SECONDS` и проверяет, что `request_id`, `company_id`, `event_id`, `role` в результате совпадают с запросом.
-
-## Правила
-
-- Все поля обязательны, массивы могут быть пустыми; `null` означает «неизвестно», а не `false`.
-- Лишние поля в запросах запрещены (`additionalProperties: false`).
-- `is_synthetic: true`, `is_mock: true`, `bank_position: null`, `sources[].kind: "synthetic_fixture"`.
-
-## Перегенерация схемы
-
-Схема `schemas/common.json` строится функцией `pydantic.json_schema.models_json_schema` по моделям из `schemas.py` (плюс `CompanyList` и `Healthz`). Если модели меняются, обновите схему и примеры; `test_contracts.py` упадет при расхождении.
+- `Claim.origin`: `fact` (новость), `client_data` (профиль), `bank` (тезис банка, только `source_id` вида `bank:*`), `ai` (вывод).
+- У каждого утверждения есть `source_ids` из `Insight.sources`.
+- Ошибки: `{"error": {"code", "message", "request_id", "retryable"}}`. Коды: 400 `INVALID_REQUEST` (вместо 422), 404 `*_NOT_FOUND`, 413 `REQUEST_TOO_LARGE`, 422 `FETCH_FAILED`, 500 `INTERNAL_ERROR` и `INVALID_ANALYSIS_RESULT`, 503 `ANALYSIS_UNAVAILABLE` и `DATA_UNAVAILABLE`, 504 `ANALYSIS_TIMEOUT`. Флаг `retryable` равен true только для 503 и 504.
+- Лишние поля в запросах запрещены, тело запроса — до 64 КиБ.
