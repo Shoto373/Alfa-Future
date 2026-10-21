@@ -1,0 +1,44 @@
+THIRD PARTY NOTICES — Альфа.Пульс, спринт 1
+
+Проект использует перечисленные ниже компоненты с открытым исходным кодом.
+Версии — по backend/requirements.txt и frontend/package-lock.json.
+Тексты лицензий распространяются вместе с пакетами.
+
+Backend (Python, PyPI)
+  fastapi            0.158.0   MIT
+  starlette          (зависимость fastapi)  BSD-3-Clause
+  pydantic           2.14.1    MIT
+  pydantic-core      (зависимость pydantic) MIT
+  uvicorn            0.54.0    BSD-3-Clause
+  httpx              0.28.1    BSD-3-Clause   (только тесты)
+  pytest             9.1.1     MIT            (только тесты)
+  pytest-asyncio     1.4.0     Apache-2.0     (только тесты)
+  jsonschema         4.26.0    MIT            (только тесты)
+  PyYAML             6.0.3     MIT            (только тесты)
+
+Frontend (npm)
+  next               16.3.8    MIT
+  react, react-dom   19.3.0    MIT
+  styled-jsx         5.1.6     MIT
+  @swc/helpers       0.5.23    Apache-2.0
+  postcss            8.5.23    MIT
+  caniuse-lite       1.0.30001818  CC-BY-4.0
+  typescript         5.9.3     Apache-2.0     (только сборка)
+  @types/*                     MIT            (только сборка)
+  sharp              0.35.5    Apache-2.0     (необязательная зависимость Next.js;
+                                                бинарные пакеты @img/sharp-libvips-*
+                                                распространяются под LGPL-3.0-or-later)
+  Прочие транзитивные пакеты: MIT, ISC, BSD-3-Clause, 0BSD, Apache-2.0
+  (полный список — frontend/package-lock.json).
+
+Runtime-образы Docker
+  python:3.11-slim   (Python Software Foundation License; Debian packages)
+  node:20-alpine     (MIT для Node.js; пакеты Alpine Linux)
+
+Данные
+  Все компании, профили и события в contracts/examples/ искусственные и созданы
+  для демонстрации. Они не описывают реальные организации, клиентов или сделки.
+
+Модели
+  В спринте 1 никакие LLM и внешние AI API не вызываются. Карточки анализа
+  формируются детерминированными правилами (backend/app/analysis/service.py).
