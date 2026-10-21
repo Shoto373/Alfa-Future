@@ -113,4 +113,5 @@ def test_openapi_routes_match_contract():
     assert routes(contract) == routes(actual)
     for path, ops in contract["paths"].items():
         for method, op in ops.items():
-            assert set(op["responses"]) <= set(actual["paths"][path][method]["responses"]) | {"200"}
+            assert set(op["responses"]) == set(actual["paths"][path][method]["responses"]), (path, method)
+    assert "HTTPValidationError" not in actual.get("components", {}).get("schemas", {})

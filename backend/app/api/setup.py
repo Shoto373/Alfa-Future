@@ -98,7 +98,28 @@ class RequestContextMiddleware:
         await self.app(scope, replay, send)
 
 
+def _openapi_without_422(app: FastAPI):
+    """FastAPI объявляет 422 автоматически, но API отвечает 400 INVALID_REQUEST."""
+    original = app.openapi
+
+    def openapi():
+        if app.openapi_schema is None:
+            schema = original()
+            for ops in schema.get("paths", {}).values():
+                for op in ops.values():
+                    op.get("responses", {}).pop("422", None)
+            schemas = schema.get("components", {}).get("schemas", {})
+            schemas.pop("HTTPValidationError", None)
+            schemas.pop("ValidationError", None)
+            app.openapi_schema = schema
+        return app.openapi_schema
+
+    return openapi
+
+
 def configure_api(app: FastAPI) -> None:
+    app.openapi = _openapi_without_422(app)
+
     @app.exception_handler(RequestValidationError)
     async def _validation(request: Request, exc: RequestValidationError):
         return error_response("INVALID_REQUEST", request.state.request_id)
