@@ -37,3 +37,6 @@ data/
 node_modules/
 .next/
 *.tsbuildinfo
+
+# Hackathon context: task, bank research PDFs, client CSV data (never commit)
+/контекст/
