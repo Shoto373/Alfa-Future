@@ -1,0 +1,30 @@
+# Git and Environment
+**/.git
+**/.gitignore
+**/.env
+**/.env.*
+!**/.env.example
+
+# Python
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache
+backend/tests
+
+# Node / Frontend
+**/node_modules
+**/.next
+**/dist
+**/build
+**/*.log
+
+# Temporary / Docs
+**/*.docx
+**/*.png
+**/*.conf
+
+# Contracts Fixtures preservation
+contracts/examples/
+!contracts/examples/**
