@@ -147,7 +147,8 @@ async def create_insight(payload: InsightRequest, request: Request) -> dict:
     n = _news(payload.news_id)
     if not payload.force_refresh:
         cached = storage.cached_insight(c["company_id"], payload.role, n["news_id"])
-        if cached:
+        # Карточка на правилах, построенная до подключения LLM, пересчитывается моделью.
+        if cached and not (cached["mode"] == "rules" and llm.available()):
             storage.log_event("insight_open", insight_id=cached["insight_id"], cached=True)
             return cached
     try:
