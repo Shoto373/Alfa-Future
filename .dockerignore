@@ -25,9 +25,6 @@ backend/tests
 **/*.png
 **/*.conf
 
-# Contracts Fixtures preservation
-contracts/examples/
-!contracts/examples/**
 
 # Case data and runtime state never go into images
 контекст

@@ -133,6 +133,14 @@ def test_analytics_and_pdf(client, tmp_path, monkeypatch):
     assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
 
 
+def test_openapi_uses_400_instead_of_422(client):
+    spec = client.get("/openapi.json").json()
+    for ops in spec["paths"].values():
+        for op in ops.values():
+            assert "422" not in op["responses"] or op["responses"]["422"]["description"].endswith("(FETCH_FAILED)")
+    assert "HTTPValidationError" not in spec.get("components", {}).get("schemas", {})
+
+
 def test_cors(client):
     ok = client.options("/api/v1/feed", headers={"Origin": ORIGIN, "Access-Control-Request-Method": "GET"})
     assert ok.headers["access-control-allow-origin"] == ORIGIN

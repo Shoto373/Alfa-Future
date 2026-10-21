@@ -21,7 +21,18 @@ from app.schemas import (Answer, ErrorResponse, FeedbackRequest, Insight, Insigh
 
 logger = logging.getLogger("app.api")
 router = APIRouter(prefix="/api/v1")
-ERRORS = {s: {"model": ErrorResponse} for s in (400, 404, 413, 422, 500, 503, 504)}
+# Описания заданы явно: иначе FastAPI берет их из http.HTTPStatus, а они различаются
+# между версиями Python (413 в 3.13+ — «Content Too Large»), и контракт перестает совпадать.
+ERROR_DESCRIPTIONS = {
+    400: "Некорректный запрос (INVALID_REQUEST)",
+    404: "Объект не найден (*_NOT_FOUND)",
+    413: "Тело запроса больше 64 КиБ (REQUEST_TOO_LARGE)",
+    422: "Не удалось загрузить материал по ссылке (FETCH_FAILED)",
+    500: "Внутренняя ошибка (INTERNAL_ERROR, INVALID_ANALYSIS_RESULT)",
+    503: "Сервис или данные временно недоступны (ANALYSIS_UNAVAILABLE, DATA_UNAVAILABLE)",
+    504: "Превышено время анализа (ANALYSIS_TIMEOUT)",
+}
+ERRORS = {s: {"model": ErrorResponse, "description": d} for s, d in ERROR_DESCRIPTIONS.items()}
 _ID = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
 
 

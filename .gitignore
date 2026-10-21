@@ -42,3 +42,15 @@ node_modules/
 
 # Hackathon context: task, bank research PDFs, client CSV data (never commit)
 /контекст/
+
+# Not needed on the server: local docs, agent notes, generators, e2e tools, legacy app
+*.md
+!/README.md
+/docs/
+/infra/
+/contracts/
+/tests/
+/app/
+/Dockerfile
+/requirements.txt
+/backend/scripts/

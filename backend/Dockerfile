@@ -15,7 +15,6 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Исходный код и синтетический набор данных (реальные данные кейса монтируются через DATA_DIR)
 COPY backend/app /app/app
-COPY backend/scripts /app/scripts
 COPY data/synthetic /app/data/synthetic
 
 RUN mkdir -p /app/runtime

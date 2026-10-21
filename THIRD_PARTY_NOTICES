@@ -11,8 +11,6 @@ Backend (Python, PyPI)
   httpx              0.28.1    BSD-3-Clause   (RSS/URL-парсер, LLM-клиент, тесты)
   pytest             9.1.1     MIT            (тесты)
   pytest-asyncio     1.4.0     Apache-2.0     (тесты)
-  jsonschema         4.26.0    MIT            (тесты контракта)
-  PyYAML             6.0.3     MIT            (тесты)
 
 Frontend (npm)
   next               16.3.8    MIT
@@ -22,9 +20,6 @@ Frontend (npm)
   sharp              0.35.5    Apache-2.0     (необязательная зависимость Next.js; бинарные
                                                 @img/sharp-libvips-* — LGPL-3.0-or-later)
   Прочие транзитивные пакеты: MIT, ISC, BSD-3-Clause, 0BSD, Apache-2.0, CC-BY-4.0 (caniuse-lite)
-
-Инструменты проверки (не входят в продукт)
-  playwright         1.55.0    Apache-2.0     (tests/e2e/ui_check.py, Chromium)
 
 Runtime-образы Docker
   python:3.11-slim, node:20-alpine, nginx:alpine
@@ -40,8 +35,8 @@ Runtime-образы Docker
   - Обезличенные данные о юрлицах, платежах и связанных физлицах кейса (df_Uid_data_hack.csv,
     df_Uid_payment_hack.csv, df_Fid_Uid_link_hack.csv) — в репозиторий не входят, подключаются
     через CASE_DATA_DIR.
-  - data/synthetic — синтетический набор той же схемы, сгенерирован
-    backend/scripts/make_synthetic_data.py; реальных компаний не описывает.
+  - data/synthetic — синтетический набор той же схемы, сгенерированный командой;
+    реальных компаний не описывает.
   - Аналитические материалы Альфа-Банка из кейса (© АО «Альфа-Банк»): в репозитории только
     краткие тезисы с указанием документа и страницы (backend/app/knowledge/bank_analytics.json);
     PDF не распространяются и подключаются через BANK_PDF_HOST_DIR.
