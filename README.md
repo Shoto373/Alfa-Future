@@ -66,6 +66,7 @@ cd frontend && npm ci && npm run dev
 cd backend && python -m pytest -q                         # контракты, API, компании, анализ
 cd frontend && npm ci && npm run typecheck && npm run build
 python tests/e2e/smoke.py --base-url http://localhost:8000  # при запущенном backend
+python tests/e2e/ui_check.py                                # UI в Chromium; нужен playwright, см. docstring
 ```
 
 Smoke-тест использует только стандартную библиотеку Python и возвращает ненулевой код выхода при любой ошибке.
