@@ -113,6 +113,8 @@ def test_llm_mode_used_when_connected_and_falls_back(client, company, monkeypatc
     ins = run(company, "cfo", "seed-rate-hold")
     assert ins["mode"] == "rules"
     assert any(s["status"] == "warning" for s in ins["trace"])
+    assert not llm.available()  # предохранитель: после сбоя соединения LLM временно не вызывается
+    monkeypatch.setattr(llm, "_down_until", 0.0)
 
 
 @pytest.mark.parametrize("question,expect", [

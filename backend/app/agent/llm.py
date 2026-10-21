@@ -18,7 +18,11 @@ from app import config
 
 logger = logging.getLogger("app.agent.llm")
 
+CONNECT_TIMEOUT = 10.0
+BREAKER_SECONDS = 60.0  # после сбоя соединения LLM не вызывается, чтобы не ждать тайм-аут на каждом шаге
+
 _usage_lock = threading.Lock()
+_down_until = 0.0
 _usage = {"date": date.today().isoformat(), "tokens": 0, "cost": 0.0, "calls": 0, "errors": 0}
 
 
@@ -37,7 +41,24 @@ def is_allowed(model: str) -> bool:
 
 def available() -> bool:
     s = config.llm_settings()
-    return bool(s["base_url"] and s["api_key"])
+    return bool(s["base_url"] and s["api_key"]) and time.monotonic() >= _down_until
+
+
+def _post(payload: dict, s: dict) -> httpx.Response:
+    """POST на основной адрес шлюза; при ошибке соединения — на запасной (LLM_FALLBACK_BASE_URL)."""
+    global _down_until
+    timeout = httpx.Timeout(s["timeout"], connect=CONNECT_TIMEOUT)
+    headers = {"Authorization": f"Bearer {s['api_key']}"}
+    bases = [b for b in (s["base_url"], s["fallback_base_url"]) if b]
+    last: Exception | None = None
+    for base in bases:
+        try:
+            return httpx.post(f"{base}/chat/completions", json=payload, timeout=timeout, headers=headers)
+        except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+            last = exc
+            logger.warning("llm gateway unreachable base=%s", base)
+    _down_until = time.monotonic() + BREAKER_SECONDS
+    raise last or httpx.ConnectError("no LLM base url")
 
 
 def usage() -> dict:
@@ -90,12 +111,10 @@ def chat_json(system: str, user: str, model_kind: str = "reasoning", max_tokens:
     }
     started = time.perf_counter()
     try:
-        resp = httpx.post(f"{s['base_url']}/chat/completions", json=payload, timeout=s["timeout"],
-                          headers={"Authorization": f"Bearer {s['api_key']}"})
+        resp = _post(payload, s)
         if resp.status_code == 400 and "response_format" in resp.text:
             payload.pop("response_format")
-            resp = httpx.post(f"{s['base_url']}/chat/completions", json=payload, timeout=s["timeout"],
-                              headers={"Authorization": f"Bearer {s['api_key']}"})
+            resp = _post(payload, s)
         resp.raise_for_status()
         body = resp.json()
         content = body["choices"][0]["message"]["content"]

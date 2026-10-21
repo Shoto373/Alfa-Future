@@ -76,6 +76,7 @@ def rss_refresh_minutes() -> int:
 def llm_settings() -> dict:
     return {
         "base_url": os.environ.get("LLM_BASE_URL", "").rstrip("/"),
+        "fallback_base_url": os.environ.get("LLM_FALLBACK_BASE_URL", "").rstrip("/"),
         "api_key": os.environ.get("LLM_API_KEY", ""),
         "model_reasoning": _env("LLM_MODEL_REASONING", "z-ai/glm-5.3-flash"),
         "model_fast": _env("LLM_MODEL_FAST", "deepseek/deepseek-v4.1-flash"),
