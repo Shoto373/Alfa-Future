@@ -109,11 +109,11 @@ CASE_DATA_DIR=/путь/к/csv BANK_PDF_HOST_DIR=/путь/к/pdf docker compose
 Без ключа агент работает в **режиме правил**: весь сценарий проходится, карточки помечены «Агент на правилах». Чтобы включить LLM, заполните `.env` и перезапустите backend:
 
 ```
-LLM_BASE_URL=https://<провайдер>/v1     # OpenAI-совместимый /chat/completions
-LLM_API_KEY=<ключ>
-LLM_MODEL_REASONING=glm-5.3-flash       # интерпретация
-LLM_MODEL_FAST=gemma-4-26b-a4b          # план и ответы на вопросы
-LLM_DAILY_TOKEN_LIMIT=400000
+LLM_BASE_URL=https://changellenge.up.railway.app/v1   # запасной: https://api.alfahack-gateway26.ru/v1
+LLM_API_KEY=<ключ команды>
+LLM_MODEL_REASONING=z-ai/glm-5.3-flash                # интерпретация
+LLM_MODEL_FAST=deepseek/deepseek-v4.1-flash           # план и ответы на вопросы
+LLM_DAILY_COST_LIMIT=450                              # ₽ в день, бюджет ключа — 500 ₽
 ```
 
 Разрешены только модели из Приложения 3 кейса: Gemma 4 26B A4B, GLM-5.3-Flash, Qwen3.6 35B A3B, DeepSeek-V4.1-Flash, Qwen3-VL-30B-A3B-Instruct и Kimi-K2.6. Другие имена backend отклоняет. При ошибке модели агент переключается на правила, и это видно в трассе.
@@ -129,7 +129,7 @@ LLM_DAILY_TOKEN_LIMIT=400000
 | `LLM_*` | — | см. выше |
 | `RSS_SOURCES` | 5 лент | `имя|url` через запятую; пустая строка — без RSS |
 | `RSS_REFRESH_MINUTES` | `0` | автообновление ленты (0 — только кнопкой) |
-| `ANALYSIS_TIMEOUT_SECONDS` | `90` | тайм-аут подготовки разбора |
+| `ANALYSIS_TIMEOUT_SECONDS` | `150` | тайм-аут подготовки разбора |
 | `FRONTEND_ORIGIN` | `http://localhost:3000` | единственный origin для CORS |
 | `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8000` | адрес API для браузера, задаётся при сборке frontend |
 

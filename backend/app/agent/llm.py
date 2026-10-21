@@ -19,7 +19,7 @@ from app import config
 logger = logging.getLogger("app.agent.llm")
 
 _usage_lock = threading.Lock()
-_usage = {"date": date.today().isoformat(), "tokens": 0, "calls": 0, "errors": 0}
+_usage = {"date": date.today().isoformat(), "tokens": 0, "cost": 0.0, "calls": 0, "errors": 0}
 
 
 class LLMError(Exception):
@@ -43,15 +43,17 @@ def available() -> bool:
 def usage() -> dict:
     with _usage_lock:
         if _usage["date"] != date.today().isoformat():
-            _usage.update(date=date.today().isoformat(), tokens=0, calls=0, errors=0)
-        return dict(_usage) | {"limit": config.llm_settings()["daily_token_limit"]}
+            _usage.update(date=date.today().isoformat(), tokens=0, cost=0.0, calls=0, errors=0)
+        s = config.llm_settings()
+        return dict(_usage) | {"limit": s["daily_token_limit"], "cost_limit": s["daily_cost_limit"], "cost": round(_usage["cost"], 3)}
 
 
-def _record(tokens: int, error: bool = False) -> None:
+def _record(tokens: int, error: bool = False, cost: float = 0.0) -> None:
     with _usage_lock:
         if _usage["date"] != date.today().isoformat():
-            _usage.update(date=date.today().isoformat(), tokens=0, calls=0, errors=0)
+            _usage.update(date=date.today().isoformat(), tokens=0, cost=0.0, calls=0, errors=0)
         _usage["tokens"] += tokens
+        _usage["cost"] += cost
         _usage["calls"] += 1
         _usage["errors"] += int(error)
 
@@ -76,8 +78,8 @@ def chat_json(system: str, user: str, model_kind: str = "reasoning", max_tokens:
     if not is_allowed(model):
         raise LLMError(f"Модель {model} не входит в список разрешенных кейсом")
     u = usage()
-    if u["tokens"] >= u["limit"]:
-        raise LLMError("Исчерпан дневной лимит токенов")
+    if u["tokens"] >= u["limit"] or u["cost"] >= u["cost_limit"]:
+        raise LLMError("Исчерпан дневной лимит LLM")
 
     payload = {
         "model": model,
@@ -97,8 +99,9 @@ def chat_json(system: str, user: str, model_kind: str = "reasoning", max_tokens:
         resp.raise_for_status()
         body = resp.json()
         content = body["choices"][0]["message"]["content"]
-        tokens = int(body.get("usage", {}).get("total_tokens") or (len(system) + len(user) + len(content)) // 3)
-        _record(tokens)
+        usage_info = body.get("usage") or {}
+        tokens = int(usage_info.get("total_tokens") or (len(system) + len(user) + len(content)) // 3)
+        _record(tokens, cost=float(usage_info.get("cost") or 0.0))
         data = _extract_json(content)
     except (httpx.HTTPError, KeyError, ValueError, IndexError) as exc:
         _record(0, error=True)

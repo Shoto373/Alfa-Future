@@ -80,6 +80,9 @@ def test_tool_runner_denies_unknown_tools_and_args(client, company):
 def test_llm_allowlist():
     assert llm.is_allowed("GLM-5.3-Flash")
     assert llm.is_allowed("qwen3.6-35b-a3b-instruct")
+    for provider_name in ("google/gemma-4-26b-a4b-it", "z-ai/glm-5.3-flash", "qwen/qwen3.6-35b-a3b",
+                          "deepseek/deepseek-v4.1-flash", "qwen/qwen3-vl-30b-a3b-instruct", "moonshotai/kimi-k2.6"):
+        assert llm.is_allowed(provider_name), provider_name
     assert not llm.is_allowed("gpt-4o")
     assert not llm.is_allowed("claude-opus")
 

@@ -64,9 +64,9 @@ export const api = {
       `/api/v1/feed?company_id=${encodeURIComponent(companyId)}&role=${role}${topic ? `&topic=${topic}` : ""}`, {}, { signal }),
   insight: (companyId: string, role: Role, newsId: string, force = false, signal?: AbortSignal) =>
     request<Insight>("/api/v1/insights", json("POST", { company_id: companyId, role, news_id: newsId, force_refresh: force }),
-      { signal, timeoutMs: 120_000 }),
+      { signal, timeoutMs: 180_000 }),
   ask: (insightId: string, question: string) =>
-    request<Answer>(`/api/v1/insights/${insightId}/questions`, json("POST", { question }), { timeoutMs: 60_000 }),
+    request<Answer>(`/api/v1/insights/${insightId}/questions`, json("POST", { question }), { timeoutMs: 90_000 }),
   feedback: (insightId: string, rating: 1 | -1, section: string, role: Role, comment?: string) =>
     request<{ status: string }>("/api/v1/feedback", json("POST", { insight_id: insightId, rating, section, role, comment: comment || null })),
   addNews: (payload: { title?: string; text?: string; url?: string }) =>
