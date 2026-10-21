@@ -47,15 +47,30 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - name: Build backend
+        uses: docker/build-push-action@v6
         with:
           context: .
+          file: backend/Dockerfile
           push: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
           tags: |
-            ghcr.io/dvajf/alfa:latest
-            ghcr.io/dvajf/alfa:${{ github.sha }}
+            ghcr.io/dvajf/alfa:backend-latest
+            ghcr.io/dvajf/alfa:backend-${{ github.sha }}
+      - name: Build frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: frontend/Dockerfile
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=https://pointers-team.online
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+          tags: |
+            ghcr.io/dvajf/alfa:frontend-latest
+            ghcr.io/dvajf/alfa:frontend-${{ github.sha }}
 
   deploy:
     needs: build
@@ -94,9 +109,10 @@ jobs:
         env:
           HOST: ${{ secrets.SERVER_HOST }}
           USER: ${{ secrets.SERVER_USER }}
-          IMAGE: ghcr.io/dvajf/alfa:${{ github.sha }}
+          BACKEND_IMAGE: ghcr.io/dvajf/alfa:backend-${{ github.sha }}
+          FRONTEND_IMAGE: ghcr.io/dvajf/alfa:frontend-${{ github.sha }}
           ACTOR: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$USER@$HOST" \
-            "cd ~/app && chmod +x deploy/deploy.sh && IMAGE=$IMAGE ACTOR=$ACTOR OWNER=$ACTOR GHCR_TOKEN=$GHCR_TOKEN bash deploy/deploy.sh"
+            "cd ~/app && chmod +x deploy/deploy.sh && BACKEND_IMAGE=$BACKEND_IMAGE FRONTEND_IMAGE=$FRONTEND_IMAGE ACTOR=$ACTOR GHCR_TOKEN=$GHCR_TOKEN bash deploy/deploy.sh"

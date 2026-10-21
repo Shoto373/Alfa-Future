@@ -1,14 +1,56 @@
+# Прод-деплой: backend + frontend за nginx (HTTPS, pointers-team.online).
+# Локальная разработка — compose.yaml (docker compose -f compose.yaml ...).
+# Образы собирает CD (.github/workflows/deploy.yml); build-секции позволяют собрать на сервере вручную.
 services:
-  app:
-    build: .
-    image: ${IMAGE:-fastapi_app:latest}
-    container_name: alfa-app
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: ${BACKEND_IMAGE:-alfa-backend:local}
+    container_name: alfa-backend
     restart: unless-stopped
     expose:
       - "8000"
+    environment:
+      FIXTURES_DIR: /app/contracts/examples
+      FRONTEND_ORIGIN: ${PUBLIC_ORIGIN:-https://pointers-team.online}
+      ANALYSIS_TIMEOUT_SECONDS: "5"
     env_file:
       - path: .env
         required: false
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        # Браузер ходит в API через тот же домен (nginx проксирует /api/ на backend).
+        NEXT_PUBLIC_API_BASE_URL: ${PUBLIC_ORIGIN:-https://pointers-team.online}
+    image: ${FRONTEND_IMAGE:-alfa-frontend:local}
+    container_name: alfa-frontend
+    restart: unless-stopped
+    expose:
+      - "3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
@@ -27,7 +69,8 @@ services:
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - /var/www/certbot:/var/www/certbot:ro
     depends_on:
-      - app
+      - backend
+      - frontend
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
