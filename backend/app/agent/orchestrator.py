@@ -138,9 +138,14 @@ def _merge_llm(draft: dict, data: dict) -> dict:
                             "features": [str(f) for f in it.get("features", [])][:6]})
         return out
 
+    rules_why = [c for c in draft["why_important"] if c["origin"] == "client_data"]
     for key in ("why_important", "risks", "opportunities", "actions"):
         if data.get(key):
             draft[key] = claims(data[key])
+    # «Почему это важно» всегда сохраняет признаки компании из профиля: выводы модели
+    # дополняются ими, чтобы связь с данными клиента оставалась трассируемой.
+    texts = {c["text"] for c in draft["why_important"]}
+    draft["why_important"] = [c for c in rules_why[:2] if c["text"] not in texts] + draft["why_important"][:4]
     if isinstance(data.get("headline"), str) and data["headline"].strip():
         draft["headline"] = data["headline"].strip()[:400]
     if data.get("facts"):
