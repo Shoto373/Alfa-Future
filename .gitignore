@@ -20,3 +20,20 @@ build/
 extracted_spec.txt
 generate_word_report.py
 TZ_AND_PROMPTS_ALFA_PULSE.md
+
+# Secrets and env (.env.example stays tracked)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Real data is never committed
+data/
+*.csv
+*.pdf
+
+# Node / Next.js
+node_modules/
+.next/
+*.tsbuildinfo

@@ -1,0 +1,400 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/dvaJf/alfa/contracts/schemas/common.json",
+  "title": "Alfa Pulse contract 0.1.0",
+  "$defs": {
+    "CompanyProfile": {
+      "additionalProperties": false,
+      "properties": {
+        "company_id": {
+          "description": "Уникальный идентификатор компании",
+          "minLength": 1,
+          "title": "Company Id",
+          "type": "string"
+        },
+        "display_name": {
+          "description": "Наименование компании",
+          "minLength": 1,
+          "title": "Display Name",
+          "type": "string"
+        },
+        "industry_name": {
+          "description": "Отрасль компании",
+          "minLength": 1,
+          "title": "Industry Name",
+          "type": "string"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Регион присутствия (null если неизвестно)",
+          "title": "Region"
+        },
+        "has_credit": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Наличие кредитных продуктов (null если неизвестно)",
+          "title": "Has Credit"
+        },
+        "has_deposit": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Наличие депозитных продуктов (null если неизвестно)",
+          "title": "Has Deposit"
+        },
+        "is_synthetic": {
+          "const": true,
+          "description": "Флаг синтетических данных",
+          "title": "Is Synthetic",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "company_id",
+        "display_name",
+        "industry_name",
+        "region",
+        "has_credit",
+        "has_deposit",
+        "is_synthetic"
+      ],
+      "title": "CompanyProfile",
+      "type": "object"
+    },
+    "ErrorDetail": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        },
+        "request_id": {
+          "minLength": 1,
+          "title": "Request Id",
+          "type": "string"
+        },
+        "retryable": {
+          "title": "Retryable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "request_id",
+        "retryable"
+      ],
+      "title": "ErrorDetail",
+      "type": "object"
+    },
+    "ErrorResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/ErrorDetail"
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "title": "ErrorResponse",
+      "type": "object"
+    },
+    "Event": {
+      "additionalProperties": false,
+      "properties": {
+        "event_id": {
+          "description": "Уникальный идентификатор события",
+          "minLength": 1,
+          "title": "Event Id",
+          "type": "string"
+        },
+        "title": {
+          "description": "Заголовок события",
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "text": {
+          "description": "Текст события",
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "is_synthetic": {
+          "const": true,
+          "description": "Флаг синтетического события",
+          "title": "Is Synthetic",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "event_id",
+        "title",
+        "text",
+        "is_synthetic"
+      ],
+      "title": "Event",
+      "type": "object"
+    },
+    "Insight": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "0.1.0",
+          "description": "Версия схемы",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "request_id": {
+          "description": "Идентификатор запроса",
+          "minLength": 1,
+          "title": "Request Id",
+          "type": "string"
+        },
+        "company_id": {
+          "description": "Идентификатор компании",
+          "minLength": 1,
+          "title": "Company Id",
+          "type": "string"
+        },
+        "event_id": {
+          "description": "Идентификатор события",
+          "minLength": 1,
+          "title": "Event Id",
+          "type": "string"
+        },
+        "role": {
+          "description": "Роль пользователя (ceo или cfo)",
+          "enum": [
+            "ceo",
+            "cfo"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "status": {
+          "const": "completed",
+          "description": "Статус формирования инсайта",
+          "title": "Status",
+          "type": "string"
+        },
+        "is_mock": {
+          "const": true,
+          "description": "Флаг синтетической/тестовой карточки",
+          "title": "Is Mock",
+          "type": "boolean"
+        },
+        "title": {
+          "description": "Заголовок инсайта",
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "facts": {
+          "description": "Ключевые факты",
+          "items": {
+            "type": "string"
+          },
+          "title": "Facts",
+          "type": "array"
+        },
+        "company_relevance": {
+          "description": "Проекция на компанию",
+          "minLength": 1,
+          "title": "Company Relevance",
+          "type": "string"
+        },
+        "risks": {
+          "description": "Выявленные риски",
+          "items": {
+            "type": "string"
+          },
+          "title": "Risks",
+          "type": "array"
+        },
+        "opportunities": {
+          "description": "Возможности для компании",
+          "items": {
+            "type": "string"
+          },
+          "title": "Opportunities",
+          "type": "array"
+        },
+        "actions": {
+          "description": "Рекомендуемые действия",
+          "items": {
+            "type": "string"
+          },
+          "title": "Actions",
+          "type": "array"
+        },
+        "bank_position": {
+          "description": "Позиция банка (в спринте 1 всегда null)",
+          "title": "Bank Position",
+          "type": "null"
+        },
+        "model_conclusion": {
+          "description": "Заключение (сообщает об отсутствии вызова LLM)",
+          "minLength": 1,
+          "title": "Model Conclusion",
+          "type": "string"
+        },
+        "sources": {
+          "description": "Источники",
+          "items": {
+            "$ref": "#/$defs/Source"
+          },
+          "title": "Sources",
+          "type": "array"
+        },
+        "uncertainty": {
+          "description": "Факторы неопределенности",
+          "items": {
+            "type": "string"
+          },
+          "title": "Uncertainty",
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema_version",
+        "request_id",
+        "company_id",
+        "event_id",
+        "role",
+        "status",
+        "is_mock",
+        "title",
+        "facts",
+        "company_relevance",
+        "risks",
+        "opportunities",
+        "actions",
+        "bank_position",
+        "model_conclusion",
+        "sources",
+        "uncertainty"
+      ],
+      "title": "Insight",
+      "type": "object"
+    },
+    "InsightRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "company_id": {
+          "description": "Идентификатор компании",
+          "minLength": 1,
+          "title": "Company Id",
+          "type": "string"
+        },
+        "role": {
+          "description": "Роль лица, принимающего решения",
+          "enum": [
+            "ceo",
+            "cfo"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "event_id": {
+          "description": "Идентификатор события",
+          "minLength": 1,
+          "title": "Event Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "company_id",
+        "role",
+        "event_id"
+      ],
+      "title": "InsightRequest",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "description": "Идентификатор источника",
+          "minLength": 1,
+          "title": "Source Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "synthetic_fixture",
+          "description": "Тип источника",
+          "title": "Kind",
+          "type": "string"
+        },
+        "title": {
+          "description": "Название источника",
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "kind",
+        "title"
+      ],
+      "title": "Source",
+      "type": "object"
+    },
+    "CompanyList": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CompanyProfile"
+          }
+        }
+      }
+    },
+    "Healthz": {
+      "type": "object",
+      "required": [
+        "status",
+        "service"
+      ],
+      "properties": {
+        "status": {
+          "const": "ok"
+        },
+        "service": {
+          "const": "backend"
+        }
+      }
+    }
+  }
+}
