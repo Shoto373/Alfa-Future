@@ -1,7 +1,6 @@
 """Глобальные обработчики ошибок, CORS, лимит тела и журналирование."""
 
 import logging
-import os
 import time
 import uuid
 
@@ -9,6 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
+from app import config
 from app.api.errors import ApiError, error_response
 
 logger = logging.getLogger("app.api")
@@ -126,14 +126,14 @@ def configure_api(app: FastAPI) -> None:
 
     @app.exception_handler(ApiError)
     async def _api_error(request: Request, exc: ApiError):
-        return error_response(exc.code, request.state.request_id)
+        return error_response(exc.code, request.state.request_id, exc.message)
 
     # Последний добавленный middleware — внешний. CORS снаружи,
     # чтобы ответ 413 из RequestContextMiddleware тоже получил CORS-заголовки.
     app.add_middleware(RequestContextMiddleware)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[os.environ.get("FRONTEND_ORIGIN", "http://localhost:3000")],
+        allow_origins=[config.frontend_origin()],
         allow_methods=["GET", "POST"],
         allow_headers=["Content-Type"],
     )

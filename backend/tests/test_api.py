@@ -2,203 +2,144 @@ import asyncio
 import json
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
-from app.analysis import service as analysis_service
-from app.api.router import router
-from app.api.setup import MAX_BODY_BYTES, configure_api
-from app.errors import AnalysisUnavailable, InvalidAnalysisResult
+from app.agent import orchestrator
+from app.api.setup import MAX_BODY_BYTES
+from app.errors import AnalysisUnavailable
 
-VALID = {"company_id": "demo_company_001", "role": "cfo", "event_id": "demo_event_001"}
 ORIGIN = "http://localhost:3000"
 
 
-@pytest.fixture
-def client(monkeypatch):
-    monkeypatch.delenv("FIXTURES_DIR", raising=False)
-    monkeypatch.setenv("FRONTEND_ORIGIN", ORIGIN)
-    monkeypatch.setenv("ANALYSIS_TIMEOUT_SECONDS", "0.2")
-    app = FastAPI()
-    configure_api(app)
-    app.include_router(router)
-    return TestClient(app)
-
-
-def patch_analysis(monkeypatch, fn):
-    monkeypatch.setattr(analysis_service, "generate_insight", fn)
-
-
-def assert_error(response, status, code, retryable=False):
+def assert_error(response, status, code):
     assert response.status_code == status, response.text
-    error = response.json()["error"]
-    assert error["code"] == code
-    assert error["retryable"] is retryable
-    assert error["request_id"].startswith("req_")
-    assert error["message"]
+    err = response.json()["error"]
+    assert err["code"] == code
+    assert err["request_id"].startswith("req_")
+    assert err["retryable"] is (status in (503, 504))
 
 
-def test_list_companies(client):
-    response = client.get("/api/v1/companies")
-    assert response.status_code == 200
-    items = response.json()["items"]
-    assert [i["company_id"] for i in items] == ["demo_company_001", "demo_company_002"]
+def test_healthz_and_meta(client):
+    assert client.get("/healthz").json() == {"status": "ok", "service": "backend"}
+    meta = client.get("/api/v1/meta").json()
+    assert meta["data"]["profiles"] > 0
+    assert meta["knowledge"]["documents"] == 9
+    assert meta["llm"]["connected"] is False
+    assert {r["role"] for r in meta["roles"]} == {"owner", "ceo", "cfo", "accountant", "treasurer", "clevel"}
 
 
-def test_insight_uses_real_module_and_preserves_context(client):
-    response = client.post("/api/v1/insights", json=VALID)
-    assert response.status_code == 200
-    body = response.json()
-    assert (body["company_id"], body["event_id"], body["role"]) == (
-        VALID["company_id"], VALID["event_id"], VALID["role"])
-    assert body["request_id"].startswith("req_")
-    assert body["is_mock"] is True and body["bank_position"] is None
+def test_companies_search_and_profile(client, company):
+    body = client.get("/api/v1/companies", params={"limit": 5}).json()
+    assert body["total"] > 0 and len(body["items"]) <= 5
+    found = client.get("/api/v1/companies", params={"q": company["company_id"]}).json()
+    assert found["items"][0]["company_id"] == company["company_id"]
+    detail = client.get(f"/api/v1/companies/{company['company_id']}").json()
+    assert detail["profile"]["company_id"] == company["company_id"] and detail["exposures"]
+    assert_error(client.get("/api/v1/companies/U_nope"), 404, "COMPANY_NOT_FOUND")
 
 
-def test_insight_passes_correct_profile(client, monkeypatch):
-    seen = {}
-    real = analysis_service.generate_insight
-
-    async def spy(company, role, event, request_id):
-        seen.update(company=company, role=role, event=event)
-        return await real(company, role, event, request_id)
-
-    patch_analysis(monkeypatch, spy)
-    response = client.post("/api/v1/insights", json={**VALID, "company_id": "demo_company_002", "role": "ceo"})
-    assert response.status_code == 200
-    assert seen["company"].company_id == "demo_company_002"
-    assert seen["company"].has_deposit is True
-    assert seen["role"] == "ceo"
-    assert seen["event"].event_id == "demo_event_001"
-
-
-@pytest.mark.parametrize(
-    "payload",
-    [
-        {**VALID, "role": "cto"},
-        {**VALID, "extra": True},
-        {"company_id": "demo_company_001", "role": "cfo"},
-        {**VALID, "company_id": ""},
-        [],
-    ],
-    ids=["wrong-role", "extra-field", "missing-field", "empty-id", "not-object"],
-)
-def test_invalid_request_returns_400(client, payload):
-    assert_error(client.post("/api/v1/insights", json=payload), 400, "INVALID_REQUEST")
+def test_feed_is_personalized(client):
+    from app.companies import profiles
+    data = profiles._load()["companies"]
+    a = next(c for c in data if c["products"]["loans"])
+    b = next(c for c in data if c["sector"] != a["sector"] and not c["products"]["loans"])
+    fa = client.get("/api/v1/feed", params={"company_id": a["company_id"], "role": "cfo"}).json()["items"]
+    fb = client.get("/api/v1/feed", params={"company_id": b["company_id"], "role": "ceo"}).json()["items"]
+    assert fa and fb
+    assert fa[0]["relevance"]["reasons"]
+    assert [i["news"]["news_id"] for i in fa[:5]] != [i["news"]["news_id"] for i in fb[:5]] or \
+        [i["relevance"]["score"] for i in fa[:5]] != [i["relevance"]["score"] for i in fb[:5]]
+    scores = [i["relevance"]["score"] for i in fa]
+    assert scores == sorted(scores, reverse=True)
+    assert_error(client.get("/api/v1/feed", params={"company_id": a["company_id"], "role": "intern"}), 400, "INVALID_REQUEST")
 
 
-def test_malformed_json_returns_400(client):
-    response = client.post("/api/v1/insights", content=b"{oops", headers={"Content-Type": "application/json"})
-    assert_error(response, 400, "INVALID_REQUEST")
+def test_insight_flow_with_cache_question_feedback_metrics(client, company):
+    req = {"company_id": company["company_id"], "role": "cfo", "news_id": "seed-rate-hold"}
+    first = client.post("/api/v1/insights", json=req)
+    assert first.status_code == 200, first.text
+    ins = first.json()
+    assert ins["schema_version"] == "1.0.0" and ins["request_id"].startswith("req_")
+    again = client.post("/api/v1/insights", json=req).json()
+    assert again["insight_id"] == ins["insight_id"]
+    fresh = client.post("/api/v1/insights", json=req | {"force_refresh": True}).json()
+    assert fresh["insight_id"] != ins["insight_id"]
+
+    assert client.get(f"/api/v1/insights/{ins['insight_id']}").json()["insight_id"] == ins["insight_id"]
+    ans = client.post(f"/api/v1/insights/{ins['insight_id']}/questions", json={"question": "Какие источники?"}).json()
+    assert ans["sources"]
+    assert client.post("/api/v1/feedback", json={"insight_id": ins["insight_id"], "rating": 1, "section": "risks"}).json() == {"status": "ok"}
+    m = client.get("/api/v1/metrics").json()
+    assert m["content"]["insights"] >= 1 and m["personalization"]["feedback"]["up"] == 1
+    audit = client.get("/api/v1/audit").json()["items"]
+    assert any(a["tool"] == "search_bank_analytics" for a in audit)
 
 
-def test_unknown_company_and_event_return_404(client):
-    assert_error(client.post("/api/v1/insights", json={**VALID, "company_id": "nope"}), 404, "COMPANY_NOT_FOUND")
-    assert_error(client.post("/api/v1/insights", json={**VALID, "event_id": "nope"}), 404, "EVENT_NOT_FOUND")
+def test_insight_errors(client, company, monkeypatch):
+    base = {"company_id": company["company_id"], "role": "cfo", "news_id": "seed-rate-hold"}
+    assert_error(client.post("/api/v1/insights", json=base | {"news_id": "nope"}), 404, "NEWS_NOT_FOUND")
+    assert_error(client.post("/api/v1/insights", json=base | {"company_id": "nope"}), 404, "COMPANY_NOT_FOUND")
+    assert_error(client.post("/api/v1/insights", json=base | {"role": "intern"}), 400, "INVALID_REQUEST")
+    assert_error(client.post("/api/v1/insights", json=base | {"extra": 1}), 400, "INVALID_REQUEST")
+    assert_error(client.post("/api/v1/insights", content=b"{bad", headers={"Content-Type": "application/json"}), 400, "INVALID_REQUEST")
+    body = json.dumps(base | {"pad": "x" * MAX_BODY_BYTES}).encode()
+    assert_error(client.post("/api/v1/insights", content=body, headers={"Content-Type": "application/json"}), 413, "REQUEST_TOO_LARGE")
 
-
-def test_body_too_large_returns_413(client):
-    body = json.dumps({**VALID, "pad": "x" * MAX_BODY_BYTES}).encode()
-    assert_error(client.post("/api/v1/insights", content=body, headers={"Content-Type": "application/json"}),
-                 413, "REQUEST_TOO_LARGE")
-
-
-def test_streamed_body_too_large_returns_413(client):
-    def chunks():
-        yield b'{"pad": "'
-        for _ in range(MAX_BODY_BYTES // 1024 + 1):
-            yield b"x" * 1024
-        yield b'"}'
-
-    response = client.post("/api/v1/insights", content=chunks(), headers={"Content-Type": "application/json"})
-    assert_error(response, 413, "REQUEST_TOO_LARGE")
-
-
-def test_analysis_unavailable_returns_503(client, monkeypatch):
-    async def fail(*args):
+    async def unavailable(*a):
         raise AnalysisUnavailable()
 
-    patch_analysis(monkeypatch, fail)
-    assert_error(client.post("/api/v1/insights", json=VALID), 503, "ANALYSIS_UNAVAILABLE", retryable=True)
+    monkeypatch.setattr(orchestrator, "run", unavailable)
+    assert_error(client.post("/api/v1/insights", json=base | {"force_refresh": True}), 503, "ANALYSIS_UNAVAILABLE")
 
-
-def test_analysis_timeout_returns_504(client, monkeypatch):
-    async def slow(*args):
+    async def slow(*a):
         await asyncio.sleep(5)
 
-    patch_analysis(monkeypatch, slow)
-    assert_error(client.post("/api/v1/insights", json=VALID), 504, "ANALYSIS_TIMEOUT", retryable=True)
+    monkeypatch.setenv("ANALYSIS_TIMEOUT_SECONDS", "0.2")
+    monkeypatch.setattr(orchestrator, "run", slow)
+    assert_error(client.post("/api/v1/insights", json=base | {"force_refresh": True}), 504, "ANALYSIS_TIMEOUT")
+
+    async def wrong(company, role, news, request_id):
+        return {"company_id": "other", "news_id": news["news_id"], "role": role, "request_id": request_id}
+
+    monkeypatch.setattr(orchestrator, "run", wrong)
+    assert_error(client.post("/api/v1/insights", json=base | {"force_refresh": True}), 500, "INVALID_ANALYSIS_RESULT")
+
+    async def boom(*a):
+        raise RuntimeError("secret")
+
+    monkeypatch.setattr(orchestrator, "run", boom)
+    r = client.post("/api/v1/insights", json=base | {"force_refresh": True})
+    assert_error(r, 500, "INTERNAL_ERROR")
+    assert "secret" not in r.text
 
 
-def test_unexpected_exception_returns_500(client, monkeypatch):
-    async def boom(*args):
-        raise RuntimeError("secret detail")
-
-    patch_analysis(monkeypatch, boom)
-    response = client.post("/api/v1/insights", json=VALID)
-    assert_error(response, 500, "INTERNAL_ERROR")
-    assert "secret" not in response.text
-
-
-def test_invalid_analysis_exception_returns_500(client, monkeypatch):
-    async def bad(*args):
-        raise InvalidAnalysisResult()
-
-    patch_analysis(monkeypatch, bad)
-    assert_error(client.post("/api/v1/insights", json=VALID), 500, "INVALID_ANALYSIS_RESULT")
+def test_add_news_text_and_validation(client):
+    r = client.post("/api/v1/news", json={"text": "Минфин объявил о росте НДС с 1 января 2027 года, что повлияет на цены и бюджет компаний."})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["created"] and body["news"]["topics"]
+    dup = client.post("/api/v1/news", json={"text": "Минфин объявил о росте НДС с 1 января 2027 года, что повлияет на цены и бюджет компаний."}).json()
+    assert dup["created"] is False
+    assert_error(client.post("/api/v1/news", json={"text": "коротко"}), 400, "INVALID_REQUEST")
+    assert_error(client.post("/api/v1/news", json={"url": "http://127.0.0.1/secret"}), 422, "FETCH_FAILED")
 
 
-def test_invalid_card_returns_500(client, monkeypatch):
-    async def broken(*args):
-        return {"title": "no other fields"}
-
-    patch_analysis(monkeypatch, broken)
-    assert_error(client.post("/api/v1/insights", json=VALID), 500, "INVALID_ANALYSIS_RESULT")
-
-
-@pytest.mark.parametrize("field,value", [
-    ("company_id", "demo_company_002"),
-    ("event_id", "other_event"),
-    ("role", "ceo"),
-    ("request_id", "req_other"),
-])
-def test_context_mismatch_returns_500(client, monkeypatch, field, value):
-    real = analysis_service.generate_insight
-
-    async def wrong(company, role, event, request_id):
-        insight = await real(company, role, event, request_id)
-        return insight.model_copy(update={field: value})
-
-    patch_analysis(monkeypatch, wrong)
-    assert_error(client.post("/api/v1/insights", json=VALID), 500, "INVALID_ANALYSIS_RESULT")
+def test_analytics_and_pdf(client, tmp_path, monkeypatch):
+    docs = client.get("/api/v1/analytics").json()["documents"]
+    assert len(docs) == 9 and all(d["theses"] for d in docs)
+    assert_error(client.get("/api/v1/analytics/rate_2026_09_11/pdf"), 404, "DOCUMENT_NOT_FOUND")
+    (tmp_path / "ALFA-Macro_Insights-Policy_Rate_11Sep.pdf").write_bytes(b"%PDF-1.4 test")
+    monkeypatch.setenv("BANK_PDF_DIR", str(tmp_path))
+    r = client.get("/api/v1/analytics/rate_2026_09_11/pdf")
+    assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
 
 
-def test_corrupted_fixtures_return_500(client, monkeypatch, tmp_path):
-    (tmp_path / "companies.json").write_text("{broken", encoding="utf-8")
-    monkeypatch.setenv("FIXTURES_DIR", str(tmp_path))
-    response = client.get("/api/v1/companies")
-    assert_error(response, 500, "INTERNAL_ERROR")
-    assert "broken" not in response.text
-    assert_error(client.post("/api/v1/insights", json=VALID), 500, "INTERNAL_ERROR")
-
-
-def test_cors_allows_only_frontend_origin(client):
-    ok = client.options("/api/v1/insights", headers={
-        "Origin": ORIGIN, "Access-Control-Request-Method": "POST",
-        "Access-Control-Request-Headers": "content-type"})
-    assert ok.status_code == 200
+def test_cors(client):
+    ok = client.options("/api/v1/feed", headers={"Origin": ORIGIN, "Access-Control-Request-Method": "GET"})
     assert ok.headers["access-control-allow-origin"] == ORIGIN
-
-    denied = client.get("/api/v1/companies", headers={"Origin": "http://evil.example"})
+    denied = client.get("/api/v1/meta", headers={"Origin": "http://evil.example"})
     assert "access-control-allow-origin" not in denied.headers
 
-    error = client.post("/api/v1/insights", json={**VALID, "company_id": "nope"}, headers={"Origin": ORIGIN})
-    assert error.headers["access-control-allow-origin"] == ORIGIN
 
-
-def test_logs_do_not_contain_profile_data(client, caplog):
-    caplog.set_level("INFO", logger="app.api")
-    client.post("/api/v1/insights", json=VALID)
-    text = caplog.text
-    assert "request_id=req_" in text and "status=200" in text
-    assert "Северная" not in text and "demo_company_001" not in text
+@pytest.mark.parametrize("path", ["/api/v1/insights/..%2F..%2Fetc", "/api/v1/insights/ins-zzz"])
+def test_insight_lookup_is_safe(client, path):
+    assert client.get(path).status_code in (404,)

@@ -2,7 +2,7 @@
   "error": {
     "code": "ANALYSIS_UNAVAILABLE",
     "message": "Анализ временно недоступен",
-    "request_id": "demo_request_002",
+    "request_id": "req_example_2",
     "retryable": true
   }
 }

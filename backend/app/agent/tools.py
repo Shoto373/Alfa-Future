@@ -1,0 +1,163 @@
+"""Инструменты агента: только чтение, явный реестр, аудит каждого вызова.
+
+Агент (и LLM в режиме планирования) может вызвать лишь инструменты из
+реестра с проверенными аргументами; вызовы ограничены бюджетом на запуск.
+Инструменты не меняют данные и не обращаются в сеть.
+"""
+
+from dataclasses import dataclass
+from typing import Callable
+
+from app.agent import audit
+from app.companies import profiles
+from app.companies.sectors import SECTOR_NAMES
+from app.knowledge import kb
+from app.news import store
+
+MAX_CALLS_PER_RUN = 16
+
+
+class ToolError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class Tool:
+    name: str
+    description: str
+    args: dict[str, type]
+    fn: Callable[..., object]
+
+
+def _profile(company_id: str) -> dict:
+    c = profiles.get(company_id)
+    if c is None:
+        raise ToolError("Компания не найдена")
+    keep = ("company_id", "display_name", "sector", "sector_name", "okved_code", "okved_name", "ownership", "age_years",
+            "stage", "workers_fns", "client_type", "products", "fts_flag", "fts_countries", "revenue", "region", "city",
+            "market", "group", "linked_persons", "affiliated_companies", "data_quality", "key_owner_mark")
+    return {k: c.get(k) for k in keep}
+
+
+def _exposures(company_id: str, topics: list[str]) -> list[dict]:
+    wanted = set(topics)
+    return [e for e in profiles.exposures(company_id) if not wanted or e["topic"] in wanted]
+
+
+def _news(news_id: str) -> dict:
+    n = store.get(news_id)
+    if n is None:
+        raise ToolError("Новость не найдена")
+    return n
+
+
+def _search(query: str, topics: list[str], sectors: list[str], include_stale: bool = False) -> list[dict]:
+    return kb.search(query, topics, sectors, limit=6, include_stale=include_stale)
+
+
+def _related(news_id: str, topics: list[str]) -> list[dict]:
+    wanted = set(topics)
+    out = []
+    for n in store.all_items():
+        if n["news_id"] == news_id:
+            continue
+        overlap = wanted & {t["topic"] for t in n["classification"]["topics"]}
+        if overlap:
+            out.append({"news_id": n["news_id"], "title": n["title"], "published_at": n["published_at"],
+                        "source": n["source"], "overlap": sorted(overlap)})
+    return out[:4]
+
+
+def _counterparties(company_id: str) -> dict:
+    c = profiles.get(company_id)
+    if c is None:
+        raise ToolError("Компания не найдена")
+
+    def side(d: dict) -> dict:
+        return {
+            "counterparties": d["counterparties"], "total_amount": d["total_amount"], "top1_share": d["top1_share"],
+            "intra_group_share": d["intra_group_share"],
+            "by_sector": [{"sector": SECTOR_NAMES.get(s["sector"], "вне выборки"), "share": round(s["share"], 3)}
+                          for s in d["by_sector"]],
+        }
+    return {"suppliers": side(c["suppliers"]), "customers": side(c["customers"])}
+
+
+def _products(company_id: str, topics: list[str]) -> list[dict]:
+    c = profiles.get(company_id) or {}
+    p = c.get("products", {})
+    wanted = set(topics)
+    out = []
+    for prod in kb.products():
+        if not wanted & set(prod["topics"]):
+            continue
+        needs = set(prod["needs"])
+        if "has_credit" in needs and not p.get("loans"):
+            continue
+        if "fts" in needs and not c.get("fts_flag"):
+            continue
+        out.append(prod)
+    return out[:3]
+
+
+def _forecasts(topics: list[str]) -> list[dict]:
+    out = []
+    for t in topics:
+        items = kb.latest_forecasts(t)
+        if len(items) > 1:
+            out.append({"topic": t, "items": [{"id": i["id"], "doc_id": i["doc_id"], "date": next(
+                d["date"] for d in kb.documents() if d["doc_id"] == i["doc_id"]), "text": i["text"]} for i in items[:3]]})
+    return out
+
+
+REGISTRY: dict[str, Tool] = {t.name: t for t in [
+    Tool("get_company_profile", "Профиль компании: отрасль, масштаб, продукты банка, ВЭД, группа, качество данных",
+         {"company_id": str}, _profile),
+    Tool("get_exposures", "Чувствительность компании к темам новостей с обоснованием по признакам",
+         {"company_id": str, "topics": list}, _exposures),
+    Tool("get_news", "Новость с классификацией: темы, отрасли, страны, факты", {"news_id": str}, _news),
+    Tool("search_bank_analytics", "Поиск тезисов аналитики Альфа-Банка (BM25 + темы + отрасли)",
+         {"query": str, "topics": list, "sectors": list, "include_stale": bool}, _search),
+    Tool("find_related_news", "Другие новости по тем же темам — для контекста", {"news_id": str, "topics": list}, _related),
+    Tool("get_counterparties", "Структура платежей: поставщики и покупатели по отраслям", {"company_id": str}, _counterparties),
+    Tool("get_bank_products", "Подходящие продукты банка для темы и профиля", {"company_id": str, "topics": list}, _products),
+    Tool("check_forecast_conflicts", "Прогнозы банка по теме из разных документов — проверка противоречий",
+         {"topics": list}, _forecasts),
+]}
+
+
+class ToolRunner:
+    """Выполняет вызовы инструментов агента с проверкой аргументов, бюджетом и аудитом."""
+
+    def __init__(self, request_id: str):
+        self.request_id = request_id
+        self.calls = 0
+
+    def call(self, name: str, **args):
+        tool = REGISTRY.get(name)
+        if tool is None:
+            audit.log(self.request_id, name, args, "denied", 0, "unknown tool")
+            raise ToolError(f"Инструмент {name} не разрешен")
+        if self.calls >= MAX_CALLS_PER_RUN:
+            audit.log(self.request_id, name, args, "denied", 0, "call budget exceeded")
+            raise ToolError("Превышен бюджет вызовов инструментов")
+        clean = {}
+        for key, typ in tool.args.items():
+            if key in args:
+                value = args[key]
+                if not isinstance(value, typ):
+                    raise ToolError(f"Аргумент {key} инструмента {name} имеет неверный тип")
+                clean[key] = value
+        unknown = set(args) - set(tool.args)
+        if unknown:
+            audit.log(self.request_id, name, args, "denied", 0, f"unknown args {sorted(unknown)}")
+            raise ToolError(f"Лишние аргументы инструмента {name}: {sorted(unknown)}")
+        self.calls += 1
+        with audit.Timer() as t:
+            try:
+                result = tool.fn(**clean)
+            except ToolError as exc:
+                audit.log(self.request_id, name, clean, "error", 0, str(exc))
+                raise
+        audit.log(self.request_id, name, clean, "ok", t.ms)
+        return result, t.ms

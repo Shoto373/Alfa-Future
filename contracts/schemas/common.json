@@ -1,30 +1,69 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/dvaJf/alfa/contracts/schemas/common.json",
-  "title": "Alfa Pulse contract 0.1.0",
+  "title": "Alfa Pulse contract 1.0.0",
   "$defs": {
-    "CompanyProfile": {
+    "Answer": {
       "additionalProperties": false,
       "properties": {
-        "company_id": {
-          "description": "Уникальный идентификатор компании",
-          "minLength": 1,
-          "title": "Company Id",
+        "insight_id": {
+          "title": "Insight Id",
           "type": "string"
         },
-        "display_name": {
-          "description": "Наименование компании",
-          "minLength": 1,
-          "title": "Display Name",
+        "question": {
+          "title": "Question",
           "type": "string"
         },
-        "industry_name": {
-          "description": "Отрасль компании",
-          "minLength": 1,
-          "title": "Industry Name",
+        "answer": {
+          "title": "Answer",
           "type": "string"
         },
-        "region": {
+        "claims": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Claims",
+          "type": "array"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/Source"
+          },
+          "title": "Sources",
+          "type": "array"
+        },
+        "mode": {
+          "enum": [
+            "llm",
+            "rules"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "refused": {
+          "default": false,
+          "title": "Refused",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "insight_id",
+        "question",
+        "answer",
+        "claims",
+        "sources",
+        "mode"
+      ],
+      "title": "Answer",
+      "type": "object"
+    },
+    "BankView": {
+      "additionalProperties": false,
+      "properties": {
+        "available": {
+          "title": "Available",
+          "type": "boolean"
+        },
+        "summary": {
           "anyOf": [
             {
               "type": "string"
@@ -33,50 +72,71 @@
               "type": "null"
             }
           ],
-          "description": "Регион присутствия (null если неизвестно)",
-          "title": "Region"
+          "title": "Summary"
         },
-        "has_credit": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Наличие кредитных продуктов (null если неизвестно)",
-          "title": "Has Credit"
+        "theses": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Theses",
+          "type": "array"
         },
-        "has_deposit": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Наличие депозитных продуктов (null если неизвестно)",
-          "title": "Has Deposit"
-        },
-        "is_synthetic": {
-          "const": true,
-          "description": "Флаг синтетических данных",
-          "title": "Is Synthetic",
-          "type": "boolean"
+        "conflicts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Conflicts",
+          "type": "array"
         }
       },
       "required": [
-        "company_id",
-        "display_name",
-        "industry_name",
-        "region",
-        "has_credit",
-        "has_deposit",
-        "is_synthetic"
+        "available",
+        "summary",
+        "theses",
+        "conflicts"
       ],
-      "title": "CompanyProfile",
+      "title": "BankView",
+      "type": "object"
+    },
+    "Claim": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "origin": {
+          "enum": [
+            "fact",
+            "client_data",
+            "bank",
+            "ai"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "source_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Source Ids",
+          "type": "array"
+        },
+        "features": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Features",
+          "type": "array"
+        }
+      },
+      "required": [
+        "text",
+        "origin",
+        "source_ids"
+      ],
+      "title": "Claim",
       "type": "object"
     },
     "ErrorDetail": {
@@ -124,181 +184,274 @@
       "title": "ErrorResponse",
       "type": "object"
     },
-    "Event": {
+    "Feature": {
       "additionalProperties": false,
       "properties": {
-        "event_id": {
-          "description": "Уникальный идентификатор события",
-          "minLength": 1,
-          "title": "Event Id",
+        "name": {
+          "title": "Name",
           "type": "string"
         },
-        "title": {
-          "description": "Заголовок события",
-          "minLength": 1,
-          "title": "Title",
+        "label": {
+          "title": "Label",
           "type": "string"
         },
-        "text": {
-          "description": "Текст события",
-          "minLength": 1,
-          "title": "Text",
+        "value": {
+          "title": "Value",
           "type": "string"
-        },
-        "is_synthetic": {
-          "const": true,
-          "description": "Флаг синтетического события",
-          "title": "Is Synthetic",
-          "type": "boolean"
         }
       },
       "required": [
-        "event_id",
-        "title",
-        "text",
-        "is_synthetic"
+        "name",
+        "label",
+        "value"
       ],
-      "title": "Event",
+      "title": "Feature",
+      "type": "object"
+    },
+    "FeedbackRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "insight_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Insight Id",
+          "type": "string"
+        },
+        "rating": {
+          "enum": [
+            1,
+            -1
+          ],
+          "title": "Rating",
+          "type": "integer"
+        },
+        "section": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Section"
+        },
+        "comment": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Comment"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "enum": [
+                "owner",
+                "ceo",
+                "cfo",
+                "accountant",
+                "treasurer",
+                "clevel"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role"
+        }
+      },
+      "required": [
+        "insight_id",
+        "rating"
+      ],
+      "title": "FeedbackRequest",
       "type": "object"
     },
     "Insight": {
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "const": "0.1.0",
-          "description": "Версия схемы",
+          "const": "1.0.0",
           "title": "Schema Version",
           "type": "string"
         },
+        "insight_id": {
+          "title": "Insight Id",
+          "type": "string"
+        },
         "request_id": {
-          "description": "Идентификатор запроса",
-          "minLength": 1,
           "title": "Request Id",
           "type": "string"
         },
         "company_id": {
-          "description": "Идентификатор компании",
-          "minLength": 1,
           "title": "Company Id",
           "type": "string"
         },
-        "event_id": {
-          "description": "Идентификатор события",
-          "minLength": 1,
-          "title": "Event Id",
-          "type": "string"
-        },
         "role": {
-          "description": "Роль пользователя (ceo или cfo)",
           "enum": [
+            "owner",
             "ceo",
-            "cfo"
+            "cfo",
+            "accountant",
+            "treasurer",
+            "clevel"
           ],
           "title": "Role",
           "type": "string"
         },
-        "status": {
-          "const": "completed",
-          "description": "Статус формирования инсайта",
-          "title": "Status",
+        "news_id": {
+          "title": "News Id",
           "type": "string"
         },
-        "is_mock": {
-          "const": true,
-          "description": "Флаг синтетической/тестовой карточки",
-          "title": "Is Mock",
-          "type": "boolean"
+        "created_at": {
+          "title": "Created At",
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "llm",
+            "rules"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Model"
         },
         "title": {
-          "description": "Заголовок инсайта",
-          "minLength": 1,
           "title": "Title",
           "type": "string"
         },
-        "facts": {
-          "description": "Ключевые факты",
-          "items": {
-            "type": "string"
-          },
-          "title": "Facts",
-          "type": "array"
-        },
-        "company_relevance": {
-          "description": "Проекция на компанию",
-          "minLength": 1,
-          "title": "Company Relevance",
+        "headline": {
+          "title": "Headline",
           "type": "string"
         },
-        "risks": {
-          "description": "Выявленные риски",
+        "what_happened": {
+          "$ref": "#/$defs/WhatHappened"
+        },
+        "why_important": {
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Why Important",
+          "type": "array"
+        },
+        "risks": {
+          "items": {
+            "$ref": "#/$defs/Claim"
           },
           "title": "Risks",
           "type": "array"
         },
         "opportunities": {
-          "description": "Возможности для компании",
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/Claim"
           },
           "title": "Opportunities",
           "type": "array"
         },
         "actions": {
-          "description": "Рекомендуемые действия",
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/Claim"
           },
           "title": "Actions",
           "type": "array"
         },
-        "bank_position": {
-          "description": "Позиция банка (в спринте 1 всегда null)",
-          "title": "Bank Position",
-          "type": "null"
+        "questions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Questions",
+          "type": "array"
         },
-        "model_conclusion": {
-          "description": "Заключение (сообщает об отсутствии вызова LLM)",
-          "minLength": 1,
-          "title": "Model Conclusion",
-          "type": "string"
+        "bank_view": {
+          "$ref": "#/$defs/BankView"
+        },
+        "products": {
+          "items": {
+            "$ref": "#/$defs/ProductOffer"
+          },
+          "title": "Products",
+          "type": "array"
+        },
+        "features_used": {
+          "items": {
+            "$ref": "#/$defs/Feature"
+          },
+          "title": "Features Used",
+          "type": "array"
+        },
+        "relevance": {
+          "$ref": "#/$defs/Relevance"
         },
         "sources": {
-          "description": "Источники",
           "items": {
             "$ref": "#/$defs/Source"
           },
           "title": "Sources",
           "type": "array"
         },
-        "uncertainty": {
-          "description": "Факторы неопределенности",
+        "quality": {
+          "$ref": "#/$defs/Quality"
+        },
+        "trace": {
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/TraceStep"
           },
-          "title": "Uncertainty",
+          "title": "Trace",
           "type": "array"
+        },
+        "disclaimer": {
+          "title": "Disclaimer",
+          "type": "string"
         }
       },
       "required": [
         "schema_version",
+        "insight_id",
         "request_id",
         "company_id",
-        "event_id",
         "role",
-        "status",
-        "is_mock",
+        "news_id",
+        "created_at",
+        "mode",
+        "model",
         "title",
-        "facts",
-        "company_relevance",
+        "headline",
+        "what_happened",
+        "why_important",
         "risks",
         "opportunities",
         "actions",
-        "bank_position",
-        "model_conclusion",
+        "questions",
+        "bank_view",
+        "products",
+        "features_used",
+        "relevance",
         "sources",
-        "uncertainty"
+        "quality",
+        "trace",
+        "disclaimer"
       ],
       "title": "Insight",
       "type": "object"
@@ -307,55 +460,333 @@
       "additionalProperties": false,
       "properties": {
         "company_id": {
-          "description": "Идентификатор компании",
+          "maxLength": 64,
           "minLength": 1,
           "title": "Company Id",
           "type": "string"
         },
         "role": {
-          "description": "Роль лица, принимающего решения",
           "enum": [
+            "owner",
             "ceo",
-            "cfo"
+            "cfo",
+            "accountant",
+            "treasurer",
+            "clevel"
           ],
           "title": "Role",
           "type": "string"
         },
-        "event_id": {
-          "description": "Идентификатор события",
+        "news_id": {
+          "maxLength": 64,
           "minLength": 1,
-          "title": "Event Id",
+          "title": "News Id",
           "type": "string"
+        },
+        "force_refresh": {
+          "default": false,
+          "title": "Force Refresh",
+          "type": "boolean"
         }
       },
       "required": [
         "company_id",
         "role",
-        "event_id"
+        "news_id"
       ],
       "title": "InsightRequest",
+      "type": "object"
+    },
+    "NewsCreateRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "maxLength": 20000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "title": "NewsCreateRequest",
+      "type": "object"
+    },
+    "ProductOffer": {
+      "additionalProperties": false,
+      "properties": {
+        "product_id": {
+          "title": "Product Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "title",
+        "text",
+        "reason"
+      ],
+      "title": "ProductOffer",
+      "type": "object"
+    },
+    "Quality": {
+      "additionalProperties": false,
+      "properties": {
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "attempts": {
+          "title": "Attempts",
+          "type": "integer"
+        },
+        "checks": {
+          "items": {
+            "$ref": "#/$defs/QualityCheck"
+          },
+          "title": "Checks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "passed",
+        "attempts",
+        "checks"
+      ],
+      "title": "Quality",
+      "type": "object"
+    },
+    "QualityCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "passed",
+        "detail"
+      ],
+      "title": "QualityCheck",
+      "type": "object"
+    },
+    "QuestionRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "question": {
+          "maxLength": 1000,
+          "minLength": 2,
+          "title": "Question",
+          "type": "string"
+        }
+      },
+      "required": [
+        "question"
+      ],
+      "title": "QuestionRequest",
+      "type": "object"
+    },
+    "Relevance": {
+      "additionalProperties": false,
+      "properties": {
+        "score": {
+          "title": "Score",
+          "type": "number"
+        },
+        "reasons": {
+          "items": {
+            "$ref": "#/$defs/RelevanceReason"
+          },
+          "title": "Reasons",
+          "type": "array"
+        }
+      },
+      "required": [
+        "score",
+        "reasons"
+      ],
+      "title": "Relevance",
+      "type": "object"
+    },
+    "RelevanceReason": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "feature": {
+          "title": "Feature",
+          "type": "string"
+        },
+        "origin": {
+          "title": "Origin",
+          "type": "string"
+        },
+        "weight": {
+          "title": "Weight",
+          "type": "number"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "topic": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Topic"
+        }
+      },
+      "required": [
+        "kind",
+        "feature",
+        "origin",
+        "weight",
+        "text"
+      ],
+      "title": "RelevanceReason",
       "type": "object"
     },
     "Source": {
       "additionalProperties": false,
       "properties": {
         "source_id": {
-          "description": "Идентификатор источника",
-          "minLength": 1,
           "title": "Source Id",
           "type": "string"
         },
         "kind": {
-          "const": "synthetic_fixture",
-          "description": "Тип источника",
+          "enum": [
+            "news",
+            "bank_analytics",
+            "client_data",
+            "bank_product"
+          ],
           "title": "Kind",
           "type": "string"
         },
         "title": {
-          "description": "Название источника",
-          "minLength": 1,
           "title": "Title",
           "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "doc_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doc Id"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page"
+        },
+        "date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Date"
+        },
+        "excerpt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Excerpt"
         }
       },
       "required": [
@@ -366,35 +797,117 @@
       "title": "Source",
       "type": "object"
     },
-    "CompanyList": {
-      "type": "object",
+    "TraceStep": {
       "additionalProperties": false,
-      "required": [
-        "items"
-      ],
       "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/CompanyProfile"
-          }
-        }
-      }
-    },
-    "Healthz": {
-      "type": "object",
-      "required": [
-        "status",
-        "service"
-      ],
-      "properties": {
-        "status": {
-          "const": "ok"
+        "step": {
+          "title": "Step",
+          "type": "integer"
         },
-        "service": {
-          "const": "backend"
+        "stage": {
+          "enum": [
+            "plan",
+            "tool",
+            "compose",
+            "check",
+            "adapt",
+            "finalize"
+          ],
+          "title": "Stage",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "warning",
+            "error",
+            "skipped"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "duration_ms": {
+          "title": "Duration Ms",
+          "type": "number"
+        },
+        "output": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output"
         }
-      }
+      },
+      "required": [
+        "step",
+        "stage",
+        "name",
+        "detail",
+        "status",
+        "duration_ms"
+      ],
+      "title": "TraceStep",
+      "type": "object"
+    },
+    "WhatHappened": {
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "facts": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Facts",
+          "type": "array"
+        },
+        "actors": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Actors",
+          "type": "array"
+        },
+        "dates": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dates",
+          "type": "array"
+        },
+        "assumptions": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Assumptions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "summary",
+        "facts",
+        "actors",
+        "dates",
+        "assumptions"
+      ],
+      "title": "WhatHappened",
+      "type": "object"
     }
   }
 }

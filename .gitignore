@@ -29,8 +29,10 @@ TZ_AND_PROMPTS_ALFA_PULSE.md
 *.key
 
 # Real data is never committed
-data/
+/data/*
+!/data/synthetic/
 *.csv
+!/data/synthetic/*.csv
 *.pdf
 
 # Node / Next.js
