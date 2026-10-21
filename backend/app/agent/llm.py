@@ -109,19 +109,28 @@ def chat_json(system: str, user: str, model_kind: str = "reasoning", max_tokens:
         "max_tokens": max_tokens,
         "response_format": {"type": "json_object"},
     }
+    if model_kind == "reasoning" and s["reasoning_effort"]:
+        payload["reasoning_effort"] = s["reasoning_effort"]
     started = time.perf_counter()
     try:
         resp = _post(payload, s)
-        if resp.status_code == 400 and "response_format" in resp.text:
-            payload.pop("response_format")
-            resp = _post(payload, s)
+        for optional in ("response_format", "reasoning_effort"):
+            if resp.status_code == 400 and optional in resp.text and optional in payload:
+                payload.pop(optional)
+                resp = _post(payload, s)
         resp.raise_for_status()
         body = resp.json()
-        content = body["choices"][0]["message"]["content"]
+        choice = body["choices"][0]
+        content = choice["message"].get("content") or ""
         usage_info = body.get("usage") or {}
         tokens = int(usage_info.get("total_tokens") or (len(system) + len(user) + len(content)) // 3)
         _record(tokens, cost=float(usage_info.get("cost") or 0.0))
+        if choice.get("finish_reason") == "length":
+            raise LLMError("Ответ модели обрезан по лимиту токенов")
         data = _extract_json(content)
+    except LLMError:
+        _record(0, error=True)
+        raise
     except (httpx.HTTPError, KeyError, ValueError, IndexError) as exc:
         _record(0, error=True)
         logger.warning("llm call failed model=%s error=%s", model, type(exc).__name__)

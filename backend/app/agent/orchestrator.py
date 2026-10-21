@@ -211,7 +211,7 @@ async def run(company: dict, role: str, news: dict, request_id: str) -> dict:
     mode = "rules"
     if use_llm:
         try:
-            data, meta = llm.chat_json(prompts.COMPOSE_SYSTEM, prompts.compose_user(ctx, _sources(ctx)), "reasoning", 6000)
+            data, meta = llm.chat_json(prompts.COMPOSE_SYSTEM, prompts.compose_user(ctx, _sources(ctx)), "reasoning", 4000)
             draft = _merge_llm(draft, data)
             mode, model = "llm", meta["model"]
             trace.add("compose", "llm_compose", f"Черновик модели {meta['model']}, токенов {meta['tokens']}", "ok", meta["duration_ms"])

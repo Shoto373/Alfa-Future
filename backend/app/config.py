@@ -80,6 +80,8 @@ def llm_settings() -> dict:
         "api_key": os.environ.get("LLM_API_KEY", ""),
         "model_reasoning": _env("LLM_MODEL_REASONING", "z-ai/glm-5.3-flash"),
         "model_fast": _env("LLM_MODEL_FAST", "deepseek/deepseek-v4.1-flash"),
+        # GLM без ограничения тратит весь лимит на рассуждения и не успевает ответить; "" — не передавать.
+        "reasoning_effort": os.environ.get("LLM_REASONING_EFFORT", "low"),
         "daily_token_limit": int(_env("LLM_DAILY_TOKEN_LIMIT", "400000")),
         "timeout": float(_env("LLM_TIMEOUT_SECONDS", "75")),
         # Провайдер кейса возвращает usage.cost в рублях; бюджет — 500 ₽/день на команду.

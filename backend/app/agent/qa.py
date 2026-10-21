@@ -98,7 +98,7 @@ def answer(insight: dict, company: dict, question: str) -> dict:
         try:
             cls = classify(question, question)
             theses = kb.search(question, [t["topic"] for t in cls.topics], [company["sector"]], limit=4)
-            data, _ = llm.chat_json(prompts.QA_SYSTEM, prompts.qa_user(insight, company, theses, question), "fast", 1500)
+            data, _ = llm.chat_json(prompts.QA_SYSTEM, prompts.qa_user(insight, company, theses, question), "fast", 3000)
             for t in theses:
                 sources.setdefault(f"bank:{t['id']}", _source(t))
             claims = []
