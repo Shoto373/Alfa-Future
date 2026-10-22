@@ -111,7 +111,6 @@ export default function AnalyticsPage() {
         <div>
           <span className="eyebrow"><Icon name="doc" /> База знаний</span>
           <h1>Аналитика Альфа-Банка</h1>
-          <p className="muted">Материалы Центра макроэкономического анализа и Альфа-КИБ из кейса. Агент цитирует тезисы с указанием страницы.</p>
         </div>
       </div>
       {error && <ErrorBox message={error} onRetry={() => setTick((t) => t + 1)} />}
