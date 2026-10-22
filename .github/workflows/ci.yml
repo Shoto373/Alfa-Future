@@ -40,6 +40,7 @@ jobs:
 
       - name: Run backend tests
         run: |
+          python -m unittest discover -s deploy/tests -v
           python -m pytest backend/tests -v
 
   frontend:

@@ -47,6 +47,7 @@ jobs:
 
       - name: Run backend tests
         run: |
+          python -m unittest discover -s deploy/tests -v
           python -m pytest backend/tests -v
 
   build:
@@ -119,7 +120,7 @@ jobs:
           scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
             nginx/nginx.conf "$USER@$HOST:~/app/nginx/"
           scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
-            deploy/deploy.sh "$USER@$HOST:~/app/deploy/"
+            deploy/deploy.sh deploy/prepare_env.py "$USER@$HOST:~/app/deploy/"
 
       - name: Remote deploy
         env:
