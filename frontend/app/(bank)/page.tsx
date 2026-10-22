@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ErrorBox, Icon, OriginTag, Score, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
-import { date, IMPORTANT_SCORE as IMPORTANT, money, pct, PRODUCT_NAMES } from "@/lib/format";
-import { useCompany, useFeed } from "@/lib/hooks";
+import { date, IMPORTANT_SCORE as IMPORTANT } from "@/lib/format";
+import { useFeed } from "@/lib/hooks";
 import { ROLE_NAMES, useSession } from "@/lib/session";
 import type { BankDocument, FeedItem } from "@/lib/types";
 
@@ -49,10 +49,8 @@ function Gauge({ value }: { value: number }) {
 export default function HomePage() {
   const { session } = useSession();
   const feed = useFeed(session!.companyId, session!.role);
-  const company = useCompany(session!.companyId);
   const [latest, setLatest] = useState<BankDocument | null>(null);
   const [bannerClosed, setBannerClosed] = useState(false);
-  const p = company.data?.profile;
   const items = feed.data ?? [];
   const important = items.filter((i) => i.relevance.score >= IMPORTANT);
   const topics = topicCounts(items).slice(0, 7);
@@ -177,46 +175,12 @@ export default function HomePage() {
 
         <Link href="/pulse" className="story">
           <strong>Как читать разбор</strong>
-          <span className="story-lead">У каждого утверждения в разборе указано, откуда оно взято</span>
-          <ul className="story-legend">
-            <li><OriginTag origin="fact" /> что написано в новости</li>
-            <li><OriginTag origin="client_data" /> профиль и платежи компании</li>
-            <li><OriginTag origin="bank" /> материалы Альфа-Банка со страницей</li>
-            <li><OriginTag origin="ai" /> вывод агента, проверенный по источникам</li>
-          </ul>
+          <span className="story-lead">У каждого вывода видно, откуда он взят</span>
+          <span className="story-legend">
+            {["fact", "client_data", "bank", "ai"].map((o) => <OriginTag key={o} origin={o} />)}
+          </span>
           <span className="story-cta">Открыть ленту <Icon name="chevronRight" size={16} /></span>
         </Link>
-      </div>
-
-      <div className="home-grid-2">
-        <section className="card">
-          <header className="card-head"><h2>Профиль компании</h2></header>
-          {company.loading && <Skeleton />}
-          {company.error && <ErrorBox message={company.error.message} onRetry={company.reload} />}
-          {p && (
-            <ul className="kv">
-              <li><span>Отрасль</span><strong>{p.sector_name}</strong></li>
-              <li><span>ОКВЭД</span><strong>{p.okved_code} · {p.okved_name}</strong></li>
-              <li><span>Выручка</span><strong>{money(p.revenue)}</strong></li>
-              <li><span>Место в отрасли</span><strong>{p.market.okved_rank ? `№${p.market.okved_rank} из ${p.market.okved_peers} (доля ${pct(p.market.okved_share, 1)})` : "нет данных"}</strong></li>
-              <li><span>Регион</span><strong>{p.region ?? "нет данных"}</strong></li>
-            </ul>
-          )}
-        </section>
-        <section className="card">
-          <header className="card-head"><h2>Продукты банка</h2></header>
-          {company.loading && <Skeleton lines={2} />}
-          {p && (
-            <div className="products">
-              {Object.entries(p.products).map(([k, v]) => (
-                <span key={k} className={`product ${v ? "on" : v === null ? "unknown" : ""}`}>
-                  <Icon name={v ? "check" : "plus"} size={16} /> {PRODUCT_NAMES[k] ?? k}
-                  <small>{v ? "подключено" : v === null ? "нет данных" : "можно подключить"}</small>
-                </span>
-              ))}
-            </div>
-          )}
-        </section>
       </div>
     </div>
   );
