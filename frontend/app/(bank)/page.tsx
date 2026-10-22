@@ -86,7 +86,7 @@ export default function HomePage() {
           {latest && !bannerClosed && (
             <div className="hero-banner">
               <span className="hero-banner-dot"><Icon name="plus" size={14} /></span>
-              <Link href="/pulse/analytics">Новая аналитика банка: <strong>{latest.title}</strong></Link>
+              <Link href="/pulse/analytics" title={latest.title}>Новая аналитика: <strong>{latest.title}</strong></Link>
               <span className="badge-green">НОВОЕ</span>
               <button className="icon-btn" onClick={() => setBannerClosed(true)} aria-label="Скрыть"><Icon name="close" size={16} /></button>
             </div>
