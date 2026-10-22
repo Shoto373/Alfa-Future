@@ -70,7 +70,6 @@ export default function Shell({ children }: { children: ReactNode }) {
         </nav>
         <div className="sidebar-foot">
           <span className="nav-item disabled"><Icon name="settings" size={20} /> Настроить меню</span>
-          <p className="sidebar-note">Прототип хакатона. Данные компаний обезличены, это не действующий интернет-банк.</p>
         </div>
       </aside>
       {menuOpen && <div className="scrim" onClick={() => setMenuOpen(false)} aria-hidden="true" />}
@@ -102,10 +101,6 @@ export default function Shell({ children }: { children: ReactNode }) {
         </header>
         <main className="content">{children}</main>
       </div>
-
-      <Link href="/pulse" className={`fab ${path.startsWith("/pulse") ? "hidden" : ""}`} aria-label="Открыть Альфа.Пульс" title="Альфа.Пульс">
-        <Icon name="pulse" size={24} />
-      </Link>
     </div>
   );
 }

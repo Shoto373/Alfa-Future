@@ -73,7 +73,6 @@ code { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; background
 .nav-badge { margin-left: auto; background: #2a8cff; color: #fff; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 6px; letter-spacing: .03em; }
 .nav-divider { border: 0; border-top: 1px solid #dcdfe3; margin: 10px 12px; }
 .sidebar-foot { margin-top: auto; padding-top: 16px; display: flex; flex-direction: column; gap: 10px; }
-.sidebar-note { margin: 0; font-size: 12px; color: var(--muted); padding: 0 12px; }
 .scrim { display: none; }
 
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -130,13 +129,6 @@ code { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; background
 .notif-pop li a { display: flex; gap: 10px; align-items: flex-start; padding: 8px; border-radius: 12px; text-decoration: none; font-size: 14px; }
 .notif-pop li a:hover { background: var(--bg); }
 
-.fab {
-  position: fixed; right: 28px; bottom: 28px; background: var(--dark); color: #fff; text-decoration: none;
-  width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; box-shadow: 0 8px 24px rgba(0, 0, 0, .25); z-index: 30;
-  border: 3px solid var(--red);
-}
-.fab:hover { background: #2a2a30; }
-.fab.hidden { display: none; }
 
 /* ---------- Controls ---------- */
 .btn {
@@ -496,7 +488,6 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--blue-soft);
   .sources li .src-kind { grid-column: 2; justify-self: start; }
   .sources li > div, .sources li > a { grid-column: 2; }
   .kv li, .features .kv li, .company-panel .kv li { grid-template-columns: minmax(0, 1fr); gap: 0; }
-  .fab { right: 16px; bottom: 16px; }
   .insight-head { padding: 20px; }
   .insight-head h1, h1 { font-size: 22px; }
   .login-hero { min-height: 240px; }
