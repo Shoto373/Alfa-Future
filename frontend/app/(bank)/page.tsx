@@ -154,7 +154,6 @@ export default function HomePage() {
         <section className="card top-news">
           <header className="card-head">
             <h2>Главное для вас {important.length > 0 && <span className="count">{important.length}</span>}</h2>
-            <Link href="/pulse" className="icon-btn" aria-label="Вся лента"><Icon name="chevronRight" /></Link>
           </header>
           {feed.loading && <Skeleton lines={5} />}
           {items.length === 0 && !feed.loading && !feed.error && <p className="muted">Пока нет новостей. Добавьте новость в ленте.</p>}
@@ -175,7 +174,6 @@ export default function HomePage() {
         <section className="card gauge-card">
           <header className="card-head">
             <h2>Новостной фон</h2>
-            <Link href="/pulse" className="icon-btn" aria-label="Перейти к ленте"><Icon name="chevronRight" /></Link>
           </header>
           <Gauge value={level} />
           <p className="gauge-value">{feed.loading ? "…" : levelText}</p>
