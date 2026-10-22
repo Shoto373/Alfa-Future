@@ -62,7 +62,7 @@ export default function HomePage() {
           {feed.loading ? <Skeleton lines={2} /> : (
             <>
               <p className="hero-amount">
-                Для вас {plural(items.length, ["отобрана", "отобрано", "отобрано"])} {items.length} {plural(items.length, ["новость", "новости", "новостей"])}
+                {important.length} {plural(important.length, ["событие", "события", "событий"])} для вас
               </p>
             </>
           )}
