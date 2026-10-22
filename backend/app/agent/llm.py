@@ -10,7 +10,7 @@ import logging
 import re
 import threading
 import time
-from datetime import date
+from datetime import datetime, timezone
 
 import httpx
 
@@ -23,7 +23,14 @@ BREAKER_SECONDS = 60.0  # после сбоя соединения LLM не вы
 
 _usage_lock = threading.Lock()
 _down_until = 0.0
-_usage = {"date": date.today().isoformat(), "tokens": 0, "cost": 0.0, "calls": 0, "errors": 0}
+
+
+def _budget_day() -> str:
+    """Бюджет шлюза обновляется в 03:00 МСК, то есть в полночь UTC."""
+    return datetime.now(timezone.utc).date().isoformat()
+
+
+_usage = {"date": _budget_day(), "tokens": 0, "cost": 0.0, "calls": 0, "errors": 0}
 
 
 class LLMError(Exception):
@@ -63,16 +70,16 @@ def _post(payload: dict, s: dict) -> httpx.Response:
 
 def usage() -> dict:
     with _usage_lock:
-        if _usage["date"] != date.today().isoformat():
-            _usage.update(date=date.today().isoformat(), tokens=0, cost=0.0, calls=0, errors=0)
+        if _usage["date"] != _budget_day():
+            _usage.update(date=_budget_day(), tokens=0, cost=0.0, calls=0, errors=0)
         s = config.llm_settings()
         return dict(_usage) | {"limit": s["daily_token_limit"], "cost_limit": s["daily_cost_limit"], "cost": round(_usage["cost"], 3)}
 
 
 def _record(tokens: int, error: bool = False, cost: float = 0.0) -> None:
     with _usage_lock:
-        if _usage["date"] != date.today().isoformat():
-            _usage.update(date=date.today().isoformat(), tokens=0, cost=0.0, calls=0, errors=0)
+        if _usage["date"] != _budget_day():
+            _usage.update(date=_budget_day(), tokens=0, cost=0.0, calls=0, errors=0)
         _usage["tokens"] += tokens
         _usage["cost"] += cost
         _usage["calls"] += 1

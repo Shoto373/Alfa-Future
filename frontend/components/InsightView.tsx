@@ -74,7 +74,7 @@ export default function InsightView({ insight: ins, onRefresh, refreshing }: { i
       <div className="insight-head">
         <div className="insight-badges">
           <Score value={ins.relevance.score} />
-          <span className={`mode mode-${ins.mode}`}>{ins.mode === "llm" ? `AI-агент · ${ins.model}` : "Агент на правилах · LLM не подключена"}</span>
+          <span className={`mode mode-${ins.mode}`}>{ins.mode === "llm" ? `AI-агент · ${ins.model}` : "Агент на правилах (без LLM)"}</span>
           <span className={`quality-pill ${ins.quality.passed ? "ok" : "warn"}`}>
             {ins.quality.passed ? "Самопроверка пройдена" : "Самопроверка с замечаниями"}
             {ins.quality.attempts > 1 ? ` · попыток: ${ins.quality.attempts}` : ""}
@@ -90,6 +90,10 @@ export default function InsightView({ insight: ins, onRefresh, refreshing }: { i
             {showTrace ? "Скрыть ход анализа" : "Как получен вывод"}
           </button>
           <span className="muted small">{date(ins.created_at)} · {ins.insight_id}</span>
+        </div>
+        <div className="legend" aria-label="Обозначения источников">
+          {["fact", "client_data", "bank", "ai"].map((o) => <OriginTag key={o} origin={o} />)}
+          <span className="muted small">— у каждого утверждения указано, откуда оно</span>
         </div>
       </div>
 

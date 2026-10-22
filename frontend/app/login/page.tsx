@@ -2,19 +2,20 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ErrorBox, Loading } from "@/components/ui";
+import { AlfaMark, CompanyTile, ErrorBox, Loading } from "@/components/ui";
 import { AbortedError, api } from "@/lib/api";
-import { money } from "@/lib/format";
 import { ROLE_NAMES, useSession } from "@/lib/session";
 import type { CompanySummary, Role } from "@/lib/types";
 
-// Демо-пользователи: одна компания — несколько людей с разными ролями (условие кейса).
-const PEOPLE: { name: string; role: Role }[] = [
-  { name: "Анна Морозова", role: "cfo" },
-  { name: "Игорь Белов", role: "ceo" },
-  { name: "Мария Ким", role: "treasurer" },
-  { name: "Олег Сафонов", role: "owner" },
-  { name: "Елена Петрова", role: "accountant" },
+// Демо-пользователи. Авторизация в Альфа-Бизнесе привязана к человеку: у одного пользователя может быть
+// доступ к нескольким компаниям, а у одной компании — несколько пользователей с разными ролями.
+const PEOPLE: { name: string; role: Role; companies: number[]; note?: string }[] = [
+  { name: "Анна Морозова", role: "cfo", companies: [0, 1, 2] },
+  { name: "Игорь Белов", role: "ceo", companies: [0, 3] },
+  { name: "Олег Сафонов", role: "owner", companies: [0, 1, 2, 3, 4], note: "собственник группы" },
+  { name: "Мария Ким", role: "treasurer", companies: [1] },
+  { name: "Елена Петрова", role: "accountant", companies: [2] },
+  { name: "Дмитрий Орлов", role: "clevel", companies: [3, 4], note: "директор по закупкам" },
 ];
 
 export default function LoginPage() {
@@ -33,44 +34,64 @@ export default function LoginPage() {
     return () => controller.abort();
   }, [attempt]);
 
-  const enter = (person: { name: string; role: Role }, c: CompanySummary) => {
-    login({ userName: person.name, role: person.role, companyId: c.company_id, companyName: c.display_name });
+  const accessible = (idx: number[]) => idx.map((i) => companies?.[i]).filter((c): c is CompanySummary => Boolean(c));
+
+  const enter = (person: (typeof PEOPLE)[number]) => {
+    const list = accessible(person.companies);
+    if (!list.length) return;
+    login({
+      userName: person.name, role: person.role, companyId: list[0].company_id, companyName: list[0].display_name,
+      companies: list.map((c) => ({ id: c.company_id, name: c.display_name })),
+    });
     router.replace("/");
   };
 
   return (
     <div className="login">
-      <div className="login-panel">
-        <div className="brand brand-lg">
-          <span className="brand-mark">А</span>
-          <span className="brand-text">Альфа-Бизнес<small>демо-стенд хакатона «Альфа.Пульс»</small></span>
+      <section className="login-hero">
+        <div className="brand">
+          <AlfaMark size={40} />
+          <span className="brand-text">Альфа-Бизнес</span>
         </div>
-        <h1>Вход для проверки</h1>
+        <div className="login-hero-text">
+          <h1>Альфа.Пульс</h1>
+          <p>Новости и аналитика Альфа-Банка, разобранные под вашу компанию и роль: что произошло, почему это важно, риски, возможности и что делать.</p>
+        </div>
+        <p className="login-hero-foot">Демо-стенд хакатона. Данные компаний обезличены.</p>
+      </section>
+
+      <section className="login-panel">
+        <h2>Вход для проверки</h2>
         <p className="muted">
-          Тестовые учетные записи без пароля. Сервис создается для людей: у одной компании несколько пользователей с разными ролями,
-          и каждый видит свою ленту.
+          Тестовые учетные записи без пароля: считаем, что пользователь уже прошел авторизацию в интернет-банке.
+          Каждый видит свои компании и свою ленту.
         </p>
         {error && <ErrorBox message={error} onRetry={() => setAttempt((a) => a + 1)} />}
         {!companies && !error && <Loading text="Загружаем организации…" />}
         {companies && companies.length === 0 && <p>Нет данных о компаниях. Проверьте DATA_DIR на backend.</p>}
-        <div className="login-grid">
-          {companies?.slice(0, 3).map((c, ci) => (
-            <div className="login-company" key={c.company_id}>
-              <div className="login-company-head">
-                <strong>{c.display_name}</strong>
-                <span>{c.sector_name} · {c.region ?? "регион н/д"} · {money(c.revenue)}</span>
-              </div>
-              {PEOPLE.slice(ci, ci + 3).map((p) => (
-                <button key={p.name} className="login-user" onClick={() => enter(p, c)}>
+        {companies && companies.length > 0 && (
+          <div className="login-list">
+            {PEOPLE.map((p) => {
+              const list = accessible(p.companies);
+              if (!list.length) return null;
+              return (
+                <button key={p.name} className="login-user" onClick={() => enter(p)}>
                   <span className="avatar">{p.name[0]}</span>
-                  <span><strong>{p.name}</strong><small>{ROLE_NAMES[p.role]}</small></span>
+                  <span className="login-user-text">
+                    <strong>{p.name}</strong>
+                    <small>{ROLE_NAMES[p.role]}{p.note ? ` · ${p.note}` : ""}</small>
+                  </span>
+                  <span className="login-companies" title={list.map((c) => c.display_name).join(", ")}>
+                    {list.slice(0, 3).map((c) => <CompanyTile key={c.company_id} id={c.company_id} name={c.display_name} size={26} />)}
+                    <small>{list.length === 1 ? list[0].display_name : `${list.length} ${list.length < 5 ? "компании" : "компаний"}`}</small>
+                  </span>
                 </button>
-              ))}
-            </div>
-          ))}
-        </div>
-        <p className="muted small">Компанию и роль можно сменить после входа в шапке интернет-банка.</p>
-      </div>
+              );
+            })}
+          </div>
+        )}
+        <p className="muted small">Роль и компанию можно сменить после входа в шапке интернет-банка.</p>
+      </section>
     </div>
   );
 }
