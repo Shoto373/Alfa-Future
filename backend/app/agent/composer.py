@@ -53,16 +53,16 @@ TOPIC_EFFECT = {
 
 ACTIONS = {
     "key_rate": {
-        "cfo": [("Пересчитать график обслуживания долга при ставке 14% до конца года и проверить запас по ковенантам", "loans"),
+        "cfo": [("Пересчитать график обслуживания долга при текущих условиях финансирования и проверить запас по ковенантам", "loans"),
                 ("Сравнить плавающую и фиксированную ставку для новых траншей; оценить хеджирование части долга", "loans"),
                 ("Пересчитать стоимость лизинговых платежей и сравнить с покупкой оборудования за собственные средства", "leasing"),
-                ("Зафиксировать доходность свободной ликвидности на 3–6 месяцев, пока ставка остается высокой", "deposits"),
+                ("Сравнить варианты размещения свободной ликвидности с учетом текущих ставок и сроков", "deposits"),
                 ("Оценить, выгодно ли сейчас привлекать заемное финансирование или отложить проекты до снижения ставки", None)],
         "treasurer": [("Разместить временно свободную ликвидность на срок до конца года, пока ставки высоки", None),
-                      ("Проверить лимиты и стоимость кредитных линий на 3–6 месяцев вперед", "loans")],
+                      ("Проверить лимиты и стоимость кредитных линий на ближайший период", "loans")],
         "ceo": [("Пересмотреть сроки инвестпроектов, финансируемых заемными средствами", "loans"),
-                ("Сопоставить план инвестиций с ожиданием сохранения ставки 14% до конца года", None)],
-        "owner": [("Оценить, оправдана ли долговая нагрузка группы при ставке 14% до конца года", "loans"),
+                ("Сопоставить план инвестиций со сценариями изменения стоимости финансирования", None)],
+        "owner": [("Оценить долговую нагрузку при текущих условиях финансирования", "loans"),
                   ("Решить, направлять ли свободный денежный поток на депозиты или в развитие", None)],
         "default": [("Оценить чувствительность денежного потока к сохранению ставки на текущем уровне", None)],
     },
@@ -79,9 +79,9 @@ ACTIONS = {
         "default": ["Оценить валютные риски по контрактам с иностранными контрагентами"],
     },
     "fuel_oil": {"default": ["Пересчитать логистические издержки и проверить условия топливных надбавок в договорах перевозки"]},
-    "credit_market": {"cfo": ["Заранее согласовать лимиты финансирования на 4К26 и 2027 г."],
+    "credit_market": {"cfo": ["Заранее согласовать лимиты финансирования на следующий бюджетный период"],
                       "default": ["Проверить зависимость продаж от кредитования клиентов"]},
-    "consumer_demand": {"ceo": ["Скорректировать план продаж и запасы на 4К26 с учетом замедления спроса"],
+    "consumer_demand": {"ceo": ["Скорректировать план продаж и запасы на ближайший квартал с учетом динамики спроса"],
                         "default": ["Пересмотреть план продаж и уровень запасов"]},
     "imports_exports": {"ceo": ["Проверить устойчивость цепочки поставок и альтернативных маршрутов"],
                         "accountant": ["Сверить документы ВЭД и валютный контроль по текущим контрактам"],
@@ -121,6 +121,39 @@ def _effect(topic: str, direction: str | None, sign: int) -> float:
     return sign * DIRECTION_VALUE.get(topic, {}).get(direction, 0)
 
 
+def effect_terms(topic: str, direction: str | None, features: set[str] | None = None) -> tuple[str, str]:
+    if topic == "key_rate":
+        features = features or set()
+        funding = "новых заимствований" if "products.loans" in features else "отраслевого финансирования"
+        if "products.leasing" in features:
+            funding = "новых заимствований и лизинга" if "products.loans" in features else "нового лизингового финансирования"
+        if direction == "down":
+            return ("доходность нового размещения ликвидности может снизиться",
+                    f"стоимость {funding} может снизиться; эффект для действующих договоров зависит от их условий")
+        if direction == "up":
+            return (f"стоимость {funding} может вырасти", "доходность нового размещения ликвидности может вырасти")
+        return (f"сохранение ставки само по себе не снижает стоимость {funding}",
+                "условия доходности нового размещения ликвидности сохраняют поддержку текущей ставки")
+    if direction == "down":
+        return {
+            "key_rate": ("доходность нового размещения ликвидности может снизиться", "стоимость новых заимствований может снизиться; эффект для действующего долга зависит от договоров"),
+            "inflation": ("темп роста цен реализации замедляется", "давление роста издержек может ослабнуть"),
+            "fx": ("валютная выручка дает меньше рублей при укреплении рубля", "валютные закупки могут стать дешевле в рублях"),
+            "fuel_oil": ("снижаются цены реализации нефти и топлива", "могут снизиться топливные и транспортные издержки"),
+            "gold": ("снижаются выручка и стоимость запасов драгметаллов", "снижаются затраты на закупку драгметаллов"),
+            "metals_steel": ("снижаются цены реализации металлопродукции", "металл в себестоимости может стать дешевле"),
+            "credit_market": TOPIC_EFFECT["credit_market"],
+            "consumer_demand": TOPIC_EFFECT["consumer_demand"],
+            "gdp_industry": TOPIC_EFFECT["gdp_industry"],
+            "labor": ("ослабление рынка труда может сигнализировать о снижении спроса", "может ослабнуть давление на фонд оплаты труда"),
+            "budget": TOPIC_EFFECT["budget"],
+            "bonds": ("снижается доходность новых размещений ликвидности", "стоимость новых рыночных заимствований может снизиться"),
+            "deposits": TOPIC_EFFECT["deposits"],
+            "construction_realestate": TOPIC_EFFECT["construction_realestate"],
+        }.get(topic, TOPIC_EFFECT[topic])
+    return TOPIC_EFFECT[topic]
+
+
 def compose(ctx: dict) -> dict:
     news, cls, company = ctx["news"], ctx["news"]["classification"], ctx["company"]
     role, news_src = ctx["role"], f"news:{ctx['news']['news_id']}"
@@ -141,16 +174,17 @@ def compose(ctx: dict) -> dict:
         if key in seen or len(why) >= 5:
             continue
         seen.add(key)
-        why.append(_claim(e["why"], "client_data", [ORIGIN_SOURCE.get(e["origin"], "client:profile")], [e["feature"]]))
+        why.append(_claim(e["why"], "ai" if e["origin"] == "sector_model" else "client_data",
+                          [ORIGIN_SOURCE.get(e["origin"], "client:profile")], [e["feature"]]))
         used_features.append(e["feature"])
-    if company["market"].get("okved_rank") and company["market"].get("okved_peers"):
+    if exposures and company["market"].get("okved_rank") and company["market"].get("okved_peers"):
         m = company["market"]
         why.append(_claim(
             f"Компания — №{m['okved_rank']} из {m['okved_peers']} по выручке среди компаний с ОКВЭД {company['okved_code']} в выборке "
-            f"(доля {pct(m['okved_share'])}): событие затрагивает одного из крупных игроков своего сегмента.",
+            f"(доля {pct(m['okved_share'])}). Это положение внутри выборки, а не доля всего рынка.",
             "client_data", ["client:profile"], ["market"]))
     if not why:
-        why.append(_claim(f"Прямых признаков чувствительности компании к теме не найдено; влияние оценено по отрасли «{company['sector_name']}».",
+        why.append(_claim(f"Прямых признаков чувствительности компании к теме не найдено. По доступным данным отрасли «{company['sector_name']}» нельзя уверенно оценить влияние.",
                           "ai", ["client:profile"], ["sector"]))
 
     # Риски и возможности: по каждой теме новости — один вывод, объединяющий признаки компании.
@@ -163,13 +197,14 @@ def compose(ctx: dict) -> dict:
         exps = sorted(by_topic.get(t, []), key=lambda x: x["weight"], reverse=True)
         if not exps or t not in TOPIC_EFFECT:
             continue
-        neg, pos = TOPIC_EFFECT[t]
         d = topic_dirs.get(t, direction)
+        neg, pos = effect_terms(t, d, {e["feature"] for e in exps})
         groups = {"neg": [], "pos": [], "amb": []}
         for e in exps:
             eff = _effect(t, d, e["sign"])
             groups["neg" if eff < 0 else "pos" if eff > 0 else "amb"].append(e)
-        forecast = next((th for th in theses if t in th["topics"] and th.get("stance") == "forecast" and not th.get("stale")), None)
+        forecast = next((th for th in sorted(theses, key=lambda x: x["doc_date"], reverse=True)
+                         if t in th["topics"] and th.get("stance") == "forecast" and not th.get("stale")), None)
         horizon = f" Горизонт по прогнозу банка: {_first_sentence(forecast['text'])}" if forecast else ""
         extra = [f"bank:{forecast['id']}"] if forecast else []
 
@@ -203,9 +238,11 @@ def compose(ctx: dict) -> dict:
     for conflict in ctx.get("forecast_conflicts", []):
         items = conflict["items"]
         if len(items) > 1:
-            conflicts.append(f"Прогнозы банка по теме «{TOPICS.get(conflict['topic'], {}).get('name', conflict['topic'])}» менялись: "
-                             f"актуален материал от {items[0]['date']}, более ранний — от {items[-1]['date']}. "
-                             "В выводах используется самый свежий.")
+            label = "Пересмотр прогноза" if conflict.get("kind") == "revision" else "Расхождение прогнозов"
+            unit = conflict.get("unit", "")
+            conflicts.append(f"{label} {conflict.get('metric_label', conflict['topic'])}: "
+                             f"{items[-1].get('value')} {unit} в материале от {items[-1]['date']} → "
+                             f"{items[0].get('value')} {unit} в материале от {items[0]['date']}.")
     bank_summary = theses[0]["text"] if theses else None
     if theses and any(t.get("stale") for t in theses[:2]):
         conflicts.append("Часть найденных материалов банка устарела (2021 г.) — они приведены только как пример логики оценки.")
@@ -214,7 +251,7 @@ def compose(ctx: dict) -> dict:
     who = f"компании {company['display_name'].replace('Компания ', '')} ({company['sector_name'].lower()})"
     main = next((t for t in topics if t in TOPIC_EFFECT and by_topic.get(t)), None)
     if main:
-        neg, pos = TOPIC_EFFECT[main]
+        neg, pos = effect_terms(main, topic_dirs.get(main, direction), {e["feature"] for e in by_topic[main]})
         effs = [_effect(main, topic_dirs.get(main, direction), e["sign"]) for e in by_topic[main]]
         if any(x < 0 for x in effs) and any(x > 0 for x in effs):
             headline = f"Для {who} событие разнонаправленное: {neg}, но {pos}."
@@ -225,7 +262,7 @@ def compose(ctx: dict) -> dict:
         else:
             headline = f"Для {who}: {neg} или {pos} — зависит от структуры операций."
     else:
-        headline = f"Событие затрагивает {who} косвенно — через отрасль и макроусловия."
+        headline = f"Для {who} не найдена подтвержденная связь с событием; нужны дополнительные данные."
     if theses and not theses[0].get("stale"):
         headline += " Банк учитывает это в своих прогнозах — см. раздел «Как оценивает банк»."
 
@@ -235,7 +272,7 @@ def compose(ctx: dict) -> dict:
         lib = ACTIONS.get(t, {})
         options = [a if isinstance(a, tuple) else (a, None) for a in (lib.get(role) or lib.get("default") or [])]
         for text, needs in [o for o in options if _eligible(o[1], company)][:2]:
-            actions.append(_claim(text, "ai", [news_src] + ([f"bank:{theses[0]['id']}"] if theses else [])))
+            actions.append(_claim(text, "ai", [news_src, "client:profile"] + ([f"bank:{theses[0]['id']}"] if theses else [])))
     if not actions:
         actions = [_claim(ACTIONS["default"]["default"][0], "ai", [news_src])]
     actions = _dedupe(actions)[:4]

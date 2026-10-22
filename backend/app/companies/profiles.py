@@ -1,7 +1,7 @@
 """Профили крупных компаний: загрузка, поиск и экспозиции к макрофакторам.
 
-Профили строит ETL (app.companies.etl) из CSV в DATA_DIR и кэширует в
-RUNTIME_DIR/companies.json. Экспозиции — объяснимые признаки, по которым
+Профили строит ETL (app.companies.etl) из CSV в DATA_DIR и сохраняет в
+PostgreSQL. Экспозиции — объяснимые признаки, по которым
 новости сопоставляются с компанией: каждая ссылается на поле данных.
 """
 
@@ -11,7 +11,10 @@ import os
 import threading
 from functools import lru_cache
 
-from app import config
+from app import config, database
+from sqlalchemy import select, func
+from sqlalchemy.dialects.postgresql import insert
+from app.models import Company
 from app.companies import etl
 from app.companies.sectors import SECTOR_NAMES, SECTOR_SENSITIVITY
 
@@ -31,29 +34,40 @@ def _load() -> dict:
     with _lock:
         if _cache is not None:
             return _cache
-        path = config.profiles_path()
         data_dir = config.data_dir()
         if not (data_dir / "df_Uid_data_hack.csv").exists():
             fallback = config.fallback_data_dir()
             logger.warning("no case CSV in %s, falling back to %s", data_dir, fallback)
             data_dir = fallback
         signature = _signature(data_dir)
-        data = None
-        if path.exists():
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                data = None
-        explicit = bool(os.environ.get("PROFILES_PATH"))
-        if data is None or (not explicit and signature and data.get("signature") != signature):
-            if not signature:
-                raise ProfilesError(f"Нет данных: {data_dir}/df_Uid_data_hack.csv")
-            logger.info("building company profiles from %s", data_dir)
-            data = etl.build_profiles(data_dir)
-            data["signature"] = signature
-            data["synthetic"] = (data_dir / "SYNTHETIC").exists()
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        with database.session() as db:
+            db.execute(select(func.pg_advisory_xact_lock(72810402)))
+            meta = database.state("profiles", db)
+            explicit = os.environ.get("PROFILES_PATH")  # optional legacy import / test fixture
+            if not meta or meta.get("signature") != signature:
+                if explicit:
+                    from pathlib import Path
+                    data = json.loads(Path(explicit).read_text(encoding="utf-8"))
+                else:
+                    if not signature:
+                        raise ProfilesError(f"Нет данных: {data_dir}/df_Uid_data_hack.csv")
+                    logger.info("building company profiles from %s", data_dir)
+                    data = etl.build_profiles(data_dir)
+                data["signature"] = signature
+                data["synthetic"] = (data_dir / "SYNTHETIC").is_file()
+                rows = [dict(company_id=c["company_id"], sector=c["sector"], revenue=c.get("revenue"), payload=c)
+                        for c in data["companies"]]
+                if rows:
+                    stmt = insert(Company)
+                    db.execute(stmt.on_conflict_do_update(index_elements=[Company.company_id],
+                                 set_={k: getattr(stmt.excluded, k) for k in ("sector", "revenue", "payload")}), rows)
+                meta = {k: v for k, v in data.items() if k != "companies"}
+                meta["company_ids"] = [c["company_id"] for c in data["companies"]]
+                database.set_state("profiles", meta, db)
+            data = {k: v for k, v in meta.items() if k != "company_ids"}
+            data["companies"] = list(db.scalars(select(Company.payload)
+                .where(Company.company_id.in_(meta["company_ids"]))
+                .order_by(Company.revenue.desc().nulls_last(), Company.company_id)))
         data["by_id"] = {c["company_id"]: c for c in data["companies"]}
         _cache = data
         exposures.cache_clear()
@@ -64,7 +78,8 @@ def _signature(data_dir) -> str | None:
     files = [data_dir / n for n in ("df_Uid_data_hack.csv", "df_Uid_payment_hack.csv", "df_Fid_Uid_link_hack.csv")]
     if not files[0].exists():
         return None
-    return "|".join(f"{f.name}:{f.stat().st_size}:{int(f.stat().st_mtime)}" for f in files if f.exists())
+    return "v2|" + str((data_dir / "SYNTHETIC").is_file()) + "|" + "|".join(
+        f"{f.name}:{f.stat().st_size}:{f.stat().st_mtime_ns}" for f in files if f.exists())
 
 
 def reset_cache() -> None:
@@ -126,11 +141,11 @@ def exposures(company_id: str) -> tuple[dict, ...]:
             add(topic, 1.0, s.sign, "sector", c["sector_name"], f"Отрасль «{c['sector_name']}»: {s.why}", "sector_model")
 
     if p.get("loans"):
-        add("key_rate", 1.2, -1, "products.loans", True, "Есть кредитные продукты: стоимость долга зависит от ключевой ставки")
+        add("key_rate", 1.2, -1, "products.loans", True, "Есть кредитные продукты: стоимость новых заимствований чувствительна к ставке; эффект для действующего долга зависит от договора")
         add("credit_market", 0.8, 1, "products.loans", True, "Есть кредитные продукты: условия кредитования влияют на финансирование")
         add("bonds", 0.4, -1, "products.loans", True, "Ставки рынка долга задают ориентир стоимости новых заимствований")
     if p.get("leasing"):
-        add("key_rate", 0.6, -1, "products.leasing", True, "Есть лизинг: лизинговые платежи привязаны к стоимости фондирования")
+        add("key_rate", 0.6, -1, "products.leasing", True, "Есть лизинг: стоимость новых сделок и условия пересмотра платежей могут зависеть от стоимости фондирования")
     if p.get("deposits"):
         add("key_rate", 0.7, 1, "products.deposits", True, "Есть депозиты: высокая ставка повышает доходность размещения ликвидности")
         add("deposits", 0.6, 1, "products.deposits", True, "Есть депозиты: важна доходность размещения")
@@ -140,7 +155,10 @@ def exposures(company_id: str) -> tuple[dict, ...]:
     if p.get("guarantees"):
         add("budget", 0.6, 1, "products.guarantees", True, "Есть банковские гарантии: вероятны контракты, в т.ч. государственные")
     if p.get("payroll") or c.get("workers_fns") in ("101-250", "Более 251"):
-        add("labor", 0.6, -1, "workers_fns", c.get("workers_fns"), f"Штат {c.get('workers_fns') or 'н/д'} сотрудников: рост зарплат увеличивает издержки")
+        feature = "workers_fns" if c.get("workers_fns") else "products.payroll"
+        why = f"Штат {c['workers_fns']} сотрудников: рост зарплат увеличивает издержки" if c.get("workers_fns") else \
+            "Есть зарплатный проект: изменения зарплат могут влиять на расходы на персонал"
+        add("labor", 0.6, -1, feature, c.get("workers_fns") or True, why)
     if c.get("fts_flag"):
         countries = ", ".join(c["fts_countries"]) or "страны не указаны"
         add("fx", 1.0, 0, "fts_countries", c["fts_countries"], f"Есть внешнеэкономическая деятельность ({countries}): курс влияет на расчеты")

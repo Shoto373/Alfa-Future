@@ -13,7 +13,7 @@ _SAFE = {"GET", "HEAD", "OPTIONS"}
 def check_origin(request: Request) -> None:
     """Дополнительная защита от CSRF: изменяющий запрос из чужого Origin отклоняется."""
     origin = request.headers.get("origin")
-    if request.method not in _SAFE and origin and origin != config.frontend_origin():
+    if request.method not in _SAFE and origin and origin not in config.frontend_origins():
         raise ApiError("FORBIDDEN")
 
 

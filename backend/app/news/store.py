@@ -2,7 +2,7 @@
 
 Каждая новость классифицируется при добавлении. Дубликаты (почти одинаковый
 текст из разных источников) объединяются: остается одна запись со списком
-источников. Хранение — JSON в RUNTIME_DIR, без внешней БД.
+источников. Записи и изменения хранятся транзакционно в PostgreSQL.
 """
 
 import hashlib
@@ -11,18 +11,15 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app import config
+from app import database
+from sqlalchemy import select, func
+from app.models import News
 from app.news.classifier import classify, tokenize
 
 SEED_FILE = Path(__file__).with_name("seed_news.json")
 DUPLICATE_THRESHOLD = 0.55
 
 _lock = threading.Lock()
-_items: dict[str, dict] | None = None
-
-
-def _store_path() -> Path:
-    return config.runtime_dir() / "news.json"
 
 
 def _shingles(text: str, n: int = 3) -> set[str]:
@@ -39,7 +36,9 @@ def similarity(a: str, b: str) -> float:
 
 def make_item(title: str, text: str, source: str, url: str | None = None,
               published_at: str | None = None, kind: str = "external", news_id: str | None = None) -> dict:
-    title, text = title.strip(), text.strip()
+    from app.agent.evidence import safe_text
+    original = (title.strip(), text.strip())
+    title, text = safe_text(original[0]), safe_text(original[1])
     digest = hashlib.sha1(f"{title}|{text[:400]}".encode()).hexdigest()[:12]
     cls = classify(title, text)
     return {
@@ -54,43 +53,44 @@ def make_item(title: str, text: str, source: str, url: str | None = None,
         "added_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "classification": cls.as_dict(),
         "duplicates": [],
+        "content_filtered": original != (title, text),
     }
 
 
-def _load() -> dict[str, dict]:
-    global _items
-    if _items is not None:
-        return _items
-    items: dict[str, dict] = {}
-    path = _store_path()
-    if path.exists():
-        try:
-            for it in json.loads(path.read_text(encoding="utf-8")):
-                items[it["news_id"]] = it
-        except (OSError, ValueError, KeyError):
-            items = {}
-    if not any(i["kind"] == "seed" for i in items.values()):
-        seed = json.loads(SEED_FILE.read_text(encoding="utf-8"))
-        for s in seed["items"]:
+def _load(db=None) -> dict[str, dict]:
+    if db is None:
+        with database.session() as db:
+            return _load(db)
+    db.execute(select(func.pg_advisory_xact_lock(72810403)))
+    version = hashlib.sha256(SEED_FILE.read_bytes() + Path(__file__).with_name("classifier.py").read_bytes()
+                             + Path(__file__).with_name("taxonomy.py").read_bytes()).hexdigest()
+    if database.state("news_seed", db) != version:
+        for s in json.loads(SEED_FILE.read_text(encoding="utf-8"))["items"]:
             it = make_item(s["title"], s["text"], s["source"], None, s["published_at"], "seed", s["news_id"])
-            items[it["news_id"]] = it
-    _items = items
-    _save()
-    return _items
-
-
-def _save() -> None:
-    path = _store_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(list((_items or {}).values()), ensure_ascii=False), encoding="utf-8")
-    tmp.replace(path)
+            previous = db.get(News, it["news_id"])
+            if previous:
+                it["duplicates"] = previous.payload.get("duplicates") or []
+                previous.payload = it
+                previous.published_at = datetime.fromisoformat(it["published_at"])
+            else:
+                db.add(News(news_id=it["news_id"], published_at=datetime.fromisoformat(it["published_at"]),
+                              kind=it["kind"], payload=it))
+        db.flush()
+        # Reclassify all previously stored records when the classifier changes.
+        for record in db.scalars(select(News)):
+            previous = record.payload
+            updated = make_item(previous["title"], previous["text"], previous["source"], previous.get("url"),
+                                previous["published_at"], previous["kind"], previous["news_id"])
+            updated.update(added_at=previous["added_at"], duplicates=previous.get("duplicates") or [],
+                           content_filtered=previous.get("content_filtered", False) or updated["content_filtered"])
+            record.payload = updated
+        db.flush()
+        database.set_state("news_seed", version, db)
+    return {p["news_id"]: p for p in db.scalars(select(News.payload))}
 
 
 def reset_cache() -> None:
-    global _items
-    with _lock:
-        _items = None
+    """Compatibility hook: news reads always use committed PostgreSQL records."""
 
 
 def all_items() -> list[dict]:
@@ -105,16 +105,17 @@ def get(news_id: str) -> dict | None:
 
 def add(item: dict) -> tuple[dict, bool]:
     """Добавляет новость. Возвращает (запись, создана_ли_новая). Дубликат приклеивается к оригиналу."""
-    with _lock:
-        items = _load()
+    with _lock, database.session() as db:
+        items = _load(db)
         if item["news_id"] in items:
             return items[item["news_id"]], False
         probe = f"{item['title']} {item['text'][:600]}"
         for existing in items.values():
             if similarity(probe, f"{existing['title']} {existing['text'][:600]}") >= DUPLICATE_THRESHOLD:
-                existing["duplicates"].append({"source": item["source"], "url": item["url"], "title": item["title"]})
-                _save()
+                existing = {**existing, "duplicates": existing["duplicates"] + [
+                    {"source": item["source"], "url": item["url"], "title": item["title"]}]}
+                db.get(News, existing["news_id"]).payload = existing
                 return existing, False
-        items[item["news_id"]] = item
-        _save()
+        db.add(News(news_id=item["news_id"], published_at=datetime.fromisoformat(item["published_at"]),
+                      kind=item["kind"], payload=item))
         return item, True

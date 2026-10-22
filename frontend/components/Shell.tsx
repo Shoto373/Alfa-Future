@@ -17,13 +17,6 @@ const NAV: (NavItem | "divider")[] = [
   { href: "/", label: "Главная", icon: "home" },
   { href: "/pulse", label: "Альфа.Пульс", icon: "pulse", badge: "НОВОЕ", accent: true },
   { href: "/pulse/analytics", label: "Аналитика банка", icon: "doc" },
-  "divider",
-  { href: "#payment", label: "Новый платёж", icon: "plus", disabled: true },
-  { href: "#operations", label: "Лента операций", icon: "mail", disabled: true },
-  { href: "#statement", label: "Выписка", icon: "file", disabled: true },
-  { href: "#accounts", label: "Счета", icon: "list", disabled: true },
-  { href: "#counterparties", label: "Контрагенты", icon: "users", disabled: true },
-  { href: "#cards", label: "Карты", icon: "card", disabled: true },
 ];
 
 export default function Shell({ children }: { children: ReactNode }) {

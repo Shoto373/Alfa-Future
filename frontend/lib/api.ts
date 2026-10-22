@@ -88,8 +88,8 @@ export const api = {
       { signal, timeoutMs: 180_000 }),
   ask: (insightId: string, question: string) =>
     request<Answer>(`/api/v1/insights/${insightId}/questions`, json("POST", { question }), { timeoutMs: 90_000 }),
-  feedback: (insightId: string, rating: 1 | -1, section: string, role: Role, comment?: string) =>
-    request<{ status: string }>("/api/v1/feedback", json("POST", { insight_id: insightId, rating, section, role, comment: comment || null })),
+  feedback: (insightId: string, rating: 1 | -1, section: string, comment?: string) =>
+    request<{ status: string }>("/api/v1/feedback", json("POST", { insight_id: insightId, rating, section, comment: comment || null })),
   addNews: (payload: { title?: string; text?: string; url?: string }) =>
     request<{ created: boolean; duplicate_of: string | null; news: NewsBrief }>("/api/v1/news", json("POST", payload), { timeoutMs: 30_000 }),
   refreshNews: () =>

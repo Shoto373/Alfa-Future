@@ -1,9 +1,13 @@
 THIRD PARTY NOTICES — «Альфа.Пульс»
 
 Версии — по backend/requirements.txt и frontend/package-lock.json.
+Транзитивные Python-версии закреплены в backend/constraints.txt.
 Тексты лицензий распространяются вместе с пакетами.
 
 Backend (Python, PyPI)
+  SQLAlchemy         2.0.55   MIT          (ORM и транзакции)
+  alembic            1.20.1   MIT          (миграции схемы)
+  psycopg, psycopg-binary 3.2.12 LGPL-3.0-or-later; бинарная сборка включает libpq
   fastapi            0.158.0   MIT
   starlette          (зависимость fastapi)  BSD-3-Clause
   pydantic           2.14.1    MIT
@@ -13,6 +17,7 @@ Backend (Python, PyPI)
   pytest-asyncio     1.4.0     Apache-2.0     (тесты)
 
 Frontend (npm)
+  @playwright/test    1.56.1   Apache-2.0    (только браузерная приемка)
   next               16.3.8    MIT
   react, react-dom   19.3.0    MIT
   typescript         5.9.3     Apache-2.0     (сборка)
@@ -23,6 +28,7 @@ Frontend (npm)
 
 Runtime-образы Docker
   python:3.11-slim, node:20-alpine, nginx:alpine
+  postgres:17.6 — PostgreSQL License; постоянное хранилище приложения
 
 Модели (LLM)
   Используются только модели из Приложения 3 кейса, через OpenAI-совместимый API провайдера

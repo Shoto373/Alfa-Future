@@ -1,8 +1,11 @@
 """Общая изоляция тестов: синтетические данные кейса и временный RUNTIME_DIR."""
 
 from pathlib import Path
+import os
+import uuid
 
 import pytest
+from sqlalchemy.schema import DropSchema
 
 from app.companies import profiles
 from app.news import store
@@ -12,6 +15,15 @@ REPO = Path(__file__).resolve().parents[2]
 
 @pytest.fixture(autouse=True)
 def isolated_runtime(tmp_path_factory, monkeypatch):
+    dsn = os.environ.get("TEST_DATABASE_URL")
+    if not dsn and os.environ.get("PGHOST"):
+        from app.config import database_url
+        dsn = database_url()
+    if not dsn:
+        pytest.fail("Set TEST_DATABASE_URL to a dedicated local PostgreSQL instance; tests create isolated schemas.")
+    schema = "test_" + uuid.uuid4().hex
+    monkeypatch.setenv("DATABASE_URL", dsn)
+    monkeypatch.setenv("DATABASE_SCHEMA", schema)
     runtime = tmp_path_factory.mktemp("runtime")
     monkeypatch.setenv("RUNTIME_DIR", str(runtime))
     monkeypatch.setenv("DATA_DIR", str(REPO / "data" / "synthetic"))
@@ -25,6 +37,16 @@ def isolated_runtime(tmp_path_factory, monkeypatch):
     yield runtime
     profiles.reset_cache()
     store.reset_cache()
+    from app.knowledge import kb
+    from app import database
+    kb._index.cache_clear()
+    database._ready.discard((dsn, schema))
+    # Only the randomly generated test schema is removed, never public or a database.
+    assert schema.startswith("test_") and len(schema) == 37
+    engine = database.engine()
+    with engine.begin() as conn:
+        conn.execute(DropSchema(schema, cascade=True, if_exists=True))
+    engine.dispose()
 
 
 @pytest.fixture(scope="session")

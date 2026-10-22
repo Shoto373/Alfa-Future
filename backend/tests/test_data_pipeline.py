@@ -45,10 +45,15 @@ def test_noisy_values_are_handled(tmp_path):
     assert companies[rows[0]["SYNTHETIC_U"]]["sector"] == "other"
 
 
-def test_profiles_built_lazily_into_runtime(isolated_runtime):
+def test_profiles_built_lazily_into_postgres(isolated_runtime):
     meta = profiles.meta()
     assert meta["profiles"] > 0
-    assert (isolated_runtime / "companies.json").exists()
+    from app import database
+    with database.session() as conn:
+        from sqlalchemy import select, func
+        from app.models import Company
+        assert conn.scalar(select(func.count()).select_from(Company)) == meta["profiles"]
+    assert not (isolated_runtime / "companies.json").exists()
 
 
 def test_exposures_reference_client_features(client, company):
@@ -57,3 +62,13 @@ def test_exposures_reference_client_features(client, company):
     assert all(e["feature"] and e["why"] and e["topic"] for e in exps)
     if company["products"]["loans"]:
         assert any(e["feature"] == "products.loans" and e["topic"] == "key_rate" for e in exps)
+
+
+def test_directory_named_synthetic_is_not_a_dataset_marker(tmp_path, monkeypatch):
+    import shutil
+    for path in (REPO / "data" / "synthetic").glob("*.csv"):
+        shutil.copy(path, tmp_path / path.name)
+    (tmp_path / "SYNTHETIC").mkdir()
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    profiles.reset_cache()
+    assert profiles.meta()["synthetic"] is False

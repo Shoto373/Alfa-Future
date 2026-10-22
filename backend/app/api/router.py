@@ -159,6 +159,8 @@ async def add_news(payload: NewsCreateRequest) -> dict:
         item = store.make_item(title, payload.text, "Добавлено пользователем", None, None, "user")
     else:
         raise ApiError("INVALID_REQUEST", "Укажите ссылку или текст новости не короче 40 символов")
+    if len(item["text"].strip()) < 40 or not item["title"].strip():
+        raise ApiError("INVALID_REQUEST", "После очистки текст новости слишком короткий или не содержит заголовка")
     saved, created = store.add(item)
     return {"created": created, "duplicate_of": None if created else saved["news_id"], "news": _news_brief(saved),
             "classification": saved["classification"]}
@@ -217,6 +219,7 @@ async def ask(insight_id: str, payload: QuestionRequest, user: dict = Depends(cu
     member_of(user, ins["company_id"])
     c = _company(ins["company_id"])
     result = await asyncio.to_thread(qa.answer, ins, c, payload.question.strip())
+    storage.save_answer(result)
     storage.log_event("question", insight_id=insight_id, refused=result["refused"], mode=result["mode"])
     return result
 
@@ -255,7 +258,8 @@ async def analytics_pdf(doc_id: str):
     path = (pdf_dir / doc["file"]).resolve()
     if path.parent != pdf_dir.resolve() or not path.exists():
         raise ApiError("DOCUMENT_NOT_FOUND")
-    return FileResponse(path, media_type="application/pdf", filename=Path(doc["file"]).name)
+    return FileResponse(path, media_type="application/pdf", filename=Path(doc["file"]).name,
+                        content_disposition_type="inline")
 
 
 @router.get("/audit", responses=ERRORS, dependencies=[Depends(require_any_admin)])

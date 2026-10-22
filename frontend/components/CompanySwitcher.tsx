@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ROLE_NAMES, useSession } from "@/lib/session";
 import { CompanyTile, Icon } from "./ui";
@@ -34,15 +35,18 @@ export default function CompanySwitcher() {
     </>
   );
 
-  if (!many) return <div className="switcher"><div className="switcher-btn static">{label}</div></div>;
-
   return (
     <div className="switcher" ref={box}>
-      <button type="button" className="switcher-btn" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-label="Сменить организацию">
-        {label}
-        <Icon name="chevron" size={16} />
-      </button>
-      {open && (
+      <div className="switcher-chip">
+        <Link href="/company" className="switcher-link" title="Профиль компании">{label}</Link>
+        {many && (
+          <button type="button" className="switcher-btn icon-btn" onClick={() => setOpen((v) => !v)} aria-expanded={open}
+            aria-label="Сменить организацию" title="Сменить организацию">
+            <Icon name="chevron" size={16} />
+          </button>
+        )}
+      </div>
+      {open && many && (
         <div className="switcher-pop" role="dialog" aria-label="Выбор организации">
           <p className="pop-title">Мои компании</p>
           <ul>

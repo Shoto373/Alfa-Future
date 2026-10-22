@@ -17,6 +17,22 @@ jobs:
     # Запускаем тесты для push, workflow_dispatch и активных либо смердженных PR
     if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.6
+        env:
+          POSTGRES_DB: alfa_test
+          POSTGRES_USER: alfa
+          POSTGRES_PASSWORD: alfa-ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U alfa -d alfa_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      TEST_DATABASE_URL: postgresql://alfa:alfa-ci@127.0.0.1:5432/alfa_test
     steps:
       - uses: actions/checkout@v4
 
@@ -31,6 +47,7 @@ jobs:
 
       - name: Run backend tests
         run: |
+          python -m unittest discover -s deploy/tests -v
           python -m pytest backend/tests -v
 
   build:
@@ -103,7 +120,7 @@ jobs:
           scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
             nginx/nginx.conf "$USER@$HOST:~/app/nginx/"
           scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
-            deploy/deploy.sh "$USER@$HOST:~/app/deploy/"
+            deploy/deploy.sh deploy/prepare_env.py "$USER@$HOST:~/app/deploy/"
 
       - name: Remote deploy
         env:

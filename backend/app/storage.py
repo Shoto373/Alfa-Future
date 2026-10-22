@@ -1,80 +1,87 @@
-"""Карточки, обратная связь и метрики качества (JSON/JSONL в RUNTIME_DIR)."""
+"""Persistent insights, answers, feedback and events in PostgreSQL."""
 
-import json
-import threading
+import hashlib
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
-from app import config
+from app import database
 from app.agent import llm
+from sqlalchemy import select
+from app.models import Insight, Feedback, Answer, Event
 
-_lock = threading.Lock()
-
-
-def _dir(name: str):
-    path = config.runtime_dir() / name
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+CACHE_VERSION = "p0-quality-2"
 
 
-def _key(company_id: str, role: str, news_id: str) -> str:
-    return f"{company_id}__{role}__{news_id}".replace("/", "_")
+def cache_version() -> str:
+    # Source imports update these signatures; old insights remain available by id.
+    with database.session() as db:
+        profiles = database.state("profiles", db) or {}
+        knowledge = database.state("knowledge", db) or ""
+        news_version = database.state("news_seed", db) or ""
+    return hashlib.sha256(f"{CACHE_VERSION}:{profiles.get('signature')}:{knowledge}:{news_version}".encode()).hexdigest()
 
 
 def save_insight(insight: dict) -> None:
-    with _lock:
-        (_dir("insights") / f"{insight['insight_id']}.json").write_text(json.dumps(insight, ensure_ascii=False), encoding="utf-8")
-        index = _index()
-        index[_key(insight["company_id"], insight["role"], insight["news_id"])] = insight["insight_id"]
-        (_dir("insights") / "_index.json").write_text(json.dumps(index), encoding="utf-8")
-
-
-def _index() -> dict:
-    path = _dir("insights") / "_index.json"
-    try:
-        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-    except ValueError:
-        return {}
+    version = cache_version()
+    with database.session() as db:
+        db.add(Insight(insight_id=insight["insight_id"], company_id=insight["company_id"],
+                         news_id=insight["news_id"], role=insight["role"],
+                         created_at=datetime.fromisoformat(insight["created_at"]), cache_version=version, payload=insight))
 
 
 def get_insight(insight_id: str) -> dict | None:
     if not insight_id.replace("-", "").isalnum():
         return None
-    path = _dir("insights") / f"{insight_id}.json"
-    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+    with database.session() as db:
+        row = db.get(Insight, insight_id)
+        return row.payload if row else None
 
 
 def cached_insight(company_id: str, role: str, news_id: str) -> dict | None:
-    iid = _index().get(_key(company_id, role, news_id))
-    return get_insight(iid) if iid else None
+    version = cache_version()
+    with database.session() as db:
+        return db.scalar(select(Insight.payload).where(Insight.company_id == company_id, Insight.role == role,
+            Insight.news_id == news_id, Insight.cache_version == version)
+            .order_by(Insight.created_at.desc(), Insight.insight_id.desc()).limit(1))
 
 
-def _append(name: str, record: dict) -> None:
+def _append(table: str, record: dict) -> None:
     record = {"ts": datetime.now(timezone.utc).isoformat(timespec="seconds")} | record
-    with _lock:
-        with (config.runtime_dir() / name).open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+    with database.session() as db:
+        if table in ("feedback", "answers"):
+            model = Feedback if table == "feedback" else Answer
+            db.add(model(insight_id=record["insight_id"], payload=record))
+        elif table == "events":
+            db.add(Event(kind=record["kind"], payload=record))
+        else:
+            raise ValueError("Unknown event table")
 
 
-def _read(name: str) -> list[dict]:
-    path = config.runtime_dir() / name
-    if not path.exists():
-        return []
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+def _read(table: str) -> list[dict]:
+    models = {"feedback": Feedback, "events": Event, "insights": Insight, "answers": Answer}
+    if table not in models:
+        raise ValueError("Unknown table")
+    model = models[table]
+    with database.session() as db:
+        return list(db.scalars(select(model.payload).order_by(model.created_at)))
 
 
 def add_feedback(fb: dict) -> None:
-    _append("feedback.jsonl", fb)
+    _append("feedback", fb)
+
+
+def save_answer(answer: dict) -> None:
+    _append("answers", answer)
 
 
 def log_event(kind: str, **data) -> None:
-    _append("events.jsonl", {"kind": kind} | data)
+    _append("events", {"kind": kind} | data)
 
 
 def metrics() -> dict:
-    insights = [json.loads(p.read_text(encoding="utf-8")) for p in _dir("insights").glob("ins-*.json")]
-    feedback = _read("feedback.jsonl")
-    events = _read("events.jsonl")
+    insights = _read("insights")
+    feedback = _read("feedback")
+    events = _read("events")
 
     checks: dict[str, list[bool]] = defaultdict(list)
     first_pass, claims_total, claims_linked, latency = 0, 0, 0, []
@@ -88,7 +95,9 @@ def metrics() -> dict:
             for cl in ins[sec]:
                 claims_total += 1
                 claims_linked += int(bool(cl["source_ids"]))
-        latency.append(sum(s["duration_ms"] for s in ins["trace"]))
+        total = next((s.get("output", {}).get("total_duration_ms") for s in ins["trace"]
+                      if s["stage"] == "finalize" and s.get("output")), None)
+        latency.append(total if total is not None else sum(s["duration_ms"] for s in ins["trace"]))
 
     ratings = Counter(f["rating"] for f in feedback)
     by_section = defaultdict(Counter)

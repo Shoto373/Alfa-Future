@@ -6,7 +6,7 @@ import { ErrorBox, Icon, OriginTag, Score, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
 import { date, IMPORTANT_SCORE as IMPORTANT } from "@/lib/format";
 import { useFeed } from "@/lib/hooks";
-import { ROLE_NAMES, useSession } from "@/lib/session";
+import { useSession } from "@/lib/session";
 import type { BankDocument, FeedItem } from "@/lib/types";
 
 function plural(n: number, forms: [string, string, string]) {
@@ -49,16 +49,17 @@ function Gauge({ value }: { value: number }) {
 export default function HomePage() {
   const { session } = useSession();
   const feed = useFeed(session!.companyId);
-  const [latest, setLatest] = useState<BankDocument | null>(null);
-  const [bannerClosed, setBannerClosed] = useState(false);
   const items = feed.data ?? [];
   const important = items.filter((i) => i.relevance.score >= IMPORTANT);
   const topics = topicCounts(items).slice(0, 7);
   const top5 = items.slice(0, 5);
   const level = top5.length ? top5.reduce((a, i) => a + i.relevance.score, 0) / top5.length : 0;
   const levelText = level >= 70 ? "Требует внимания" : level >= 45 ? "Умеренный фон" : "Спокойный фон";
-  const companies = session!.memberships.length;
 
+  const [latest, setLatest] = useState<BankDocument | null>(null);
+  const [bannerClosed, setBannerClosed] = useState(false);
+
+  // Самый свежий актуальный материал банка — для зеленого баннера «НОВОЕ».
   useEffect(() => {
     api.analytics()
       .then((r) => setLatest([...r.documents].filter((d) => !d.stale).sort((a, b) => b.date.localeCompare(a.date))[0] ?? null))
@@ -69,13 +70,12 @@ export default function HomePage() {
     <div className="page home">
       <section className="hero" aria-label="Альфа.Пульс на главной">
         <div className="hero-main">
-          <span className="hero-label">Альфа.Пульс · {ROLE_NAMES[session!.role]}</span>
+          <span className="hero-label">Альфа.Пульс</span>
           {feed.loading ? <Skeleton lines={2} /> : (
             <>
               <p className="hero-amount">
                 {important.length} {plural(important.length, ["событие", "события", "событий"])} для вас
               </p>
-              <p className="hero-sub"><span aria-hidden="true">↳</span> из {items.length} новостей, отобранных под {session!.companyName}</p>
             </>
           )}
           {feed.error && <ErrorBox message={feed.error.message} onRetry={feed.reload} />}
@@ -86,7 +86,7 @@ export default function HomePage() {
           {latest && !bannerClosed && (
             <div className="hero-banner">
               <span className="hero-banner-dot"><Icon name="plus" size={14} /></span>
-              <span>Новая аналитика банка: <strong>{latest.title}</strong></span>
+              <Link href="/pulse/analytics" title={latest.title}>Новая аналитика: <strong>{latest.title}</strong></Link>
               <span className="badge-green">НОВОЕ</span>
               <button className="icon-btn" onClick={() => setBannerClosed(true)} aria-label="Скрыть"><Icon name="close" size={16} /></button>
             </div>
@@ -141,7 +141,6 @@ export default function HomePage() {
             <use href="#pr-line" stroke="#ff6a5c" strokeWidth="4.5" opacity=".9" />
             <use href="#pr-line" stroke="url(#pr-fade)" strokeWidth="2.2" />
           </svg>
-          <span className="promo-badge">Для {companies} {plural(companies, ["компании", "компаний", "компаний"])}</span>
         </Link>
       </section>
 

@@ -11,9 +11,12 @@ WORKDIR /app
 
 # Установка зависимостей backend
 COPY backend/requirements.txt /app/requirements.txt
+COPY backend/constraints.txt /app/constraints.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Исходный код и синтетический набор данных (реальные данные кейса монтируются через DATA_DIR)
+COPY backend/alembic.ini /app/alembic.ini
+COPY backend/alembic /app/alembic
 COPY backend/app /app/app
 COPY data/synthetic /app/data/synthetic
 

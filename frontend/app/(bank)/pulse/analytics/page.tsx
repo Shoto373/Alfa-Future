@@ -32,6 +32,7 @@ function Theses({ d }: { d: BankDocument }) {
           <li key={t.id} className="thesis">
             <p>
               {t.stance === "forecast" && <span className="thesis-flag">Прогноз</span>}
+              {t.stale && <span className="tag tag-warn">архивный тезис</span>}
               {t.text}
             </p>
             <span className="thesis-page">стр. {t.page}</span>

@@ -8,6 +8,7 @@
 import re
 
 from app.news.store import similarity
+from app.agent import evidence
 
 _NUM = re.compile(r"\d+(?:[.,]\d+)?")
 _THOUSANDS = re.compile(r"(?<=\d)[  ](?=\d{3}(?!\d))")
@@ -26,6 +27,34 @@ def _claims(draft: dict) -> list[tuple[str, dict]]:
     return out
 
 
+def claim_errors(section: str, c: dict, ctx: dict, source_ids: set[str]) -> set[str]:
+    errors = set()
+    ids = c.get("source_ids", [])
+    texts = evidence.source_texts(ctx)
+    if not ids or not set(ids) <= source_ids:
+        errors.add("sources")
+    if not set(c.get("features", [])) <= evidence.valid_features(ctx["company"]):
+        errors.add("features")
+    if c.get("origin") == "bank":
+        if not ids or not all(s.startswith("bank:") for s in ids):
+            errors.add("origin")
+        elif evidence.normalized(c["text"]) not in {evidence.normalized(texts.get(s, "")) for s in ids}:
+            errors.add("origin")
+    if c.get("origin") == "fact":
+        if not any(s.startswith("news:") for s in ids) or evidence.normalized(c["text"]) not in evidence.normalized(texts.get(f"news:{ctx['news']['news_id']}", "")):
+            errors.add("origin")
+    if c.get("origin") == "client_data" and not any(s.startswith("client:") for s in ids):
+        errors.add("origin")
+    grounded = _norm_numbers(" ".join(texts.get(s, "") for s in ids))
+    if _norm_numbers(c["text"]) - grounded:
+        errors.add("numbers")
+    if c.get("origin") in ("ai", "client_data") and evidence.contradictions(c["text"], ctx["company"]):
+        errors.add("contradictions")
+    if evidence.INSTRUCTION.search(c["text"]):
+        errors.add("instruction")
+    return errors
+
+
 def check(draft: dict, ctx: dict, source_ids: set[str], grounding_text: str) -> list[dict]:
     results = []
 
@@ -36,7 +65,7 @@ def check(draft: dict, ctx: dict, source_ids: set[str], grounding_text: str) -> 
     missing = [s for s in ("why_important", "actions") if not draft[s]]
     if not draft["what_happened"]["facts"]:
         missing.append("what_happened")
-    if not draft["risks"] and not draft["opportunities"]:
+    if ctx.get("exposures") and not draft["risks"] and not draft["opportunities"]:
         missing.append("risks/opportunities")
     add("completeness", not missing, "Все разделы заполнены" if not missing else f"Пустые разделы: {', '.join(missing)}",
         "fill_from_rules")
@@ -53,49 +82,56 @@ def check(draft: dict, ctx: dict, source_ids: set[str], grounding_text: str) -> 
     add("bank_view_grounded", not wrong_bank and (draft["bank_view"]["available"] or not has_kb),
         "Позиция банка опирается только на материалы банка" if not wrong_bank else "В позиции банка есть утверждения не из материалов банка",
         "drop_unlinked")
-    add("bank_view_found", has_kb, "Найдены релевантные материалы банка" if has_kb else "Материалы банка по теме не найдены",
+    add("bank_view_found", has_kb or bool(ctx.get("bank_search_complete")), "Найдены релевантные материалы банка" if has_kb else "Поиск выполнен; материалов банка по теме нет, это явно указано",
         "broaden_search")
 
     # 4. Цифры в выводах есть в источниках (минимизация фактологических ошибок).
-    grounded = _norm_numbers(grounding_text)
     ungrounded = []
+    source_texts = evidence.source_texts(ctx)
     for section, c in _claims(draft):
-        if c["origin"] == "ai" or section == "what_happened":
-            bad = _norm_numbers(c["text"]) - grounded
-            if bad:
-                ungrounded.append((c["text"][:60], sorted(bad)))
+        bad = _norm_numbers(c["text"]) - _norm_numbers(" ".join(source_texts.get(s, "") for s in c["source_ids"]))
+        if bad:
+            ungrounded.append((c["text"][:60], sorted(bad)))
     add("numbers_grounded", not ungrounded, "Все числа подтверждены источниками" if not ungrounded
         else f"Числа без подтверждения: {ungrounded[:3]}", "drop_ungrounded")
 
     # 5. Нет противоречий с данными клиента.
-    p = ctx["company"]["products"]
-    contradictions = []
-    for _, c in _claims(draft):
-        t = c["text"].lower()
-        if c["origin"] in ("client_data", "ai"):
-            if p.get("loans") is False and re.search(r"(ваш|у компании|ее|её)\s+(кредит|долг)", t):
-                contradictions.append("утверждается наличие кредита, хотя кредитных продуктов нет")
-            if not ctx["company"].get("fts_flag") and re.search(r"(ваш|у компании)\s+(импорт|экспорт|вэд)", t):
-                contradictions.append("утверждается ВЭД, хотя признака ВЭД нет")
+    contradictions = ["Утверждение о компании не подтверждено профилем" for _, c in _claims(draft)
+                      if c["origin"] in ("client_data", "ai") and evidence.contradictions(c["text"], ctx["company"])]
     add("consistent_with_client", not contradictions, "Противоречий с данными клиента нет" if not contradictions
         else "; ".join(sorted(set(contradictions))), "drop_contradictions")
 
     # 6. Не пересказ: вывод опирается на признаки компании и несколько факторов.
     features = {f for _, c in _claims(draft) for f in c.get("features", [])}
     headline_copy = similarity(draft["headline"], ctx["news"]["title"] + " " + ctx["news"]["lead"]) > 0.5
-    add("personalized", len(features) >= 2 and not headline_copy,
-        f"Использовано признаков компании: {len(features)}" if len(features) >= 2 and not headline_copy
+    available = {e["feature"] for e in ctx.get("exposures", [])}
+    personalized = not headline_copy and (len(features & available) >= min(2, len(available)) if available else
+                                          "не найден" in " ".join(c["text"].lower() for c in draft["why_important"]))
+    add("personalized", personalized,
+        f"Использовано признаков компании: {len(features)}" if personalized
         else "Вывод слабо привязан к компании или повторяет новость", "fill_from_rules")
+    invalid = [(section, claim_errors(section, c, ctx, source_ids)) for section, c in _claims(draft)]
+    add("evidence_boundaries", not any(err for _, err in invalid),
+        "Проверены типы источников, числа в указанных источниках и доступность признаков", "drop_invalid")
+    headline_ok = not evidence.contradictions(draft["headline"], ctx["company"]) and \
+        not (_norm_numbers(draft["headline"]) - _norm_numbers(" ".join(evidence.source_texts(ctx).values())))
+    add("headline_grounded", headline_ok, "Проверены числа и противоречия в заголовке", "restore_headline")
+    bank_texts = {evidence.normalized(t["text"]) for t in ctx["theses"]}
+    summary = draft["bank_view"].get("summary")
+    summary_ok = not summary or evidence.normalized(summary) in bank_texts
+    add("bank_summary_grounded", summary_ok, "Резюме банка соответствует проверенному тезису", "restore_bank_summary")
     return results
 
 
-def apply_fix(draft: dict, results: list[dict], source_ids: set[str], grounding_text: str) -> list[str]:
+def apply_fix(draft: dict, results: list[dict], source_ids: set[str], grounding_text: str, ctx: dict | None = None) -> list[str]:
     """Чинит черновик по провалившимся проверкам. Возвращает список выполненных исправлений."""
     done = []
     fixes = {r["fix"] for r in results if not r["passed"]}
     grounded = _norm_numbers(grounding_text)
 
     def keep(section: str, c: dict) -> bool:
+        if ctx is not None and claim_errors(section, c, ctx, source_ids):
+            return False
         if "drop_unlinked" in fixes and (not c["source_ids"] or not set(c["source_ids"]) <= source_ids):
             return False
         if "drop_ungrounded" in fixes and (c["origin"] == "ai" or section == "what_happened") and _norm_numbers(c["text"]) - grounded:
@@ -119,4 +155,11 @@ def apply_fix(draft: dict, results: list[dict], source_ids: set[str], grounding_
     if len(bv["theses"]) != before:
         done.append(f"bank_view: удалено {before - len(bv['theses'])}")
     bv["available"] = bool(bv["theses"])
+    if ctx is not None:
+        bv["theses"] = [c for c in bv["theses"] if not claim_errors("bank_view", c, ctx, source_ids)]
+        bv["available"] = bool(bv["theses"])
+        bv["summary"] = bv["theses"][0]["text"] if bv["theses"] else None
+        if "restore_headline" in fixes:
+            from app.agent import composer
+            draft["headline"] = composer.compose(ctx)["headline"]
     return done
