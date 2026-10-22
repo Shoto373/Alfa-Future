@@ -1,6 +1,8 @@
 """База знаний Альфа-Банка: тезисы аналитических материалов и поиск по ним.
 
-Поиск — BM25 по тексту тезиса плюс бонусы за совпадение тем и отраслей.
+Поиск гибридный: BM25 по словам тезиса плюс смысловая близость (embedding-модель,
+app.embeddings) и бонусы за совпадение тем и отраслей. Смысл помогает найти тезис,
+сформулированный другими словами; без модели остается только BM25.
 Свежие материалы получают приоритет; устаревшие (stale) — штраф и пометку.
 Каждый результат несет doc_id и страницу, чтобы вывод можно было проверить.
 """
@@ -14,7 +16,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from app.news.classifier import tokenize
-from app import config, database
+from app import config, database, embeddings
 from sqlalchemy import select, func
 from app.models import BankDocument, BankThesis, BankProduct
 
@@ -94,11 +96,44 @@ def _recency(doc_date: str) -> float:
     return max(0.3, 1.0 - age / 365)
 
 
+DENSE_WEIGHT = 6.0    # вклад смысловой близости в оценку (сопоставим с BM25 и бонусом темы)
+DENSE_FLOOR = 0.30    # ниже этого сходство считается шумом
+# Тезис проходит фильтр по смыслу, даже если общих слов мало: среди тезисов нужной темы
+# это лучший по смыслу и близкие к нему. Абсолютный порог не годится — у короткого
+# заголовка и длинного тезиса сходство в целом ниже (подобрано на тезисах кейса).
+DENSE_PASS_MIN = 0.35
+DENSE_PASS_GAP = 0.08
+
+
+@lru_cache(maxsize=4)
+def _thesis_vectors(signature: str, model: str) -> dict | None:
+    theses = _kb()["theses"]
+    vectors = embeddings.embed([t["text"] for t in theses])
+    return None if vectors is None else {t["id"]: v for t, v in zip(theses, vectors)}
+
+
+def _dense(query: str) -> tuple[dict, list[float]] | None:
+    if not query.strip():
+        return None
+    model = embeddings.signature()
+    if model == "emb:off":
+        return None
+    vectors = _thesis_vectors(hashlib.sha256(KB_FILE.read_bytes()).hexdigest(), model)
+    qv = embeddings.embed([query[:600]]) if vectors else None
+    return (vectors, qv[0]) if vectors and qv else None
+
+
 def search(query: str = "", topics: list[str] | None = None, sectors: list[str] | None = None,
            limit: int = 6, include_stale: bool = False) -> list[dict]:
     kb = _kb()
     q = [w[:5] for w in tokenize(query)]
     topics, sectors = set(topics or []), set(sectors or [])
+    dense = _dense(query)
+    sims = {}
+    if dense:
+        sims = {t["id"]: embeddings.cosine(dense[1], dense[0][t["id"]]) for t in kb["theses"]
+                if not topics or topics & set(t["topics"])}
+    pass_at = max(DENSE_PASS_MIN, max(sims.values(), default=0.0) - DENSE_PASS_GAP)
     results = []
     for t in kb["theses"]:
         if t["stale"] and not include_stale:
@@ -109,19 +144,22 @@ def search(query: str = "", topics: list[str] | None = None, sectors: list[str] 
         # Sector overlap alone does not make a bank thesis relevant to an event.
         if topics and not topic_hit:
             continue
+        sim = sims.get(t["id"], 0.0)
+        by_meaning = sim >= pass_at
         meaningful = {w for w in q if len(w) >= 5 and w not in {"компа", "банка", "альфа", "новос", "данны"}}
-        if topics and len(q) > 5 and len(meaningful & set(t["_tokens"])) < 2:
+        if topics and len(q) > 5 and len(meaningful & set(t["_tokens"])) < 2 and not by_meaning:
             continue
-        if not topics and (lexical < 2 or len(meaningful & set(t["_tokens"])) < 2):
+        if not topics and (lexical < 2 or len(meaningful & set(t["_tokens"])) < 2) and not by_meaning:
             continue
-        score = lexical + 2.5 * topic_hit + 1.5 * sector_hit
+        score = lexical + DENSE_WEIGHT * max(0.0, sim - DENSE_FLOOR) + 2.5 * topic_hit + 1.5 * sector_hit
         if score <= 0:
             continue
         score *= _recency(t["doc_date"])
         if t["stale"]:
             score *= 0.4
         results.append({**_public(t), "score": round(score, 3), "match": {"topics": sorted(topics & set(t["topics"])),
-                                                                          "sectors": sorted(sectors & set(t["sectors"]))}})
+                                                                          "sectors": sorted(sectors & set(t["sectors"])),
+                                                                          "semantic": round(sim, 3)}})
     results.sort(key=lambda r: r["score"], reverse=True)
     return results[:limit]
 

@@ -77,11 +77,6 @@ export default function InsightView({ insight: ins, onRefresh, refreshing }: { i
       <div className="insight-head">
         <div className="insight-badges">
           <Score value={ins.relevance.score} />
-          <span className={`mode mode-${ins.mode}`}>{ins.mode === "llm" ? `AI-агент · ${ins.model}` : "Агент на правилах (без LLM)"}</span>
-          <span className={`quality-pill ${ins.quality.passed ? "ok" : "warn"}`}>
-            {ins.quality.passed ? "Самопроверка пройдена" : "Самопроверка с замечаниями"}
-            {ins.quality.attempts > 1 ? ` · попыток: ${ins.quality.attempts}` : ""}
-          </span>
         </div>
         <p className="news-title">{ins.title}</p>
         <h1>{ins.headline}</h1>
@@ -92,11 +87,7 @@ export default function InsightView({ insight: ins, onRefresh, refreshing }: { i
           <button className="btn btn-secondary btn-sm" onClick={() => setShowTrace((v) => !v)}>
             {showTrace ? "Скрыть ход анализа" : "Как получен вывод"}
           </button>
-          <span className="muted small">{date(ins.created_at)} · {ins.insight_id}</span>
-        </div>
-        <div className="legend" aria-label="Обозначения источников">
-          {["fact", "client_data", "bank", "ai"].map((o) => <OriginTag key={o} origin={o} />)}
-          <span className="muted small">— у каждого утверждения указано, откуда оно</span>
+          <span className="muted small">{date(ins.created_at)}</span>
         </div>
       </div>
 
@@ -195,7 +186,6 @@ export default function InsightView({ insight: ins, onRefresh, refreshing }: { i
       </div>
 
       <Chat insightId={ins.insight_id} suggestions={["Какие источники использованы?", "Покажи в разрезе контрагентов", "Что думает банк о ставке?", "Какое место компании в отрасли?"]} />
-      <p className="disclaimer">{ins.disclaimer}</p>
     </div>
   );
 }

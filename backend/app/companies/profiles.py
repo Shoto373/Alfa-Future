@@ -15,7 +15,7 @@ from app import config, database
 from sqlalchemy import select, func
 from sqlalchemy.dialects.postgresql import insert
 from app.models import Company
-from app.companies import etl
+from app.companies import etl, names
 from app.companies.sectors import SECTOR_NAMES, SECTOR_SENSITIVITY
 
 logger = logging.getLogger("app.companies")
@@ -68,6 +68,7 @@ def _load() -> dict:
             data["companies"] = list(db.scalars(select(Company.payload)
                 .where(Company.company_id.in_(meta["company_ids"]))
                 .order_by(Company.revenue.desc().nulls_last(), Company.company_id)))
+        names.assign(data["companies"])  # вымышленные названия вместо «Компания №…»
         data["by_id"] = {c["company_id"]: c for c in data["companies"]}
         _cache = data
         exposures.cache_clear()
@@ -98,7 +99,8 @@ def list_companies(query: str = "", sector: str | None = None, limit: int = 50, 
     items = _load()["companies"]
     q = query.strip().lower()
     if q:
-        items = [c for c in items if q in c["company_id"].lower() or q in (c["okved_name"] or "").lower()
+        items = [c for c in items if q in c["company_id"].lower() or q in c["display_name"].lower()
+                 or q in (c["okved_name"] or "").lower()
                  or q in (c["region"] or "").lower() or q in c["sector_name"].lower() or q in (c["okved_code"] or "")]
     if sector:
         items = [c for c in items if c["sector"] == sector]

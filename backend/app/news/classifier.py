@@ -1,14 +1,20 @@
 """Классификация новости и извлечение ключевой информации на правилах.
 
 Работает без LLM: темы, отрасли, страны, направление события, участники,
-даты, числа и ключевые предложения. При подключенной LLM агент может
-уточнить результат, но правила остаются базой и проверкой.
+даты, числа и ключевые предложения. Темы ищутся по словарю и по смыслу
+(локальная embedding-модель, app.news.semantic); без модели — только по словарю.
 """
 
 import re
 from dataclasses import dataclass, field
 
+from app.news import semantic
 from app.news.taxonomy import ACTORS, COUNTRY_STEMS, DIRECTION_STEMS, SECTOR_STEMS, TOPICS
+
+# «Санкции» засчитываются только рядом с деловым контекстом — и по словарю, и по смыслу.
+SANCTIONS_BUSINESS_STEMS = ["санкц", "swift", "эмбарго", "экспорт", "импорт", "платеж", "банков", "компани", "торгов",
+                            "поставк", "тариф", "пошлин", "финанс"]
+SEMANTIC_TOPIC_SCORE = 2  # как слабое словарное совпадение: тема по смыслу не перевешивает явную
 
 _WORD = re.compile(r"[a-zа-я0-9$%.,/-]+", re.IGNORECASE)
 _SENT = re.compile(r"(?<=[.!?…])\s+(?=[А-ЯA-Z«\"0-9])")
@@ -85,11 +91,21 @@ def classify(title: str, text: str) -> Classification:
     for key, spec in TOPICS.items():
         score, matched = _score(tokens, spec["stems"])
         score += 2 * _score(title_tokens, spec["stems"])[0]  # заголовок важнее
-        if key == "sanctions_geopolitics" and not _score(tokens, [
-                "санкц", "swift", "эмбарго", "экспорт", "импорт", "платеж", "банков", "компани", "торгов", "поставк", "тариф", "пошлин", "финанс"])[0]:
+        if key == "sanctions_geopolitics" and not _score(tokens, SANCTIONS_BUSINESS_STEMS)[0]:
             continue
         if score:
             topics.append({"topic": key, "name": spec["name"], "score": score, "matched": matched})
+    # Смысловые темы (embedding-модель): находят тему без слов из словаря,
+    # например «мегарегулятор оставил стоимость заимствований» — ключевая ставка.
+    meaning = semantic.analyze(title, text, {t["topic"] for t in topics})
+    if meaning:
+        for t in topics:
+            t["semantic"] = meaning["sims"][t["topic"]]
+        for key in meaning["added"]:
+            if key == "sanctions_geopolitics" and not _score(tokens, SANCTIONS_BUSINESS_STEMS)[0]:
+                continue
+            topics.append({"topic": key, "name": TOPICS[key]["name"], "score": SEMANTIC_TOPIC_SCORE,
+                           "matched": [f"по смыслу ({meaning['sims'][key]:.2f})"], "semantic": meaning["sims"][key]})
     topics.sort(key=lambda t: t["score"], reverse=True)
     if topics:
         top = topics[0]["score"]

@@ -117,3 +117,12 @@ def llm_settings() -> dict:
 def bank_pdf_dir() -> Path | None:
     value = os.environ.get("BANK_PDF_DIR")
     return Path(value) if value and Path(value).is_dir() else None
+
+
+def embeddings_settings() -> dict:
+    """Локальная embedding-модель для смыслового сравнения (не генеративная LLM — разрешена кейсом)."""
+    return {
+        "enabled": _env("EMBEDDINGS_ENABLED", "1").lower() not in ("0", "false", "no", "off"),
+        "model": _env("EMBEDDINGS_MODEL", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"),
+        "cache_dir": os.environ.get("EMBEDDINGS_CACHE_DIR") or None,
+    }

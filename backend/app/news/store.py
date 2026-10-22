@@ -11,7 +11,7 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app import database
+from app import database, embeddings
 from sqlalchemy import select, func
 from app.models import News
 from app.news.classifier import classify, tokenize
@@ -62,8 +62,11 @@ def _load(db=None) -> dict[str, dict]:
         with database.session() as db:
             return _load(db)
     db.execute(select(func.pg_advisory_xact_lock(72810403)))
+    # Новости переклассифицируются при смене словарей, правил или embedding-модели.
     version = hashlib.sha256(SEED_FILE.read_bytes() + Path(__file__).with_name("classifier.py").read_bytes()
-                             + Path(__file__).with_name("taxonomy.py").read_bytes()).hexdigest()
+                             + Path(__file__).with_name("taxonomy.py").read_bytes()
+                             + Path(__file__).with_name("semantic.py").read_bytes()
+                             + embeddings.signature().encode()).hexdigest()
     if database.state("news_seed", db) != version:
         for s in json.loads(SEED_FILE.read_text(encoding="utf-8"))["items"]:
             it = make_item(s["title"], s["text"], s["source"], None, s["published_at"], "seed", s["news_id"])

@@ -31,6 +31,8 @@ def isolated_runtime(tmp_path_factory, monkeypatch):
     monkeypatch.delenv("LLM_BASE_URL", raising=False)
     monkeypatch.delenv("LLM_API_KEY", raising=False)
     monkeypatch.setenv("RSS_SOURCES", "")
+    # Тесты не скачивают модель: смысловой слой проверяется подменой embeddings.embed.
+    monkeypatch.setenv("EMBEDDINGS_ENABLED", "0")
     monkeypatch.setenv("FRONTEND_ORIGIN", "http://localhost:3000")
     profiles.reset_cache()
     store.reset_cache()
@@ -38,8 +40,12 @@ def isolated_runtime(tmp_path_factory, monkeypatch):
     profiles.reset_cache()
     store.reset_cache()
     from app.knowledge import kb
-    from app import database
+    from app import database, embeddings
+    from app.news import semantic
     kb._index.cache_clear()
+    kb._thesis_vectors.cache_clear()
+    semantic._prototypes.cache_clear()
+    embeddings.reset()
     database._ready.discard((dsn, schema))
     # Only the randomly generated test schema is removed, never public or a database.
     assert schema.startswith("test_") and len(schema) == 37

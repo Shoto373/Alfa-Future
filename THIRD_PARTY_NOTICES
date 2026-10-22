@@ -26,9 +26,22 @@ Frontend (npm)
                                                 @img/sharp-libvips-* — LGPL-3.0-or-later)
   Прочие транзитивные пакеты: MIT, ISC, BSD-3-Clause, 0BSD, Apache-2.0, CC-BY-4.0 (caniuse-lite)
 
+Смысловой слой (backend, PyPI)
+  fastembed          0.9.0     Apache-2.0
+  onnxruntime        1.31.0    MIT
+  tokenizers         0.23.3    Apache-2.0
+  huggingface_hub    1.33.0    Apache-2.0     (загрузка модели при сборке образа)
+  numpy              2.4.6     BSD-3-Clause
+  Прочие зависимости fastembed: MIT, BSD, Apache-2.0, HPND (pillow)
+
 Runtime-образы Docker
   python:3.11-slim, node:20-alpine, nginx:alpine
   postgres:17.6 — PostgreSQL License; постоянное хранилище приложения
+
+Embedding-модель (локальная, не генеративная)
+  sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 — Apache-2.0, Hugging Face.
+  Используется для смыслового сравнения новостей с темами и тезисами банка; организаторы
+  разрешили локальные embedding-модели (ограничение списка касается только генеративных LLM).
 
 Модели (LLM)
   Используются только модели из Приложения 3 кейса, через OpenAI-совместимый API провайдера
@@ -48,6 +61,10 @@ Runtime-образы Docker
     PDF не распространяются и подключаются через BANK_PDF_HOST_DIR.
   - Демо-лента (backend/app/news/seed_news.json) — пересказ событий из материалов кейса,
     не является публикацией СМИ.
+
+Демо-названия компаний
+  Названия вида «ООО «Бензобак»» придуманы командой (app/companies/names.py) вместо
+  обезличенных ID кейса; совпадение с реальными организациями случайно.
 
 Смоделированные интеграции
   - Интернет-банк Альфа-Бизнес: интерфейс — демонстрационный макет, вход — демо-пользователи,

@@ -336,14 +336,7 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--blue-soft);
 .insight-head .btn-secondary { background: rgba(255, 255, 255, .1); color: #fff; }
 .insight-head .btn-secondary:hover:not(:disabled) { background: rgba(255, 255, 255, .18); }
 .news-title { color: rgba(255, 255, 255, .6); margin: 14px 0 0; font-weight: 500; }
-.legend { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, .1); }
-.legend .origin-fact { background: rgba(255, 255, 255, .14); color: #fff; }
 .insight-badges, .insight-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-.mode { font-size: 12px; padding: 4px 10px; border-radius: 8px; background: rgba(255, 255, 255, .12); color: #fff; font-weight: 600; }
-.mode-llm::before { content: "✦ "; color: var(--red); }
-.quality-pill { font-size: 12px; padding: 4px 10px; border-radius: 8px; font-weight: 600; }
-.quality-pill.ok { background: var(--green-acid); color: #fff; }
-.quality-pill.warn { background: #ffb800; color: #111; }
 .insight-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .span-2 { grid-column: span 2; }
 .two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
@@ -396,7 +389,6 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--blue-soft);
 .agent-progress li.done::before { background: var(--green-acid); border-color: var(--green-acid); }
 .agent-progress li.now { color: var(--ink); font-weight: 600; }
 .agent-progress li.now::before { border-color: var(--red); border-top-color: transparent; animation: spin .8s linear infinite; }
-.disclaimer { font-size: 12px; color: var(--muted); margin: 0; }
 
 /* ---------- Chat ---------- */
 .chat .chips { margin-bottom: 14px; }
