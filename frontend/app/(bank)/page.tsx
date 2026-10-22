@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ErrorBox, Icon, Score, Skeleton } from "@/components/ui";
+import { ErrorBox, Icon, OriginTag, Score, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
 import { date, IMPORTANT_SCORE as IMPORTANT, money, pct, PRODUCT_NAMES } from "@/lib/format";
 import { useCompany, useFeed } from "@/lib/hooks";
@@ -175,16 +175,17 @@ export default function HomePage() {
           <p className="muted small center">Средняя релевантность топ-5 новостей для компании и роли: {Math.round(level)} из 100</p>
         </section>
 
-        <div className="stories">
-          <Link href="/pulse" className="story story-red">
-            <strong>Как читать разбор</strong>
-            <span>Факты, данные компании, позиция банка и выводы AI помечены отдельно</span>
-          </Link>
-          <Link href="/pulse/analytics" className="story story-dark">
-            <strong>Альфа-<br />Анали&shy;тика</strong>
-            <span>{latest ? date(latest.date) : "Материалы банка"}</span>
-          </Link>
-        </div>
+        <Link href="/pulse" className="story">
+          <strong>Как читать разбор</strong>
+          <span className="story-lead">У каждого утверждения в разборе указано, откуда оно взято</span>
+          <ul className="story-legend">
+            <li><OriginTag origin="fact" /> что написано в новости</li>
+            <li><OriginTag origin="client_data" /> профиль и платежи компании</li>
+            <li><OriginTag origin="bank" /> материалы Альфа-Банка со страницей</li>
+            <li><OriginTag origin="ai" /> вывод агента, проверенный по источникам</li>
+          </ul>
+          <span className="story-cta">Открыть ленту <Icon name="chevronRight" size={16} /></span>
+        </Link>
       </div>
 
       <div className="home-grid-2">
