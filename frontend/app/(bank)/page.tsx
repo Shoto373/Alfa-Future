@@ -69,13 +69,6 @@ export default function HomePage() {
 
   return (
     <div className="page home">
-      <div className="quick-actions" role="toolbar" aria-label="Быстрые действия">
-        <Link href="/pulse" className="qa-btn qa-accent"><Icon name="pulse" /> Альфа.Пульс</Link>
-        <Link href="/pulse#add-news" className="qa-btn"><Icon name="plus" /> Проверить свою новость</Link>
-        <Link href="/pulse/analytics" className="qa-btn hide-sm"><Icon name="doc" /> Аналитика банка</Link>
-        <Link href="/pulse/quality" className="qa-btn hide-sm"><Icon name="shield" /> Качество и аудит</Link>
-      </div>
-
       <section className="hero" aria-label="Альфа.Пульс на главной">
         <div className="hero-main">
           <span className="hero-label">Альфа.Пульс · {ROLE_NAMES[session!.role]}</span>

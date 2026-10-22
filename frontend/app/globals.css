@@ -198,14 +198,6 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--blue-soft);
 .badge-green { background: var(--green-acid); color: #fff; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 6px; letter-spacing: .03em; }
 
 /* ---------- Home ---------- */
-.quick-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-.qa-btn {
-  display: inline-flex; align-items: center; gap: 10px; background: var(--card); border-radius: 14px; padding: 13px 20px; font-weight: 500;
-  text-decoration: none; white-space: nowrap; box-shadow: var(--shadow);
-}
-.qa-btn:hover { background: #fafafa; }
-.qa-accent { font-weight: 700; }
-.qa-accent .icon { color: var(--red); }
 .anchor { scroll-margin-top: 88px; }
 
 .hero {
