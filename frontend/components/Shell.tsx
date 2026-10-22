@@ -90,7 +90,6 @@ export default function Shell({ children }: { children: ReactNode }) {
                 ))}
               </select>
             </label>
-            <span className="icon-btn hide-sm" title="Письма банка — не входит в прототип" aria-hidden="true"><Icon name="mail" size={20} /></span>
             <Notifications />
             <CompanySwitcher />
             <div className="user-pill">

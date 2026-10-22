@@ -76,7 +76,7 @@ export default function PulsePage() {
           {company.loading && <Card title="Контекст компании"><Skeleton lines={6} /></Card>}
           {company.error && <ErrorBox message={company.error.message} onRetry={company.reload} />}
           {company.data && <CompanyPanel profile={company.data.profile} exposures={company.data.exposures} sectors={sectors} />}
-          <AddNews onAdded={feed.reload} />
+          <div id="add-news" className="anchor"><AddNews onAdded={feed.reload} /></div>
         </aside>
       </div>
     </div>
