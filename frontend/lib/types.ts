@@ -1,6 +1,40 @@
 // Типы публичного контракта 1.0.0 (contracts/schemas/common.json).
 
 export type Role = "owner" | "ceo" | "cfo" | "accountant" | "treasurer" | "clevel";
+export interface Membership {
+  company_id: string;
+  company_name: string;
+  role: Role;
+  is_admin: boolean;
+  is_founder: boolean;
+}
+
+export interface User {
+  user_id: string;
+  name: string;
+  email: string;
+  memberships: Membership[];
+}
+
+export interface LookupCompany {
+  company_id: string;
+  display_name: string;
+  sector_name: string;
+  region: string | null;
+  claimed: boolean;
+}
+
+export interface Member {
+  member_id: string;
+  user_id: string | null;
+  name: string | null;
+  email: string;
+  role: Role;
+  is_admin: boolean;
+  is_founder: boolean;
+  status: "active" | "invited";
+}
+
 export type Origin = "fact" | "client_data" | "bank" | "ai";
 
 export interface Claim {

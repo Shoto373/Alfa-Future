@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AbortedError, ApiError, api } from "./api";
-import type { CompanyProfile, Exposure, FeedItem, Role } from "./types";
+import type { CompanyProfile, Exposure, FeedItem } from "./types";
 
 type Load<T> = { data: T | null; error: ApiError | null; loading: boolean; reload: () => void };
 
@@ -31,8 +31,8 @@ function useLoad<T>(fn: (signal: AbortSignal) => Promise<T>, deps: unknown[]): L
   return { data, error, loading, reload: useCallback(() => setTick((t) => t + 1), []) };
 }
 
-export function useFeed(companyId: string, role: Role, topic?: string): Load<FeedItem[]> {
-  return useLoad((s) => api.feed(companyId, role, topic, s).then((r) => r.items), [companyId, role, topic]);
+export function useFeed(companyId: string, topic?: string): Load<FeedItem[]> {
+  return useLoad((s) => api.feed(companyId, topic, s).then((r) => r.items), [companyId, topic]);
 }
 
 export function useCompany(companyId: string): Load<{ profile: CompanyProfile; exposures: Exposure[] }> {

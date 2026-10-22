@@ -40,6 +40,7 @@ const PATHS: Record<string, string> = {
   search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4",
   risk: "M12 4 2 20h20zM12 10v4M12 17v.5",
   growth: "M3 17l6-6 4 4 8-8M15 7h6v6",
+  more: "M5 12h.01M12 12h.01M19 12h.01",
   briefcase: "M3 8h18v11H3zM8 8V5h8v3",
 };
 

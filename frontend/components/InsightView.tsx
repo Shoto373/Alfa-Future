@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { date } from "@/lib/format";
-import type { Claim, Insight, Role, Source } from "@/lib/types";
+import type { Claim, Insight, Source } from "@/lib/types";
 import Chat from "./Chat";
 import { Card, Icon, OriginTag, Score } from "./ui";
 
@@ -46,9 +46,9 @@ function ClaimList({ items, index, empty = "Нет данных" }: { items: Cla
   );
 }
 
-function Feedback({ insightId, section, role }: { insightId: string; section: string; role: Role }) {
+function Feedback({ insightId, section }: { insightId: string; section: string }) {
   const [sent, setSent] = useState<1 | -1 | null>(null);
-  const send = (r: 1 | -1) => api.feedback(insightId, r, section, role).then(() => setSent(r)).catch(() => setSent(null));
+  const send = (r: 1 | -1) => api.feedback(insightId, r, section).then(() => setSent(r)).catch(() => setSent(null));
   return (
     <span className="feedback" aria-label="Оцените раздел">
       {sent ? <span className="muted small">Спасибо за оценку</span> : (
@@ -70,7 +70,7 @@ function sourceLink(s: Source): string | null {
 export default function InsightView({ insight: ins, onRefresh, refreshing }: { insight: Insight; onRefresh: () => void; refreshing: boolean }) {
   const index = new Map(ins.sources.map((s, i) => [s.source_id, i + 1]));
   const [showTrace, setShowTrace] = useState(false);
-  const fb = (section: string) => <Feedback insightId={ins.insight_id} section={section} role={ins.role} />;
+  const fb = (section: string) => <Feedback insightId={ins.insight_id} section={section} />;
 
   return (
     <div className="insight">

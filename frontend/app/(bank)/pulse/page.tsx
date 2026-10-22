@@ -15,7 +15,7 @@ export default function PulsePage() {
   const { session } = useSession();
   const [topic, setTopic] = useState<string | undefined>();
   const [meta, setMeta] = useState<Meta | null>(null);
-  const feed = useFeed(session!.companyId, session!.role, topic);
+  const feed = useFeed(session!.companyId, topic);
   const [refreshing, setRefreshing] = useState(false);
   const [allTopics, setAllTopics] = useState(false);
   const [refreshNote, setRefreshNote] = useState<string | null>(null);

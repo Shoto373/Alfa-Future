@@ -2,26 +2,34 @@ import { test, expect, type Page } from "@playwright/test";
 
 const api = process.env.E2E_API_URL || "http://localhost:8000";
 
-async function login(page: Page) {
-  await page.goto("/login");
-  await page.getByRole("button", { name: /Анна Морозова/ }).click();
+/** Регистрирует нового пользователя, занимает компании (первый регистрирующий — администратор) и входит в приложение. */
+async function login(page: Page, companies = 1) {
+  const email = `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+  const reg = await page.request.post(`${api}/api/v1/auth/register`, { data: { name: "Анна Морозова", email, password: "e2e-password-1" } });
+  expect(reg.ok()).toBeTruthy();
+  const lookup = await page.request.get(`${api}/api/v1/companies/lookup?limit=50`);
+  const free = ((await lookup.json()).items as { company_id: string; claimed: boolean }[]).filter(c => !c.claimed);
+  expect(free.length).toBeGreaterThanOrEqual(companies);
+  for (const c of free.slice(0, companies)) {
+    const claim = await page.request.post(`${api}/api/v1/companies/${c.company_id}/claim`, { data: { role: "cfo" } });
+    expect(claim.ok()).toBeTruthy();
+  }
+  await page.goto("/");
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("region", { name: "Альфа.Пульс на главной" })).toBeVisible();
   await expect(page.locator(".home .top-list li").first()).toBeVisible();
 }
 
-test("вход, компания, роль и персонализированная лента", async ({ page }) => {
+test("вход, компания, роль только для чтения и персонализированная лента", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", e => errors.push(e.message));
-  await login(page);
+  await login(page, 2);
   await page.goto("/pulse");
   await expect(page.getByRole("heading", { name: /^Лента / })).toBeVisible();
   await expect(page.locator(".news-card").first()).toBeVisible();
-  const role = page.locator("select").first();
-  const changedFeed = page.waitForResponse(r => r.url().includes("/api/v1/feed?") && r.url().includes("role=treasurer"));
-  await role.selectOption("treasurer");
-  expect((await changedFeed).ok()).toBeTruthy();
-  await expect(page.getByText(/роль «Руководитель казначейства»/)).toBeVisible();
+  // Роль выдаёт администратор компании: в шапке её нельзя выбрать, она только отображается.
+  await expect(page.locator(".topbar select")).toHaveCount(0);
+  await expect(page.locator(".switcher-label")).toContainText("Финансовый директор");
   const current = await page.locator(".switcher-name").innerText();
   await page.locator(".switcher-btn").click();
   const dialog = page.getByRole("dialog", { name: "Выбор организации" });
@@ -49,7 +57,7 @@ test("разбор, трасса, уточнение, оценка и перво
   const pdf = page.locator('a[href*="/analytics/"][href*="/pdf#page="]').first();
   const href = await pdf.getAttribute("href");
   expect(href).toMatch(/#page=\d+/);
-  const response = await request.get(href!.split("#")[0]);
+  const response = await page.request.get(href!.split("#")[0]);
   expect(response.ok()).toBeTruthy();
   expect(response.headers()["content-type"]).toContain("application/pdf");
   expect(response.headers()["content-disposition"]).toContain("inline");
@@ -67,6 +75,7 @@ test("разбор, трасса, уточнение, оценка и перво
 test("новая новость и сохраненный разбор после перезагрузки", async ({ page }) => {
   await login(page);
   await page.goto("/pulse");
+  await page.getByRole("button", { name: "Текст", exact: true }).click();
   await page.getByPlaceholder("Например: Минфин предложил повысить НДС…").fill(
     `Банк России сохранил ключевую ставку на уровне 14%. Условия новых кредитов не изменились. Проверка браузера ${Date.now()}.`
   );

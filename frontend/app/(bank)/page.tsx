@@ -48,7 +48,7 @@ function Gauge({ value }: { value: number }) {
 
 export default function HomePage() {
   const { session } = useSession();
-  const feed = useFeed(session!.companyId, session!.role);
+  const feed = useFeed(session!.companyId);
   const items = feed.data ?? [];
   const important = items.filter((i) => i.relevance.score >= IMPORTANT);
   const topics = topicCounts(items).slice(0, 7);

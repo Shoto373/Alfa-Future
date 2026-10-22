@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { ROLE_NAMES, useSession } from "@/lib/session";
-import type { Role } from "@/lib/types";
+import { useSession } from "@/lib/session";
 import CompanySwitcher from "./CompanySwitcher";
 import Notifications from "./Notifications";
 import { AlfaMark, Icon } from "./ui";
@@ -21,18 +20,24 @@ const NAV: (NavItem | "divider")[] = [
 ];
 
 export default function Shell({ children }: { children: ReactNode }) {
-  const { session, ready, logout, update } = useSession();
+  const { session, ready, logout } = useSession();
   const router = useRouter();
   const path = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // Без компаний доступны только регистрация компании и профиль.
+  const noCompanyOk = path === "/company/register" || path === "/profile";
+  const needCompany = Boolean(session) && session!.memberships.length === 0 && !noCompanyOk;
+
   useEffect(() => {
-    if (ready && !session) router.replace("/login");
-  }, [ready, session, router]);
+    if (!ready) return;
+    if (!session) router.replace("/login");
+    else if (needCompany) router.replace("/company/register");
+  }, [ready, session, needCompany, router]);
 
   useEffect(() => setMenuOpen(false), [path]);
 
-  if (!ready || !session) {
+  if (!ready || !session || needCompany) {
     return <div className="boot"><span className="spinner" aria-label="Загрузка" /></div>;
   }
 
@@ -61,9 +66,6 @@ export default function Shell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
-        <div className="sidebar-foot">
-          <span className="nav-item disabled"><Icon name="settings" size={20} /> Настроить меню</span>
-        </div>
       </aside>
       {menuOpen && <div className="scrim" onClick={() => setMenuOpen(false)} aria-hidden="true" />}
 
@@ -73,21 +75,13 @@ export default function Shell({ children }: { children: ReactNode }) {
             <Icon name="menu" />
           </button>
           <div className="topbar-right">
-            <label className="role-select" title="Роль определяет, какие новости и действия в приоритете">
-              <span className="sr-only">Роль</span>
-              <select value={session.role} onChange={(e) => update({ role: e.target.value as Role })}>
-                {(Object.keys(ROLE_NAMES) as Role[]).map((r) => (
-                  <option key={r} value={r}>{ROLE_NAMES[r]}</option>
-                ))}
-              </select>
-            </label>
-            <Notifications />
+            {session.memberships.length > 0 && <Notifications />}
             <CompanySwitcher />
-            <div className="user-pill">
+            <Link href="/profile" className="user-pill" aria-label={`Профиль: ${session.userName}`}>
               <span className="avatar">{session.userName.slice(0, 1)}</span>
               <span className="user-name">{session.userName}</span>
-            </div>
-            <button className="icon-btn" onClick={() => { logout(); router.replace("/login"); }} aria-label="Выйти" title="Выйти">
+            </Link>
+            <button className="icon-btn" onClick={async () => { await logout(); router.replace("/login"); }} aria-label="Выйти" title="Выйти">
               <Icon name="logout" size={20} />
             </button>
           </div>
