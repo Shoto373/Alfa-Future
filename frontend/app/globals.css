@@ -224,7 +224,18 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--blue-soft);
 .hero-topics { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-weight: 600; }
 .hero-topics span:not(:last-child):not(.hero-more)::after { content: "·"; margin-left: 14px; color: rgba(255, 255, 255, .4); }
 .hero-more { background: rgba(255, 255, 255, .12); border-radius: 8px; padding: 1px 8px; font-size: 13px; }
+.hero-banner {
+  display: flex; align-items: center; gap: 10px; color: rgba(255, 255, 255, .75); font-size: 14px; padding: 12px 0;
+  border-top: 1px solid rgba(255, 255, 255, .1); margin-top: auto;
+}
+.hero-banner a { flex: 1; min-width: 0; text-decoration: none; }
+.hero-banner a:hover strong { text-decoration: underline; }
+.hero-banner strong { color: #fff; }
+.hero-banner-dot { width: 20px; height: 20px; border-radius: 50%; background: var(--green-acid); display: grid; place-items: center; color: #fff; flex-shrink: 0; }
+.hero-banner .icon-btn { color: rgba(255, 255, 255, .6); padding: 4px; }
+.hero-banner .icon-btn:hover { background: rgba(255, 255, 255, .1); color: #fff; }
 .hero-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding-top: 14px; margin-top: auto; border-top: 1px solid rgba(255, 255, 255, .1); }
+.hero-banner + .hero-tiles { margin-top: 0; }
 .hero-tile { display: flex; gap: 12px; align-items: center; text-decoration: none; color: #fff; border-radius: 14px; padding: 6px; }
 .hero-tile:hover { background: rgba(255, 255, 255, .06); }
 .hero-tile-icon { width: 44px; height: 44px; border-radius: 12px; background: rgba(255, 255, 255, .1); display: grid; place-items: center; flex-shrink: 0; }

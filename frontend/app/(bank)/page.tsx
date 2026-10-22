@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { ErrorBox, Icon, OriginTag, Score, Skeleton } from "@/components/ui";
+import { api } from "@/lib/api";
 import { date, IMPORTANT_SCORE as IMPORTANT } from "@/lib/format";
 import { useFeed } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
-import type { FeedItem } from "@/lib/types";
+import type { BankDocument, FeedItem } from "@/lib/types";
 
 function plural(n: number, forms: [string, string, string]) {
   const m10 = n % 10, m100 = n % 100;
@@ -54,6 +56,16 @@ export default function HomePage() {
   const level = top5.length ? top5.reduce((a, i) => a + i.relevance.score, 0) / top5.length : 0;
   const levelText = level >= 70 ? "Требует внимания" : level >= 45 ? "Умеренный фон" : "Спокойный фон";
 
+  const [latest, setLatest] = useState<BankDocument | null>(null);
+  const [bannerClosed, setBannerClosed] = useState(false);
+
+  // Самый свежий актуальный материал банка — для зеленого баннера «НОВОЕ».
+  useEffect(() => {
+    api.analytics()
+      .then((r) => setLatest([...r.documents].filter((d) => !d.stale).sort((a, b) => b.date.localeCompare(a.date))[0] ?? null))
+      .catch(() => setLatest(null));
+  }, []);
+
   return (
     <div className="page home">
       <section className="hero" aria-label="Альфа.Пульс на главной">
@@ -71,6 +83,14 @@ export default function HomePage() {
             {topics.slice(0, 3).map((t) => <span key={t.topic}>{t.name}</span>)}
             {topics.length > 3 && <span className="hero-more">+{topics.length - 3}</span>}
           </div>
+          {latest && !bannerClosed && (
+            <div className="hero-banner">
+              <span className="hero-banner-dot"><Icon name="plus" size={14} /></span>
+              <Link href="/pulse/analytics">Новая аналитика банка: <strong>{latest.title}</strong></Link>
+              <span className="badge-green">НОВОЕ</span>
+              <button className="icon-btn" onClick={() => setBannerClosed(true)} aria-label="Скрыть"><Icon name="close" size={16} /></button>
+            </div>
+          )}
           <div className="hero-tiles">
             <Link href="/pulse" className="hero-tile">
               <span className="hero-tile-icon"><Icon name="list" /></span>
