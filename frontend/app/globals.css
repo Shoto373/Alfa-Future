@@ -603,7 +603,7 @@ input.check-input, .check input { width: auto; margin: 0; }
 /* Формы входа и профиль: поле пароля с кнопкой внутри, читаемая подсказка, видимая кнопка на сером фоне */
 .pw-wrap { position: relative; }
 .pw-wrap input { width: 100%; padding-right: 96px; }
-.pw-wrap .btn { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); }
+.pw-wrap .btn { position: absolute; right: 6px; top: 0; bottom: 0; margin: auto 0; height: fit-content; transform: none; }
 .lookup-action small, .lookup-action .muted { white-space: normal; overflow-wrap: anywhere; }
 .page-head .btn-secondary { background: var(--card); }
 .page-head .btn-secondary:hover:not(:disabled) { background: #fff; box-shadow: var(--shadow-pop); }
@@ -621,3 +621,11 @@ input.check-input, .check input { width: auto; margin: 0; }
 .menu-confirm { display: flex; flex-direction: column; gap: 10px; padding: 8px; }
 .menu-confirm p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
 .menu-confirm > div { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Уведомления: непрочитанные горят, прочитанные остаются историей */
+.notif-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.notif-readall { background: none; border: 0; padding: 0; color: var(--blue); font-size: 13px; cursor: pointer; white-space: nowrap; }
+.notif-readall:hover { text-decoration: underline; }
+.notif-pop li.is-read a { opacity: .55; }
+.notif-pop li.is-read a:hover { opacity: 1; }
+.notif-new { flex: none; width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--red); }

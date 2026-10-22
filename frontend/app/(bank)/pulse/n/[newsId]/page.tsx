@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import InsightView from "@/components/InsightView";
 import { ErrorBox, Icon, Skeleton } from "@/components/ui";
 import { AbortedError, ApiError, api } from "@/lib/api";
+import { markRead } from "@/lib/notifications";
 import { useSession } from "@/lib/session";
 import type { Insight } from "@/lib/types";
 
@@ -19,6 +20,11 @@ export default function InsightPage() {
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState(0);
   const seq = useRef(0);
+
+  // Открыли разбор — уведомление по этой новости прочитано.
+  useEffect(() => {
+    if (session && newsId) markRead(session.user.user_id, session.companyId, [newsId]);
+  }, [session, newsId]);
   const controller = useRef<AbortController | null>(null);
 
   const load = useCallback((force = false) => {
