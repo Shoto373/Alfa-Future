@@ -3,6 +3,7 @@ import hashlib
 import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from datetime import date, datetime, timezone
 
 import pytest
 from alembic.migration import MigrationContext
@@ -58,6 +59,24 @@ def test_concurrent_events_and_usage_are_not_lost():
     assert len(storage._read("events")) == 20
     usage = llm.usage()
     assert usage["tokens"] == 60 and usage["cost"] == 0.2 and usage["calls"] == 20
+
+
+def test_llm_budget_uses_utc_day_and_persistent_usage(monkeypatch):
+    from app.models import LLMUsage
+
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            # 00:30 Moscow on Oct 22 is still Oct 21 in the gateway budget.
+            return datetime(2026, 10, 21, 21, 30, tzinfo=timezone.utc).astimezone(tz)
+
+    monkeypatch.setattr(llm, "datetime", FrozenDatetime)
+    assert llm._budget_day() == date(2026, 10, 21)
+    llm._record(7, cost=0.1)
+    assert llm.usage()["date"] == "2026-10-21"
+    assert llm.usage()["tokens"] == 7
+    with database.session() as db:
+        assert db.get(LLMUsage, date(2026, 10, 21)).tokens == 7
 
 
 def test_news_concurrent_dedup_survives_reset():

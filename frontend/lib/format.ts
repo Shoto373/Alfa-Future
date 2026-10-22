@@ -1,3 +1,6 @@
+/** Порог релевантности, с которого новость считается важной для компании и роли (главная, колокольчик). */
+export const IMPORTANT_SCORE = 50;
+
 export function money(value: number | null | undefined): string {
   if (!value) return "нет данных";
   if (value >= 1e9) return `${(value / 1e9).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} млрд ₽`;

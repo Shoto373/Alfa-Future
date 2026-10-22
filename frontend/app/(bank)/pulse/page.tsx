@@ -21,6 +21,11 @@ export default function PulsePage() {
 
   useEffect(() => { api.meta().then(setMeta).catch(() => setMeta(null)); }, []);
   useEffect(() => setTopic(undefined), [session!.companyId]);
+  // Переход с главной по теме: /pulse?topic=key_rate.
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("topic");
+    if (t) setTopic(t);
+  }, []);
 
   const sectors = Object.fromEntries((meta?.sectors ?? []).map((s) => [s.sector, s.name]));
 
@@ -44,7 +49,7 @@ export default function PulsePage() {
       <div className="page-head">
         <div>
           <span className="eyebrow"><Icon name="spark" /> Альфа.Пульс</span>
-          <h1>Лента для {session!.companyName}</h1>
+          <h1>Лента {session!.companyName}</h1>
           <p className="muted">Ранжировано под профиль компании и роль «{ROLE_NAMES[session!.role]}». Смените роль в шапке — лента перестроится.</p>
         </div>
         <button className="btn btn-secondary" onClick={refresh} disabled={refreshing}>
@@ -71,7 +76,7 @@ export default function PulsePage() {
           {company.loading && <Card title="Контекст компании"><Skeleton lines={6} /></Card>}
           {company.error && <ErrorBox message={company.error.message} onRetry={company.reload} />}
           {company.data && <CompanyPanel profile={company.data.profile} exposures={company.data.exposures} sectors={sectors} />}
-          <AddNews onAdded={feed.reload} />
+          <div id="add-news" className="anchor"><AddNews onAdded={feed.reload} /></div>
         </aside>
       </div>
     </div>

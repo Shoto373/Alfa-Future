@@ -9,7 +9,7 @@ import json
 import logging
 import re
 import time
-from datetime import date
+from datetime import date, datetime, timezone
 
 import httpx
 
@@ -23,6 +23,11 @@ CONNECT_TIMEOUT = 10.0
 BREAKER_SECONDS = 60.0  # после сбоя соединения LLM не вызывается, чтобы не ждать тайм-аут на каждом шаге
 
 _down_until = 0.0
+
+
+def _budget_day() -> date:
+    """Gateway budget resets at 03:00 Moscow time, i.e. midnight UTC."""
+    return datetime.now(timezone.utc).date()
 
 
 class LLMError(Exception):
@@ -61,17 +66,18 @@ def _post(payload: dict, s: dict) -> httpx.Response:
 
 
 def usage() -> dict:
+    day = _budget_day()
     with database.session() as db:
-        row = db.get(LLMUsage, date.today())
+        row = db.get(LLMUsage, day)
         tokens, cost, calls, errors = (row.tokens, row.cost, row.calls, row.errors) if row else (0, 0, 0, 0)
     s = config.llm_settings()
-    return {"date": date.today().isoformat(), "tokens": tokens, "cost": round(float(cost), 3), "calls": calls,
+    return {"date": day.isoformat(), "tokens": tokens, "cost": round(float(cost), 3), "calls": calls,
             "errors": errors, "limit": s["daily_token_limit"], "cost_limit": s["daily_cost_limit"]}
 
 
 def _record(tokens: int, error: bool = False, cost: float = 0.0, call: bool = True) -> None:
     with database.session() as db:
-        stmt = insert(LLMUsage).values(day=date.today(), tokens=max(0, tokens), cost=max(0, cost),
+        stmt = insert(LLMUsage).values(day=_budget_day(), tokens=max(0, tokens), cost=max(0, cost),
                                        calls=int(call), errors=int(error))
         db.execute(stmt.on_conflict_do_update(index_elements=[LLMUsage.day],
             set_={k: getattr(LLMUsage, k) + getattr(stmt.excluded, k) for k in ("tokens", "cost", "calls", "errors")}))

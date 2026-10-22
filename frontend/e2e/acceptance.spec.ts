@@ -6,6 +6,8 @@ async function login(page: Page) {
   await page.goto("/login");
   await page.getByRole("button", { name: /Анна Морозова/ }).click();
   await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("region", { name: "Альфа.Пульс на главной" })).toBeVisible();
+  await expect(page.locator(".home .top-list li").first()).toBeVisible();
 }
 
 test("вход, компания, роль и персонализированная лента", async ({ page }) => {
@@ -13,7 +15,7 @@ test("вход, компания, роль и персонализированн
   page.on("pageerror", e => errors.push(e.message));
   await login(page);
   await page.goto("/pulse");
-  await expect(page.getByRole("heading", { name: /Лента для/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Лента / })).toBeVisible();
   await expect(page.locator(".news-card").first()).toBeVisible();
   const role = page.locator("select").first();
   const changedFeed = page.waitForResponse(r => r.url().includes("/api/v1/feed?") && r.url().includes("role=treasurer"));
@@ -26,7 +28,7 @@ test("вход, компания, роль и персонализированн
   await expect(dialog.locator("li button").nth(1)).toBeVisible();
   await dialog.locator("li button").nth(1).click();
   await expect(page.locator(".switcher-name")).not.toHaveText(current);
-  await expect(page.getByRole("heading", { name: /Лента для/ })).toContainText(await page.locator(".switcher-name").innerText());
+  await expect(page.getByRole("heading", { name: /^Лента / })).toContainText(await page.locator(".switcher-name").innerText());
   await expect(page.getByText("Подбираем новости под компанию…")).toBeHidden();
   await expect(page.locator(".news-card").first()).toBeVisible();
   await page.screenshot({ path: "../data/review/acceptance/feed.png", fullPage: false });
@@ -98,13 +100,14 @@ test("состояния загрузки и ошибки с повтором", 
   await expect(page.locator(".news-card").first()).toBeVisible();
 });
 
-test("аналитика, качество и мобильный экран", async ({ page }) => {
+test("аналитика, новый стиль и мобильный экран", async ({ page }) => {
   await login(page);
+  await expect(page.getByRole("link", { name: "Альфа-Бизнес, главная" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Качество и аудит" })).toHaveCount(0);
+  await page.screenshot({ path: "../data/review/acceptance/home-new-style.png", fullPage: true });
   await page.goto("/pulse/analytics");
   await expect(page.getByRole("heading", { name: "Аналитика Альфа-Банка" })).toBeVisible();
   await expect(page.getByText("устарел", { exact: true })).toBeVisible();
-  await page.goto("/pulse/quality");
-  await expect(page.getByRole("heading", { name: /Качество/ })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/pulse");
   await expect(page.locator(".news-card").first()).toBeVisible();
@@ -122,7 +125,7 @@ test("отказ провайдера LLM дает разбор на прави�
   await login(page);
   await page.goto("/pulse/n/seed-rate-hold");
   await expect(page.getByRole("heading", { name: "1. Что произошло" })).toBeVisible();
-  await expect(page.getByText("Агент на правилах", { exact: true })).toBeVisible();
+  await expect(page.getByText("Агент на правилах (без LLM)", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Как получен вывод" }).click();
   await expect(page.locator(".trace")).toContainText("LLM-план не получен");
   await page.screenshot({ path: "../data/review/acceptance/provider-fallback.png", fullPage: true });

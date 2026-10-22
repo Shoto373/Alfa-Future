@@ -12,11 +12,18 @@ export const ROLE_NAMES: Record<Role, string> = {
   clevel: "Другой C-level",
 };
 
+export interface CompanyRef {
+  id: string;
+  name: string;
+}
+
 export interface Session {
   userName: string;
   role: Role;
   companyId: string;
   companyName: string;
+  /** Организации, к которым у пользователя есть доступ в интернет-банке (авторизация привязана к человеку). */
+  companies?: CompanyRef[];
 }
 
 interface Ctx {
@@ -67,6 +74,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       {children}
     </SessionContext.Provider>
   );
+}
+
+/** Короткое имя для шапки: «Анна Морозова» → «Морозова А.». */
+export function shortName(full: string): string {
+  const [first, last] = full.split(" ");
+  return last ? `${last} ${first[0]}.` : full;
 }
 
 export function useSession(): Ctx {
