@@ -18,10 +18,10 @@ function Flow({ title, d, sectors }: { title: string; d: Counterparties; sectors
   );
 }
 
-export default function CompanyPanel({ profile: p, exposures, sectors }: { profile: CompanyProfile; exposures: Exposure[]; sectors: Record<string, string> }) {
+export default function CompanyPanel({ profile: p, exposures, sectors, title = "Контекст компании" }: { profile: CompanyProfile; exposures: Exposure[]; sectors: Record<string, string>; title?: string }) {
   const topExposures = [...exposures].sort((a, b) => b.weight - a.weight).slice(0, 5);
   return (
-    <Card title="Контекст компании" className="company-panel">
+    <Card title={title} className="company-panel">
       <ul className="kv">
         <li><span>ОКВЭД</span><strong>{p.okved_code} · {p.okved_name}</strong></li>
         <li><span>Выручка</span><strong>{money(p.revenue)}</strong></li>

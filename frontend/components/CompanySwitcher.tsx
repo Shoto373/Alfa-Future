@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AbortedError, api } from "@/lib/api";
 import { money } from "@/lib/format";
@@ -45,14 +46,18 @@ export default function CompanySwitcher() {
 
   return (
     <div className="switcher" ref={box}>
-      <button className="switcher-btn" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-label="Сменить организацию">
-        <CompanyTile id={session.companyId} name={session.companyName} size={36} />
-        <span className="switcher-text">
-          <span className="switcher-name">{session.companyName}</span>
-          <span className="switcher-label">{shortName(session.userName)}{mine.length > 1 ? ` · ещё ${mine.length - 1} в «Моих компаниях»` : ""}</span>
-        </span>
-        <Icon name="chevron" size={16} />
-      </button>
+      <div className="switcher-chip">
+        <Link href="/company" className="switcher-link" title="Профиль компании">
+          <CompanyTile id={session.companyId} name={session.companyName} size={36} />
+          <span className="switcher-text">
+            <span className="switcher-name">{session.companyName}</span>
+            <span className="switcher-label">{shortName(session.userName)}{mine.length > 1 ? ` · ещё ${mine.length - 1} в «Моих компаниях»` : ""}</span>
+          </span>
+        </Link>
+        <button className="switcher-btn icon-btn" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-label="Сменить организацию" title="Сменить организацию">
+          <Icon name="chevron" size={16} />
+        </button>
+      </div>
       {open && (
         <div className="switcher-pop" role="dialog" aria-label="Выбор организации">
           <p className="pop-title">Мои компании</p>
