@@ -166,6 +166,10 @@ def compose(ctx: dict) -> dict:
     assumptions = []
     if direction is None:
         assumptions.append(_claim("Направление события из текста однозначно не определяется — оценка влияния дана в виде сценариев.", "ai", [news_src]))
+    strength = cls.get("magnitude")
+    if strength and strength.get("evidence"):
+        # Сила события: цитата из новости, поэтому числа в утверждении подтверждаются ее текстом.
+        assumptions.append(_claim(f"Масштаб изменения — {strength['label']}: в новости «{strength['evidence']}».", "ai", [news_src]))
 
     # Почему важно: самые весомые экспозиции по темам новости, по одному признаку на тему.
     why, used_features, seen = [], [], set()

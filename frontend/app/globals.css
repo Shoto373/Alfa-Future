@@ -72,7 +72,19 @@ code { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; background
 .nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-badge { margin-left: auto; background: #2a8cff; color: #fff; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 6px; letter-spacing: .03em; }
 .nav-divider { border: 0; border-top: 1px solid #dcdfe3; margin: 10px 12px; }
-.sidebar-foot { margin-top: auto; padding-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+.sidebar-foot { margin-top: auto; padding: 16px 12px 4px; display: flex; flex-direction: column; gap: 6px; }
+.foot-link { font-size: 13px; color: var(--muted); text-decoration: none; }
+.foot-link:hover, .foot-link.active { color: var(--ink); text-decoration: underline; }
+.doc-page { max-width: 860px; }
+.doc-page .card h2 { margin-bottom: 10px; }
+.doc-page .card p, .doc-page .card li { color: var(--ink-2); }
+.doc-page .card p { margin: 0 0 10px; }
+.faq details { border-top: 1px solid var(--line); padding: 14px 0; }
+.faq details:first-of-type { border-top: 0; padding-top: 0; }
+.faq summary { cursor: pointer; font-weight: 600; color: var(--ink); list-style: none; display: flex; justify-content: space-between; gap: 12px; }
+.faq summary::after { content: "+"; color: var(--muted); font-weight: 400; }
+.faq details[open] summary::after { content: "−"; }
+.faq details p { margin: 10px 0 0; }
 .scrim { display: none; }
 
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -164,6 +176,8 @@ code { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; background
 .add-news-compact .seg button { padding: 5px 12px; font-size: 13px; }
 .add-news-compact textarea, .add-news-compact input { padding: 8px 12px; font-size: 14px; margin-bottom: 8px; }
 .add-news-compact .btn { padding: 8px 16px; font-size: 14px; border-radius: 12px; }
+.chip-count { color: var(--muted); font-size: 12px; margin-left: 2px; }
+.chip.on .chip-count { color: rgba(255, 255, 255, .6); }
 .chip-more { background: transparent; color: var(--blue); }
 .chip-more:hover:not(:disabled) { background: var(--blue-soft) !important; }
 .chip:disabled { opacity: .5; }

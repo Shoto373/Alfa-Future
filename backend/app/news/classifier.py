@@ -8,7 +8,7 @@
 import re
 from dataclasses import dataclass, field
 
-from app.news import semantic
+from app.news import magnitude, semantic
 from app.news.taxonomy import ACTORS, COUNTRY_STEMS, DIRECTION_STEMS, SECTOR_STEMS, TOPICS
 
 # «Санкции» засчитываются только рядом с деловым контекстом — и по словарю, и по смыслу.
@@ -66,6 +66,7 @@ class Classification:
     numbers: list[str] = field(default_factory=list)
     key_sentences: list[str] = field(default_factory=list)
     importance: float = 0.0
+    magnitude: dict | None = None                           # сила события по главной теме
 
     def topic_keys(self) -> list[str]:
         return [t["topic"] for t in self.topics]
@@ -75,6 +76,7 @@ class Classification:
             "topics": self.topics, "sectors": self.sectors, "countries": self.countries,
             "direction": self.direction, "topic_directions": self.topic_directions, "actors": self.actors, "dates": self.dates,
             "numbers": self.numbers, "key_sentences": self.key_sentences, "importance": round(self.importance, 3),
+            "magnitude": self.magnitude,
         }
 
 
@@ -152,4 +154,10 @@ def classify(title: str, text: str) -> Classification:
     key_sentences = [s for s in sentences if s in ranked[:3]]  # в исходном порядке
 
     importance = max((TOPICS[t["topic"]]["importance"] for t in topics), default=0.0)
-    return Classification(topics, sectors, countries, direction, topic_directions, actors, dates, numbers, key_sentences, importance)
+
+    # Сила события — по предложениям о главной теме; если их нет, по заголовку и началу текста.
+    main = topics[0]["topic"] if topics else None
+    about_main = [s for s in sentences_all if main and _score(tokenize(s), TOPICS[main]["stems"])[0]]
+    strength = magnitude.assess(main, about_main or sentences_all[:3])
+    return Classification(topics, sectors, countries, direction, topic_directions, actors, dates, numbers, key_sentences,
+                          importance, strength)

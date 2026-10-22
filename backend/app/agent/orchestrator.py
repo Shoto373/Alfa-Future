@@ -12,11 +12,12 @@
 
 import logging
 import asyncio
+import copy
 import time
 import uuid
 from datetime import datetime, timezone
 
-from app.agent import composer, llm, prompts, validators
+from app.agent import composer, llm, prompts, review, validators
 from app.agent.tools import REGISTRY, ToolError, ToolRunner
 from app.companies.sectors import SECTOR_NAMES
 from app.errors import AnalysisUnavailable
@@ -157,7 +158,9 @@ def _merge_llm(draft: dict, data: dict) -> dict:
     if data.get("facts"):
         draft["what_happened"]["facts"] = claims(data["facts"], "fact")
     if data.get("assumptions"):
-        draft["what_happened"]["assumptions"] = claims(data["assumptions"])
+        # Оценка силы события — из чисел новости по правилам, модель ее не заменяет.
+        strength = [c for c in draft["what_happened"]["assumptions"] if c["text"].startswith("Масштаб изменения")]
+        draft["what_happened"]["assumptions"] = strength + claims(data["assumptions"])
     # The bank summary remains a reviewed thesis. Free model text cannot become
     # the bank's position just because it is placed in the bank_summary field.
     if isinstance(data.get("questions"), list):
@@ -297,7 +300,30 @@ async def run(company: dict, role: str, news: dict, request_id: str) -> dict:
             logger.warning("analysis rejected request_id=%s checks=%s", request_id,
                            [r["name"] for r in results if not r["passed"]])
             raise AnalysisUnavailable("Не удалось подготовить подтвержденный разбор")
-    final_checks = results
+    final_checks = list(results)
+
+    # 5a. Смысловая проверка выводов AI второй моделью (только для текста модели).
+    if mode == "llm":
+        t0 = time.perf_counter()
+        backup = copy.deepcopy(draft)
+        try:
+            outcome = await asyncio.to_thread(review.review, draft, ctx, _sources(ctx))
+            recheck = validators.check(draft, ctx, {s["source_id"] for s in _sources(ctx)}, _grounding_text(ctx))
+            if any(not r["passed"] for r in recheck):
+                draft = backup
+                detail = "Критик предложил убрать выводы, но разбор без них не прошел проверки — оставлен прежний"
+            else:
+                final_checks = list(recheck)
+                detail = (f"Проверено выводов AI: {outcome['reviewed']}; подтверждено {outcome['supported']}, "
+                          f"частично {outcome['partial']}, убрано {len(outcome['removed'])}")
+                if outcome["removed"]:
+                    detail += ": " + "; ".join(outcome["removed"])
+            final_checks.append({"name": "semantic_review", "passed": True, "detail": detail[:400]})
+            trace.add("check", "semantic_review", detail, "ok", (time.perf_counter() - t0) * 1000)
+        except llm.LLMError as exc:
+            draft = backup
+            trace.add("check", "semantic_review", f"Смысловая проверка недоступна ({exc}); остаются детерминированные проверки",
+                      "warning", (time.perf_counter() - t0) * 1000)
     quality = {"passed": all(r["passed"] for r in final_checks), "attempts": attempts,
                "checks": [{"name": r["name"], "passed": r["passed"], "detail": r["detail"]} for r in final_checks]}
 

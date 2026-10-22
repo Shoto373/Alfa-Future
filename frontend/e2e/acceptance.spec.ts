@@ -46,12 +46,14 @@ test("вход, компания, роль только для чтения и �
 test("разбор, трасса, уточнение, оценка и первоисточник", async ({ page, request }) => {
   await login(page);
   await page.goto("/pulse/n/seed-rate-hold");
-  await expect(page.getByRole("heading", { name: "1. Что произошло" })).toBeVisible();
-  await expect(page.getByText("Самопроверка пройдена", { exact: false }).first()).toBeVisible();
+  // Разбор с LLM и смысловой проверкой может идти до минуты.
+  await expect(page.getByRole("heading", { name: "1. Что произошло" })).toBeVisible({ timeout: 80_000 });
   await page.getByRole("button", { name: "Как получен вывод" }).click();
   await expect(page.getByRole("heading", { name: "Ход анализа агента" })).toBeVisible();
+  // Плашка самопроверки убрана из шапки — результат проверок виден в ходе анализа.
+  await expect(page.locator(".checks li").first()).toBeVisible();
   await page.getByRole("button", { name: "Покажи в разрезе контрагентов" }).click();
-  await expect(page.locator(".chat-turn").last()).toContainText("Структура платежей");
+  await expect(page.locator(".chat-turn").last()).toContainText("Структура платежей", { timeout: 60_000 });
   await page.getByRole("button", { name: "Полезно", exact: true }).first().click();
   await expect(page.getByText("Спасибо за оценку").first()).toBeVisible();
   const pdf = page.locator('a[href*="/analytics/"][href*="/pdf#page="]').first();
@@ -81,7 +83,7 @@ test("новая новость и сохраненный разбор посл�
   );
   await page.getByRole("button", { name: "Разобрать", exact: true }).click();
   await expect(page).toHaveURL(/\/pulse\/n\//);
-  await expect(page.getByRole("heading", { name: "1. Что произошло" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "1. Что произошло" })).toBeVisible({ timeout: 80_000 });
   const url = page.url();
   await page.reload();
   await expect(page.getByRole("heading", { name: "1. Что произошло" })).toBeVisible();

@@ -132,10 +132,19 @@ async def news_feed(company_id: str, topic: str | None = Query(None, max_length=
                     limit: int = Query(30, ge=1, le=100), user: dict = Depends(current_user)) -> dict:
     role = member_of(user, company_id)["role"]  # роль берется из членства, не от клиента
     _company(company_id)
-    ranked = feed(store.all_items(), company_id, role, topic, limit)
+    # Вся лента компании без фильтра — для счетчиков тем: показываются только темы, где есть новости.
+    everything = feed(store.all_items(), company_id, role, None, 500)
+    counts: dict[str, dict] = {}
+    for r in everything:
+        for t in r["news"]["classification"]["topics"]:
+            counts.setdefault(t["topic"], {"topic": t["topic"], "name": t["name"], "count": 0})["count"] += 1
+    ranked = [r for r in everything if not topic or topic in {t["topic"] for t in r["news"]["classification"]["topics"]}][:limit]
     storage.log_event("feed_view", company_id=company_id, role=role)
-    return {"company_id": company_id, "role": role, "items": [
-        {"news": _news_brief(r["news"]), "relevance": r["relevance"],
+    return {"company_id": company_id, "role": role,
+            "topic_counts": sorted(counts.values(), key=lambda c: (-c["count"], c["name"])), "items": [
+        # Склеенные похожие новости других источников добавляются к счетчику «+N источников».
+        {"news": {**_news_brief(r["news"]), "duplicates": len(r["news"]["duplicates"]) + r.get("story_size", 0)},
+         "relevance": r["relevance"],
          "cached_insight_id": (storage.cached_insight(company_id, role, r["news"]["news_id"]) or {}).get("insight_id")}
         for r in ranked]}
 

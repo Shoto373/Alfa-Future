@@ -177,6 +177,12 @@ export interface NewsBrief {
   duplicates: number;
 }
 
+export interface TopicCount {
+  topic: string;
+  name: string;
+  count: number;
+}
+
 export interface FeedItem {
   news: NewsBrief;
   relevance: Relevance;

@@ -66,6 +66,7 @@ def _load(db=None) -> dict[str, dict]:
     version = hashlib.sha256(SEED_FILE.read_bytes() + Path(__file__).with_name("classifier.py").read_bytes()
                              + Path(__file__).with_name("taxonomy.py").read_bytes()
                              + Path(__file__).with_name("semantic.py").read_bytes()
+                             + Path(__file__).with_name("magnitude.py").read_bytes()
                              + embeddings.signature().encode()).hexdigest()
     if database.state("news_seed", db) != version:
         for s in json.loads(SEED_FILE.read_text(encoding="utf-8"))["items"]:

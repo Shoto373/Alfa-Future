@@ -5,22 +5,21 @@ import AddNews from "@/components/AddNews";
 import NewsCard from "@/components/NewsCard";
 import { Card, ErrorBox, Icon, Loading } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
-import { useFeed } from "@/lib/hooks";
+import { useFeedWithTopics } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
-import type { Meta } from "@/lib/types";
+import type { TopicCount } from "@/lib/types";
 
 const TOPICS_SHOWN = 10;
 
 export default function PulsePage() {
   const { session } = useSession();
   const [topic, setTopic] = useState<string | undefined>();
-  const [meta, setMeta] = useState<Meta | null>(null);
-  const feed = useFeed(session!.companyId, topic);
+  const page = useFeedWithTopics(session!.companyId, topic);
+  const feed = { ...page, data: page.data?.items ?? null };
   const [refreshing, setRefreshing] = useState(false);
   const [allTopics, setAllTopics] = useState(false);
   const [refreshNote, setRefreshNote] = useState<string | null>(null);
 
-  useEffect(() => { api.meta().then(setMeta).catch(() => setMeta(null)); }, []);
   useEffect(() => setTopic(undefined), [session!.companyId]);
   // Переход с главной по теме: /pulse?topic=key_rate.
   useEffect(() => {
@@ -28,8 +27,11 @@ export default function PulsePage() {
     if (t) setTopic(t);
   }, []);
 
-  // Первые 10 тем видны сразу, остальные — по кнопке; выбранная тема видна всегда.
-  const topics = meta?.topics ?? [];
+  // Только темы, по которым у компании есть новости; первые 10 видны сразу, остальные — по кнопке.
+  // Счетчики приходят с сервером и не меняются при выборе темы, поэтому список не «прыгает».
+  const [topics, setTopics] = useState<TopicCount[]>([]);
+  useEffect(() => { if (page.data) setTopics(page.data.topic_counts); }, [page.data]);
+  useEffect(() => setTopics([]), [session!.companyId]);
   const visibleTopics = allTopics ? topics : topics.filter((t, i) => i < TOPICS_SHOWN || t.topic === topic);
   const hiddenCount = topics.length - topics.filter((t, i) => i < TOPICS_SHOWN || t.topic === topic).length;
 
@@ -67,7 +69,9 @@ export default function PulsePage() {
           <div className="chips" role="toolbar" aria-label="Фильтр по темам">
             <button className={!topic ? "chip on" : "chip"} onClick={() => setTopic(undefined)}>Все темы</button>
             {visibleTopics.map((t) => (
-              <button key={t.topic} className={topic === t.topic ? "chip on" : "chip"} onClick={() => setTopic(t.topic)}>{t.name}</button>
+              <button key={t.topic} className={topic === t.topic ? "chip on" : "chip"} onClick={() => setTopic(t.topic)}>
+                {t.name} <span className="chip-count">{t.count}</span>
+              </button>
             ))}
             {hiddenCount > 0 && (
               <button className="chip chip-more" onClick={() => setAllTopics((v) => !v)} aria-expanded={allTopics}>

@@ -66,6 +66,10 @@ export default function Shell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
+        <div className="sidebar-foot">
+          <Link href="/help" className={`foot-link ${path === "/help" ? "active" : ""}`}>Вопросы и ответы</Link>
+          <Link href="/legal" className={`foot-link ${path === "/legal" ? "active" : ""}`}>Правовая информация</Link>
+        </div>
       </aside>
       {menuOpen && <div className="scrim" onClick={() => setMenuOpen(false)} aria-hidden="true" />}
 

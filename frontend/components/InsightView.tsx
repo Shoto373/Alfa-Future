@@ -19,6 +19,7 @@ const CHECK: Record<string, string> = {
   evidence_boundaries: "Проверены источники и доступность признаков",
   headline_grounded: "Проверен заголовок",
   bank_summary_grounded: "Резюме банка сверено с тезисом",
+  semantic_review: "Выводы AI проверены второй моделью по источникам",
 };
 
 function SourceRefs({ ids, index }: { ids: string[]; index: Map<string, number> }) {

@@ -1,5 +1,5 @@
 import type {
-  Answer, BankDocument, CompanyProfile, CompanySummary, Exposure, FeedItem, Insight, LookupCompany, Member, Membership, Meta, NewsBrief, Role, User,
+  Answer, BankDocument, CompanyProfile, CompanySummary, Exposure, FeedItem, Insight, LookupCompany, Member, Membership, Meta, NewsBrief, Role, TopicCount, User,
 } from "./types";
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
@@ -81,7 +81,7 @@ export const api = {
   company: (id: string, signal?: AbortSignal) =>
     request<{ profile: CompanyProfile; exposures: Exposure[] }>(`/api/v1/companies/${encodeURIComponent(id)}`, {}, { signal }),
   feed: (companyId: string, topic?: string, signal?: AbortSignal) =>
-    request<{ items: FeedItem[] }>(
+    request<{ items: FeedItem[]; topic_counts: TopicCount[] }>(
       `/api/v1/feed?company_id=${encodeURIComponent(companyId)}${topic ? `&topic=${topic}` : ""}`, {}, { signal }),
   insight: (companyId: string, newsId: string, force = false, signal?: AbortSignal) =>
     request<Insight>("/api/v1/insights", json("POST", { company_id: companyId, news_id: newsId, force_refresh: force }),
