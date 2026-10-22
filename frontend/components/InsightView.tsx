@@ -12,10 +12,13 @@ const CHECK: Record<string, string> = {
   completeness: "Все разделы заполнены",
   sources_linked: "У каждого вывода есть источник",
   bank_view_grounded: "Позиция банка — только из материалов банка",
-  bank_view_found: "Найдены материалы банка",
+  bank_view_found: "Проверен результат поиска аналитики банка",
   numbers_grounded: "Цифры подтверждены источниками",
   consistent_with_client: "Нет противоречий с данными компании",
   personalized: "Вывод опирается на признаки компании",
+  evidence_boundaries: "Проверены источники и доступность признаков",
+  headline_grounded: "Проверен заголовок",
+  bank_summary_grounded: "Резюме банка сверено с тезисом",
 };
 
 function SourceRefs({ ids, index }: { ids: string[]; index: Map<string, number> }) {
@@ -74,7 +77,7 @@ export default function InsightView({ insight: ins, onRefresh, refreshing }: { i
       <div className="insight-head">
         <div className="insight-badges">
           <Score value={ins.relevance.score} />
-          <span className={`mode mode-${ins.mode}`}>{ins.mode === "llm" ? `AI-агент · ${ins.model}` : "Агент на правилах · LLM не подключена"}</span>
+          <span className={`mode mode-${ins.mode}`}>{ins.mode === "llm" ? `AI-агент · ${ins.model}` : "Агент на правилах"}</span>
           <span className={`quality-pill ${ins.quality.passed ? "ok" : "warn"}`}>
             {ins.quality.passed ? "Самопроверка пройдена" : "Самопроверка с замечаниями"}
             {ins.quality.attempts > 1 ? ` · попыток: ${ins.quality.attempts}` : ""}

@@ -37,6 +37,9 @@ TZ_AND_PROMPTS_ALFA_PULSE.md
 
 # Node / Next.js
 node_modules/
+.npm-cache/
+test-results/
+playwright-report/
 .next/
 *.tsbuildinfo
 
@@ -54,3 +57,4 @@ node_modules/
 /Dockerfile
 /requirements.txt
 /backend/scripts/
+.idea/

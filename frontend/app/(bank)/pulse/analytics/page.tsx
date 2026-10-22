@@ -38,6 +38,7 @@ export default function AnalyticsPage() {
                   <span className="thesis-page">стр. {t.page}</span>
                   <span>{t.text}</span>
                   {t.stance === "forecast" && <span className="tag">прогноз</span>}
+                  {t.stale && <span className="tag tag-warn">архивный тезис</span>}
                 </li>
               ))}
             </ul>

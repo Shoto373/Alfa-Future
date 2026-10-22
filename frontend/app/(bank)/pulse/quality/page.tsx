@@ -7,8 +7,11 @@ import { pct } from "@/lib/format";
 
 const CHECK: Record<string, string> = {
   completeness: "Полнота разделов", sources_linked: "Выводы со ссылкой на источник", bank_view_grounded: "Позиция банка из материалов банка",
-  bank_view_found: "Найдена аналитика банка", numbers_grounded: "Цифры подтверждены", consistent_with_client: "Без противоречий с данными",
+  bank_view_found: "Проверен результат поиска аналитики", numbers_grounded: "Цифры подтверждены", consistent_with_client: "Без противоречий с данными",
   personalized: "Персонализация",
+  evidence_boundaries: "Типы источников и доступность признаков",
+  headline_grounded: "Проверка заголовка",
+  bank_summary_grounded: "Резюме позиции банка",
 };
 
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {

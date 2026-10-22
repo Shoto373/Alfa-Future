@@ -1,17 +1,16 @@
-"""Журнал обращений агента к инструментам (JSONL в RUNTIME_DIR/audit.jsonl).
+"""Журнал обращений агента к инструментам в PostgreSQL.
 
 Пишутся имя инструмента, аргументы без чувствительных полей, статус,
 длительность и request_id. Тексты профилей и ответы модели не пишутся.
 """
 
-import json
-import threading
 import time
 from datetime import datetime, timezone
 
-from app import config
+from app import database
+from sqlalchemy import select
+from app.models import ToolAudit
 
-_lock = threading.Lock()
 SENSITIVE = {"api_key", "authorization", "text", "question"}
 
 
@@ -35,17 +34,14 @@ def log(request_id: str, tool: str, args: dict, status: str, duration_ms: float,
         "request_id": request_id, "tool": tool, "args": _safe(args), "status": status,
         "duration_ms": round(duration_ms, 1), "detail": detail[:200],
     }
-    with _lock:
-        with (config.runtime_dir() / "audit.jsonl").open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+    with database.session() as db:
+        db.add(ToolAudit(request_id=request_id, payload=record))
 
 
 def tail(limit: int = 100) -> list[dict]:
-    path = config.runtime_dir() / "audit.jsonl"
-    if not path.exists():
-        return []
-    lines = path.read_text(encoding="utf-8").splitlines()[-limit:]
-    return [json.loads(line) for line in lines if line.strip()]
+    with database.session() as db:
+        rows = list(db.scalars(select(ToolAudit.payload).order_by(ToolAudit.id.desc()).limit(limit)))
+    return list(reversed(rows))
 
 
 class Timer:

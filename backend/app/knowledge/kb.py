@@ -6,6 +6,7 @@
 """
 
 import json
+import hashlib
 import math
 from collections import Counter
 from datetime import date
@@ -13,14 +14,35 @@ from functools import lru_cache
 from pathlib import Path
 
 from app.news.classifier import tokenize
+from app import config, database
+from sqlalchemy import select, func
+from app.models import BankDocument, BankThesis, BankProduct
 
 KB_FILE = Path(__file__).with_name("bank_analytics.json")
-REFERENCE_DATE = date(2026, 10, 21)
 
 
-@lru_cache(maxsize=1)
 def _kb() -> dict:
-    data = json.loads(KB_FILE.read_text(encoding="utf-8"))
+    return _index(config.database_url(), config.database_schema(), hashlib.sha256(KB_FILE.read_bytes()).hexdigest())
+
+
+@lru_cache(maxsize=2)
+def _index(url: str, schema: str, signature: str) -> dict:
+    source = json.loads(KB_FILE.read_text(encoding="utf-8"))
+    with database.session() as db:
+        db.execute(select(func.pg_advisory_xact_lock(72810404)))
+        if database.state("knowledge", db) != signature:
+            for d in source["documents"]:
+                db.merge(BankDocument(doc_id=d["doc_id"], payload=d))
+            db.flush()  # Documents precede thesis foreign keys.
+            for t in source["theses"]:
+                db.merge(BankThesis(thesis_id=t["id"], doc_id=t["doc_id"], page=t["page"], payload=t))
+            for p in source["products"]:
+                db.merge(BankProduct(product_id=p["id"], payload=p))
+            db.flush()
+            database.set_state("knowledge", signature, db)
+        data = {"documents": list(db.scalars(select(BankDocument.payload).order_by(BankDocument.doc_id))),
+                "theses": list(db.scalars(select(BankThesis.payload).order_by(BankThesis.thesis_id))),
+                "products": list(db.scalars(select(BankProduct.payload).order_by(BankProduct.product_id)))}
     docs = {d["doc_id"]: d for d in data["documents"]}
     theses = []
     for t in data["theses"]:
@@ -67,7 +89,8 @@ def _bm25(query: list[str], t: dict, kb: dict, k1: float = 1.4, b: float = 0.7) 
 
 
 def _recency(doc_date: str) -> float:
-    age = (REFERENCE_DATE - date.fromisoformat(doc_date)).days
+    parsed = date.fromisoformat(doc_date + "-01" if len(doc_date) == 7 else doc_date)
+    age = max(0, (date.today() - parsed).days)
     return max(0.3, 1.0 - age / 365)
 
 
@@ -83,6 +106,14 @@ def search(query: str = "", topics: list[str] | None = None, sectors: list[str] 
         lexical = _bm25(q, t, kb) if q else 0.0
         topic_hit = len(topics & set(t["topics"]))
         sector_hit = len(sectors & set(t["sectors"]))
+        # Sector overlap alone does not make a bank thesis relevant to an event.
+        if topics and not topic_hit:
+            continue
+        meaningful = {w for w in q if len(w) >= 5 and w not in {"компа", "банка", "альфа", "новос", "данны"}}
+        if topics and len(q) > 5 and len(meaningful & set(t["_tokens"])) < 2:
+            continue
+        if not topics and (lexical < 2 or len(meaningful & set(t["_tokens"])) < 2):
+            continue
         score = lexical + 2.5 * topic_hit + 1.5 * sector_hit
         if score <= 0:
             continue
