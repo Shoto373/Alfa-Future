@@ -123,13 +123,23 @@ export default function HomePage() {
         <Link href="/pulse" className="hero-promo">
           <strong>AI-аналитик для руководителя</strong>
           <span>Что произошло, почему это важно именно вам, риски, возможности и позиция Альфа-Банка</span>
-          <svg viewBox="0 0 220 120" className="promo-art" aria-hidden="true">
+          <svg viewBox="0 0 240 120" className="promo-art" aria-hidden="true">
             <defs>
-              <linearGradient id="pr-g" x1="0" x2="1"><stop offset="0" stopColor="#fff" stopOpacity=".2" /><stop offset="1" stopColor="#fff" /></linearGradient>
-              <filter id="pr-glow"><feGaussianBlur stdDeviation="4" /></filter>
+              <linearGradient id="pr-fade" gradientUnits="userSpaceOnUse" x1="0" x2="240" y1="0" y2="0">
+                <stop offset="0" stopColor="#fff" stopOpacity="0" />
+                <stop offset=".18" stopColor="#fff" />
+                <stop offset=".82" stopColor="#fff" />
+                <stop offset="1" stopColor="#fff" stopOpacity="0" />
+              </linearGradient>
+              <filter id="pr-glow" filterUnits="userSpaceOnUse" x="-20" y="-20" width="280" height="160">
+                <feGaussianBlur stdDeviation="5" />
+              </filter>
+              <path id="pr-line" d="M4 72H78c4 0 6-6 9-6s5 6 9 6h6l9-44c1-4 4-4 5 0l12 66c1 4 4 4 5 0l7-34c1-3 3-3 4 0l3 12h85"
+                fill="none" strokeLinecap="round" strokeLinejoin="round" />
             </defs>
-            <path d="M0 80h50l14-44 26 76 18-52 12 20h100" fill="none" stroke="#ef3124" strokeWidth="10" filter="url(#pr-glow)" />
-            <path d="M0 80h50l14-44 26 76 18-52 12 20h100" fill="none" stroke="url(#pr-g)" strokeWidth="4" strokeLinejoin="round" />
+            <use href="#pr-line" stroke="#ef3124" strokeWidth="9" opacity=".75" filter="url(#pr-glow)" />
+            <use href="#pr-line" stroke="#ff6a5c" strokeWidth="4.5" opacity=".9" />
+            <use href="#pr-line" stroke="url(#pr-fade)" strokeWidth="2.2" />
           </svg>
           <span className="promo-badge">Для {companies} {plural(companies, ["компании", "компаний", "компаний"])}</span>
         </Link>
