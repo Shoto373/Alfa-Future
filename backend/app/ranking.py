@@ -23,6 +23,8 @@ ROLES = {
 }
 
 HALF_LIFE_DAYS = 45
+MAX_FEED_AGE_DAYS = 120
+MIN_FEED_SCORE = 10.0
 NOW_OVERRIDE: datetime | None = None  # для тестов
 
 
@@ -80,7 +82,8 @@ def score(news: dict, company_id: str, role: str) -> dict:
     age = _age_days(news["published_at"])
     freshness = 0.5 ** (age / HALF_LIFE_DAYS)
     importance = 0.5 + cls["importance"]
-    raw = importance * (exposure_sum + direct + country_hit) * role_mult * (0.4 + 0.6 * freshness)
+    # No permanent 40% freshness floor: old external events must leave the feed.
+    raw = importance * (exposure_sum + direct + country_hit) * role_mult * freshness
     value = round(100 * (1 - math.exp(-raw / 2.5)), 1)
 
     reasons.sort(key=lambda r: r["weight"], reverse=True)
@@ -93,6 +96,12 @@ def feed(items: list[dict], company_id: str, role: str, topic: str | None = None
     for news in items:
         if topic and topic not in [t["topic"] for t in news["classification"]["topics"]]:
             continue
-        ranked.append({"news": news, "relevance": score(news, company_id, role)})
+        relevance = score(news, company_id, role)
+        has_company_basis = any(r["kind"] in ("exposure", "sector_mention", "country") for r in relevance["reasons"])
+        if not news["classification"]["topics"] or not has_company_basis or relevance["score"] < MIN_FEED_SCORE:
+            continue
+        if news.get("kind") != "seed" and relevance["age_days"] > MAX_FEED_AGE_DAYS:
+            continue
+        ranked.append({"news": news, "relevance": relevance})
     ranked.sort(key=lambda r: r["relevance"]["score"], reverse=True)
     return ranked[:limit]

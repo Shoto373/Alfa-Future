@@ -12,10 +12,13 @@ const CHECK: Record<string, string> = {
   completeness: "Все разделы заполнены",
   sources_linked: "У каждого вывода есть источник",
   bank_view_grounded: "Позиция банка — только из материалов банка",
-  bank_view_found: "Найдены материалы банка",
+  bank_view_found: "Проверен результат поиска аналитики банка",
   numbers_grounded: "Цифры подтверждены источниками",
   consistent_with_client: "Нет противоречий с данными компании",
   personalized: "Вывод опирается на признаки компании",
+  evidence_boundaries: "Проверены источники и доступность признаков",
+  headline_grounded: "Проверен заголовок",
+  bank_summary_grounded: "Резюме банка сверено с тезисом",
 };
 
 function SourceRefs({ ids, index }: { ids: string[]; index: Map<string, number> }) {

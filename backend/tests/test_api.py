@@ -131,6 +131,7 @@ def test_analytics_and_pdf(client, tmp_path, monkeypatch):
     monkeypatch.setenv("BANK_PDF_DIR", str(tmp_path))
     r = client.get("/api/v1/analytics/rate_2026_09_11/pdf")
     assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
+    assert r.headers["content-disposition"].startswith("inline")
 
 
 def test_openapi_uses_400_instead_of_422(client):
@@ -142,10 +143,28 @@ def test_openapi_uses_400_instead_of_422(client):
 
 
 def test_cors(client):
-    ok = client.options("/api/v1/feed", headers={"Origin": ORIGIN, "Access-Control-Request-Method": "GET"})
-    assert ok.headers["access-control-allow-origin"] == ORIGIN
-    denied = client.get("/api/v1/meta", headers={"Origin": "http://evil.example"})
-    assert "access-control-allow-origin" not in denied.headers
+    for origin in (ORIGIN, "http://127.0.0.1:3000"):
+        ok = client.options("/api/v1/companies", headers={"Origin": origin, "Access-Control-Request-Method": "GET"})
+        assert ok.status_code == 200
+        assert ok.headers["access-control-allow-origin"] == origin
+        response = client.get("/api/v1/companies?q=&limit=6", headers={"Origin": origin})
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == origin
+    for origin in ("http://evil.example", "http://127.0.0.1:3001", "http://localhost.evil.example:3000"):
+        denied = client.options("/api/v1/companies", headers={"Origin": origin, "Access-Control-Request-Method": "GET"})
+        assert denied.status_code == 400
+        assert "access-control-allow-origin" not in denied.headers
+
+
+@pytest.mark.parametrize("configured,expected", [
+    ("http://localhost:3100", ["http://localhost:3100", "http://127.0.0.1:3100"]),
+    ("http://127.0.0.1:3100/", ["http://127.0.0.1:3100", "http://localhost:3100"]),
+    ("https://example.com", ["https://example.com"]),
+])
+def test_cors_origin_configuration(monkeypatch, configured, expected):
+    from app import config
+    monkeypatch.setenv("FRONTEND_ORIGIN", configured)
+    assert config.frontend_origins() == expected
 
 
 @pytest.mark.parametrize("path", ["/api/v1/insights/..%2F..%2Fetc", "/api/v1/insights/ins-zzz"])

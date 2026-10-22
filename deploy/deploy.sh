@@ -7,7 +7,14 @@ cd "$(dirname "$0")/.."          # ~/app, where docker-compose.yml lives
 : "${FRONTEND_IMAGE:?FRONTEND_IMAGE not set}"
 : "${GHCR_TOKEN:?GHCR_TOKEN not set}"
 
-touch .env
+# Do not let an exported empty value override the password saved in .env.
+if [ -z "${POSTGRES_PASSWORD:-}" ]; then unset POSTGRES_PASSWORD; fi
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "!! Python 3 is required on the server to prepare deployment configuration"
+  exit 1
+fi
+python3 deploy/prepare_env.py
+docker compose config --quiet
 
 echo "==> Deploying $BACKEND_IMAGE + $FRONTEND_IMAGE"
 echo "$GHCR_TOKEN" | docker login ghcr.io -u "${ACTOR:-ci}" --password-stdin

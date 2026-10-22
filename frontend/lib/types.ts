@@ -166,5 +166,5 @@ export interface BankDocument {
   author: string;
   stale?: boolean;
   pdf_available: boolean;
-  theses: { id: string; page: number; text: string; topics: string[]; stance?: string }[];
+  theses: { id: string; page: number; text: string; topics: string[]; stance?: string; stale?: boolean }[];
 }

@@ -11,6 +11,7 @@
 """
 
 import logging
+import asyncio
 import time
 import uuid
 from datetime import datetime, timezone
@@ -28,6 +29,7 @@ DISCLAIMER = ("Прототип для хакатона. Данные о ком�
               "Материал не является инвестиционной рекомендацией. Выводы с пометкой «AI» сформированы автоматически.")
 
 FEATURE_LABELS = {
+    "products.payroll": "Зарплатный проект",
     "sector": "Отрасль", "products.loans": "Кредитные продукты", "products.leasing": "Лизинг",
     "products.deposits": "Депозиты", "products.factoring": "Факторинг", "products.guarantees": "Банковские гарантии",
     "workers_fns": "Численность (ФНС)", "fts_countries": "Страны ВЭД (ФТС)", "revenue": "Выручка",
@@ -67,7 +69,10 @@ def _rules_plan(news: dict, company: dict) -> list[dict]:
 def _llm_plan(news: dict, company: dict) -> tuple[list[dict], dict]:
     data, meta = llm.chat_json(prompts.PLAN_SYSTEM, prompts.plan_user(news, company, REGISTRY), "fast", 1500)
     steps = []
-    for s in data.get("steps", [])[:10]:
+    raw_steps = data.get("steps")
+    if not isinstance(raw_steps, list):
+        raise llm.LLMError("План модели не содержит списка шагов")
+    for s in raw_steps[:10]:
         if isinstance(s, dict) and s.get("tool") in REGISTRY and isinstance(s.get("args", {}), dict):
             steps.append({"tool": s["tool"], "args": s.get("args", {}), "why": str(s.get("why", ""))[:200]})
     if not any(s["tool"] == "search_bank_analytics" for s in steps):
@@ -103,7 +108,7 @@ def _grounding_text(ctx: dict) -> str:
     parts += [composer.pct(s['share'], 0) for side in ("suppliers", "customers") for s in c[side]["by_sector"]]
     if c["suppliers"]["top1_share"]:
         parts.append(composer.pct(c['suppliers']['top1_share'], 0))
-    parts += ["14%", "2026", "2027", "4К26", "3–6", "6"]  # горизонты из шаблонов действий
+    parts += [c["company_id"]]
     return " ".join(parts)
 
 
@@ -111,6 +116,7 @@ def _features(ctx: dict, draft: dict) -> list[dict]:
     c = ctx["company"]
     used = {f for sec in ("why_important", "risks", "opportunities") for cl in draft[sec] for f in cl.get("features", [])}
     values = {
+        "products.payroll": "есть" if c["products"].get("payroll") else "нет данных",
         "sector": c["sector_name"], "products.loans": "есть" if c["products"].get("loans") else "нет",
         "products.leasing": "есть" if c["products"].get("leasing") else "нет",
         "products.deposits": "есть" if c["products"].get("deposits") else "нет",
@@ -130,12 +136,12 @@ def _merge_llm(draft: dict, data: dict) -> dict:
     """Переносит в черновик разделы из ответа LLM, сохраняя структуру Claim."""
     def claims(items, default_origin="ai"):
         out = []
-        for it in items or []:
+        for it in items if isinstance(items, list) else []:
             if isinstance(it, dict) and isinstance(it.get("text"), str) and it["text"].strip():
                 origin = it.get("origin") if it.get("origin") in ("fact", "client_data", "bank", "ai") else default_origin
                 out.append({"text": it["text"].strip()[:600], "origin": origin,
-                            "source_ids": [str(s) for s in it.get("source_ids", [])][:6],
-                            "features": [str(f) for f in it.get("features", [])][:6]})
+                            "source_ids": [str(s) for s in it.get("source_ids", [])][:6] if isinstance(it.get("source_ids"), list) else [],
+                            "features": [str(f) for f in it.get("features", [])][:6] if isinstance(it.get("features"), list) else []})
         return out
 
     rules_why = [c for c in draft["why_important"] if c["origin"] == "client_data"]
@@ -146,15 +152,15 @@ def _merge_llm(draft: dict, data: dict) -> dict:
     # дополняются ими, чтобы связь с данными клиента оставалась трассируемой.
     texts = {c["text"] for c in draft["why_important"]}
     draft["why_important"] = [c for c in rules_why[:2] if c["text"] not in texts] + draft["why_important"][:4]
-    if isinstance(data.get("headline"), str) and data["headline"].strip():
-        draft["headline"] = data["headline"].strip()[:400]
+    # Keep the evidence-based summary from the composer. A free-form model
+    # headline has no per-claim citations and cannot be independently grounded.
     if data.get("facts"):
         draft["what_happened"]["facts"] = claims(data["facts"], "fact")
     if data.get("assumptions"):
         draft["what_happened"]["assumptions"] = claims(data["assumptions"])
-    if isinstance(data.get("bank_summary"), str):
-        draft["bank_view"]["summary"] = data["bank_summary"][:600]
-    if data.get("questions"):
+    # The bank summary remains a reviewed thesis. Free model text cannot become
+    # the bank's position just because it is placed in the bank_summary field.
+    if isinstance(data.get("questions"), list):
         draft["questions"] = [str(q)[:300] for q in data["questions"]][:4]
     return draft
 
@@ -171,7 +177,22 @@ async def run(company: dict, role: str, news: dict, request_id: str) -> dict:
     plan, plan_source = _rules_plan(news, company), "rules"
     if use_llm:
         try:
-            plan, meta = _llm_plan(news, company)
+            plan, meta = await asyncio.to_thread(_llm_plan, news, company)
+            for step in plan:
+                if "topics" in REGISTRY[step["tool"]].args:
+                    step["args"]["topics"] = [t["topic"] for t in news["classification"]["topics"]]
+                if "company_id" in step["args"]:
+                    step["args"]["company_id"] = company["company_id"]
+                if "news_id" in step["args"]:
+                    step["args"]["news_id"] = news["news_id"]
+                if step["tool"] == "search_bank_analytics":
+                    # A model-selected generic query must not replace the event
+                    # with a different topic just to find some bank material.
+                    step["args"].update(query=f"{news['title']} {news['lead']}",
+                        topics=[t["topic"] for t in news["classification"]["topics"]],
+                        sectors=[company["sector"]] + news["classification"]["sectors"], include_stale=False)
+            if not any(s["tool"] == "get_exposures" for s in plan):
+                plan.insert(0, _rules_plan(news, company)[1])
             plan_source, model = "llm", meta["model"]
         except llm.LLMError as exc:
             trace.add("plan", "llm_plan", f"LLM-план не получен ({exc}); используется план на правилах", "warning")
@@ -180,7 +201,7 @@ async def run(company: dict, role: str, news: dict, request_id: str) -> dict:
 
     # 2. Инструменты -> общий контекст.
     ctx = {"news": news, "company": company, "role": role, "exposures": [], "theses": [], "products": [],
-           "forecast_conflicts": [], "counterparties": None, "related": []}
+           "forecast_conflicts": [], "counterparties": None, "related": [], "bank_search_complete": False}
     for step in plan:
         try:
             result, ms = runner.call(step["tool"], **step["args"])
@@ -189,10 +210,12 @@ async def run(company: dict, role: str, news: dict, request_id: str) -> dict:
             continue
         summary = ""
         if step["tool"] == "get_exposures":
-            ctx["exposures"] = list(result)
+            event_topics = {t["topic"] for t in news["classification"]["topics"]}
+            ctx["exposures"] = [e for e in result if e["topic"] in event_topics]
             summary = f"найдено экспозиций: {len(result)}"
         elif step["tool"] == "search_bank_analytics":
-            ctx["theses"] = result
+            ctx["theses"] = [t for t in result if not t.get("stale")]
+            ctx["bank_search_complete"] = True
             summary = "тезисы: " + ", ".join(t["id"] for t in result) if result else "материалы не найдены"
         elif step["tool"] == "get_bank_products":
             ctx["products"] = result
@@ -216,7 +239,7 @@ async def run(company: dict, role: str, news: dict, request_id: str) -> dict:
     mode = "rules"
     if use_llm:
         try:
-            data, meta = llm.chat_json(prompts.COMPOSE_SYSTEM, prompts.compose_user(ctx, _sources(ctx)), "reasoning", 4000)
+            data, meta = await asyncio.to_thread(llm.chat_json, prompts.COMPOSE_SYSTEM, prompts.compose_user(ctx, _sources(ctx)), "reasoning", 4000)
             draft = _merge_llm(draft, data)
             mode, model = "llm", meta["model"]
             trace.add("compose", "llm_compose", f"Черновик модели {meta['model']}, токенов {meta['tokens']}", "ok", meta["duration_ms"])
@@ -244,8 +267,10 @@ async def run(company: dict, role: str, news: dict, request_id: str) -> dict:
         fixes = {r["fix"] for r in failed}
         if "broaden_search" in fixes:
             try:
-                wider, ms = runner.call("search_bank_analytics", query=news["text"][:600], topics=[], sectors=[], include_stale=True)
+                wider, ms = runner.call("search_bank_analytics", query=news["text"][:600],
+                                       topics=[t["topic"] for t in news["classification"]["topics"]], sectors=[], include_stale=False)
                 ctx["theses"] = wider
+                ctx["bank_search_complete"] = True
                 rebuilt = composer.compose(ctx)
                 draft["bank_view"] = rebuilt["bank_view"]
                 actions.append(f"расширен поиск по аналитике банка: {len(wider)} тезисов")
@@ -259,9 +284,19 @@ async def run(company: dict, role: str, news: dict, request_id: str) -> dict:
             if validators.similarity(draft["headline"], news["title"]) > 0.5:
                 draft["headline"] = rebuilt["headline"]
             actions.append("разделы дополнены правилами")
-        actions += validators.apply_fix(draft, failed, {s["source_id"] for s in _sources(ctx)}, _grounding_text(ctx))
+        actions += validators.apply_fix(draft, failed, {s["source_id"] for s in _sources(ctx)}, _grounding_text(ctx), ctx)
         trace.add("adapt", f"adapt_{round_no + 1}", "; ".join(actions) or "исправления не потребовались", "ok")
 
+    if any(not r["passed"] for r in results):
+        # Never return known-invalid output after exhausting bounded corrections.
+        draft = composer.compose(ctx)
+        mode, model = "rules", None
+        results = validators.check(draft, ctx, {s["source_id"] for s in _sources(ctx)}, _grounding_text(ctx))
+        trace.add("adapt", "safe_fallback", "Лимит коррекций исчерпан; повторно проверен разбор на правилах", "warning")
+        if any(not r["passed"] for r in results):
+            logger.warning("analysis rejected request_id=%s checks=%s", request_id,
+                           [r["name"] for r in results if not r["passed"]])
+            raise AnalysisUnavailable("Не удалось подготовить подтвержденный разбор")
     final_checks = results
     quality = {"passed": all(r["passed"] for r in final_checks), "attempts": attempts,
                "checks": [{"name": r["name"], "passed": r["passed"], "detail": r["detail"]} for r in final_checks]}
@@ -270,9 +305,22 @@ async def run(company: dict, role: str, news: dict, request_id: str) -> dict:
     used_ids = {s for sec in ("why_important", "risks", "opportunities", "actions") for c in draft[sec] for s in c["source_ids"]}
     used_ids |= {s for c in draft["bank_view"]["theses"] + draft["what_happened"]["facts"] for s in c["source_ids"]}
     used_ids |= {f"product:{p['product_id']}" for p in draft["products"]}
+    used_ids |= {"client:profile", "client:payments"}
+    used_ids |= {f"bank:{item['id']}" for conflict in ctx["forecast_conflicts"] for item in conflict["items"]}
+    # Historical forecast versions used in the revision notice are sources too.
+    existing_theses = {t["id"] for t in ctx["theses"]}
+    for conflict in ctx["forecast_conflicts"]:
+        for item in conflict["items"]:
+            if item["id"] not in existing_theses:
+                from app.knowledge import kb
+                thesis = kb.thesis(item["id"])
+                if thesis:
+                    ctx["theses"].append(thesis)
+                    existing_theses.add(item["id"])
     sources = [s for s in _sources(ctx) if s["source_id"] in used_ids]
     relevance = score(news, company["company_id"], role)
-    trace.add("finalize", "finalize", f"Источников: {len(sources)}, режим: {mode}, всего {(time.perf_counter() - started) * 1000:.0f} мс")
+    trace.add("finalize", "finalize", f"Источников: {len(sources)}, режим: {mode}, всего {(time.perf_counter() - started) * 1000:.0f} мс",
+              output={"total_duration_ms": round((time.perf_counter() - started) * 1000, 1)})
 
     insight = {
         "schema_version": SCHEMA_VERSION,

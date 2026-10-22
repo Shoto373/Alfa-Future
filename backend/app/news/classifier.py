@@ -85,12 +85,18 @@ def classify(title: str, text: str) -> Classification:
     for key, spec in TOPICS.items():
         score, matched = _score(tokens, spec["stems"])
         score += 2 * _score(title_tokens, spec["stems"])[0]  # заголовок важнее
+        if key == "sanctions_geopolitics" and not _score(tokens, [
+                "санкц", "swift", "эмбарго", "экспорт", "импорт", "платеж", "банков", "компани", "торгов", "поставк", "тариф", "пошлин", "финанс"])[0]:
+            continue
         if score:
             topics.append({"topic": key, "name": spec["name"], "score": score, "matched": matched})
     topics.sort(key=lambda t: t["score"], reverse=True)
     if topics:
         top = topics[0]["score"]
-        topics = [t for t in topics if t["score"] >= max(2, top * 0.25)][:5] or topics[:1]
+        # A single weak body mention ("minister arrived", "contribution to
+        # culture", generic "budget") cannot turn an unrelated item into news
+        # about corporate finance. No fallback to a score-one topic.
+        topics = [t for t in topics if t["score"] >= max(2, top * 0.25)][:5]
 
     sectors = [s for s, stems in SECTOR_STEMS.items() if _score(tokens, stems)[0]]
     countries = [c for c, stems in COUNTRY_STEMS.items() if _score(tokens, stems)[0]]

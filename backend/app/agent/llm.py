@@ -8,29 +8,26 @@
 import json
 import logging
 import re
-import threading
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import httpx
 
-from app import config
+from app import config, database
+from app.models import LLMUsage
+from sqlalchemy.dialects.postgresql import insert
 
 logger = logging.getLogger("app.agent.llm")
 
 CONNECT_TIMEOUT = 10.0
 BREAKER_SECONDS = 60.0  # после сбоя соединения LLM не вызывается, чтобы не ждать тайм-аут на каждом шаге
 
-_usage_lock = threading.Lock()
 _down_until = 0.0
 
 
-def _budget_day() -> str:
-    """Бюджет шлюза обновляется в 03:00 МСК, то есть в полночь UTC."""
-    return datetime.now(timezone.utc).date().isoformat()
-
-
-_usage = {"date": _budget_day(), "tokens": 0, "cost": 0.0, "calls": 0, "errors": 0}
+def _budget_day() -> date:
+    """Gateway budget resets at 03:00 Moscow time, i.e. midnight UTC."""
+    return datetime.now(timezone.utc).date()
 
 
 class LLMError(Exception):
@@ -69,21 +66,21 @@ def _post(payload: dict, s: dict) -> httpx.Response:
 
 
 def usage() -> dict:
-    with _usage_lock:
-        if _usage["date"] != _budget_day():
-            _usage.update(date=_budget_day(), tokens=0, cost=0.0, calls=0, errors=0)
-        s = config.llm_settings()
-        return dict(_usage) | {"limit": s["daily_token_limit"], "cost_limit": s["daily_cost_limit"], "cost": round(_usage["cost"], 3)}
+    day = _budget_day()
+    with database.session() as db:
+        row = db.get(LLMUsage, day)
+        tokens, cost, calls, errors = (row.tokens, row.cost, row.calls, row.errors) if row else (0, 0, 0, 0)
+    s = config.llm_settings()
+    return {"date": day.isoformat(), "tokens": tokens, "cost": round(float(cost), 3), "calls": calls,
+            "errors": errors, "limit": s["daily_token_limit"], "cost_limit": s["daily_cost_limit"]}
 
 
-def _record(tokens: int, error: bool = False, cost: float = 0.0) -> None:
-    with _usage_lock:
-        if _usage["date"] != _budget_day():
-            _usage.update(date=_budget_day(), tokens=0, cost=0.0, calls=0, errors=0)
-        _usage["tokens"] += tokens
-        _usage["cost"] += cost
-        _usage["calls"] += 1
-        _usage["errors"] += int(error)
+def _record(tokens: int, error: bool = False, cost: float = 0.0, call: bool = True) -> None:
+    with database.session() as db:
+        stmt = insert(LLMUsage).values(day=_budget_day(), tokens=max(0, tokens), cost=max(0, cost),
+                                       calls=int(call), errors=int(error))
+        db.execute(stmt.on_conflict_do_update(index_elements=[LLMUsage.day],
+            set_={k: getattr(LLMUsage, k) + getattr(stmt.excluded, k) for k in ("tokens", "cost", "calls", "errors")}))
 
 
 def _extract_json(text: str) -> dict:
@@ -119,6 +116,7 @@ def chat_json(system: str, user: str, model_kind: str = "reasoning", max_tokens:
     if model_kind == "reasoning" and s["reasoning_effort"]:
         payload["reasoning_effort"] = s["reasoning_effort"]
     started = time.perf_counter()
+    recorded = False
     try:
         resp = _post(payload, s)
         for optional in ("response_format", "reasoning_effort"):
@@ -132,14 +130,17 @@ def chat_json(system: str, user: str, model_kind: str = "reasoning", max_tokens:
         usage_info = body.get("usage") or {}
         tokens = int(usage_info.get("total_tokens") or (len(system) + len(user) + len(content)) // 3)
         _record(tokens, cost=float(usage_info.get("cost") or 0.0))
+        recorded = True
+        if not isinstance(content, str):
+            raise LLMError("Модель вернула ответ неподдерживаемого формата")
         if choice.get("finish_reason") == "length":
             raise LLMError("Ответ модели обрезан по лимиту токенов")
         data = _extract_json(content)
     except LLMError:
-        _record(0, error=True)
+        _record(0, error=True, call=not recorded)
         raise
-    except (httpx.HTTPError, KeyError, ValueError, IndexError) as exc:
-        _record(0, error=True)
+    except (httpx.HTTPError, KeyError, ValueError, IndexError, TypeError, AttributeError) as exc:
+        _record(0, error=True, call=not recorded)
         logger.warning("llm call failed model=%s error=%s", model, type(exc).__name__)
         raise LLMError(f"Ошибка вызова модели: {type(exc).__name__}") from exc
     return data, {"model": model, "tokens": tokens, "duration_ms": round((time.perf_counter() - started) * 1000, 1)}

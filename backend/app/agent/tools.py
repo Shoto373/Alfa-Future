@@ -104,9 +104,23 @@ def _forecasts(topics: list[str]) -> list[dict]:
     out = []
     for t in topics:
         items = kb.latest_forecasts(t)
-        if len(items) > 1:
-            out.append({"topic": t, "items": [{"id": i["id"], "doc_id": i["doc_id"], "date": next(
-                d["date"] for d in kb.documents() if d["doc_id"] == i["doc_id"]), "text": i["text"]} for i in items[:3]]})
+        series = {}
+        for item in items:
+            for metric, value in item.get("forecast_values", {}).items():
+                series.setdefault(metric, []).append({"id": item["id"], "doc_id": item["doc_id"],
+                    "date": item["doc_date"], "text": item["text"], "value": value})
+        for metric, observations in series.items():
+            observations.sort(key=lambda x: x["date"], reverse=True)
+            tolerance = 0.5 if metric.startswith("usd_rub:") else 0.001
+            latest = observations[0]
+            different = [i for i in observations[1:] if abs(i["value"] - latest["value"]) > tolerance]
+            if different:
+                kind = "conflict" if any(i["date"] == latest["date"] for i in different) else "revision"
+                base, horizon = metric.split(":", 1)
+                metric_label = {"key_rate": "ключевой ставки", "avg_key_rate": "средней ключевой ставки",
+                                "inflation": "инфляции", "usd_rub": "курса доллара"}.get(base, base)
+                out.append({"topic": t, "metric": metric, "metric_label": f"{metric_label} на {horizon}",
+                            "unit": "руб./$" if base == "usd_rub" else "%", "kind": kind, "items": [latest, different[0]]})
     return out
 
 

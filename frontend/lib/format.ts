@@ -17,6 +17,7 @@ export function date(value: string | null | undefined): string {
   if (!value) return "";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
+  if (/^\d{4}-\d{2}$/.test(value)) return d.toLocaleDateString("ru-RU", { month: "long", year: "numeric", timeZone: "UTC" });
   return d.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
 }
 

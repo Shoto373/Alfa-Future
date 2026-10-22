@@ -2,6 +2,23 @@
 # Локальная разработка — compose.yaml (docker compose -f compose.yaml ...).
 # Образы собирает CD (.github/workflows/deploy.yml); build-секции позволяют собрать на сервере вручную.
 services:
+  postgres:
+    image: postgres:17.6
+    environment:
+      POSTGRES_DB: alfa
+      POSTGRES_USER: alfa
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alfa -d alfa"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    networks:
+      - app-network
+
   backend:
     build:
       context: .
@@ -12,6 +29,11 @@ services:
     expose:
       - "8000"
     environment:
+      DATABASE_URL: ""
+      PGHOST: postgres
+      PGDATABASE: alfa
+      PGUSER: alfa
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       DATA_DIR: /data/case
       RUNTIME_DIR: /app/runtime
       BANK_PDF_DIR: /data/bank_pdf
@@ -37,6 +59,9 @@ services:
       options: { max-size: "10m", max-file: "3" }
     networks:
       - app-network
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   frontend:
     build:
@@ -91,3 +116,4 @@ networks:
 
 volumes:
   runtime:
+  postgres_data:

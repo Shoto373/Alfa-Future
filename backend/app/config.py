@@ -2,8 +2,22 @@
 
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def database_url() -> str:
+    if not os.environ.get("DATABASE_URL") and os.environ.get("PGHOST"):
+        from sqlalchemy.engine import URL
+        return URL.create("postgresql+psycopg", host=os.environ["PGHOST"], port=int(os.environ.get("PGPORT", "5432")),
+                          database=os.environ.get("PGDATABASE", "alfa"), username=os.environ.get("PGUSER", "alfa"),
+                          password=os.environ.get("PGPASSWORD", "")).render_as_string(hide_password=False)
+    return _env("DATABASE_URL", "postgresql://alfa:alfa-local@127.0.0.1:5432/alfa")
+
+
+def database_schema() -> str:
+    return _env("DATABASE_SCHEMA", "public")
 
 ALLOWED_MODELS = (
     "gemma-4-26b-a4b",
@@ -51,6 +65,17 @@ def analysis_timeout() -> float:
 
 def frontend_origin() -> str:
     return _env("FRONTEND_ORIGIN", "http://localhost:3000")
+
+
+def frontend_origins() -> list[str]:
+    """Allow both loopback names on the configured port for local development."""
+    origin = frontend_origin().rstrip("/")
+    parts = urlsplit(origin)
+    if parts.scheme not in ("http", "https") or parts.hostname not in ("localhost", "127.0.0.1"):
+        return [origin]
+    alias = "127.0.0.1" if parts.hostname == "localhost" else "localhost"
+    netloc = f"{alias}:{parts.port}" if parts.port is not None else alias
+    return [origin, parts._replace(netloc=netloc).geturl()]
 
 
 def rss_sources() -> list[dict]:

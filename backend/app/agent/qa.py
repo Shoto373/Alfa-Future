@@ -11,6 +11,7 @@ from app.agent import llm, prompts
 from app.companies.sectors import SECTOR_NAMES
 from app.knowledge import kb
 from app.news.classifier import classify
+from app.news import store
 
 OFF_TOPIC = re.compile(r"(купить|продать)\s+(акци|облигац|валют)|пароль|номер карты|игнорируй\s+(инструкц|предыдущ)", re.I)
 
@@ -102,13 +103,31 @@ def answer(insight: dict, company: dict, question: str) -> dict:
             for t in theses:
                 sources.setdefault(f"bank:{t['id']}", _source(t))
             claims = []
-            for c in data.get("claims", []):
-                ids = [s for s in c.get("source_ids", []) if s in sources]
+            raw_claims = data.get("claims")
+            if not isinstance(raw_claims, list):
+                raise llm.LLMError("Ответ модели не содержит списка утверждений")
+            for c in raw_claims:
+                if not isinstance(c, dict):
+                    continue
+                ids = [s for s in c.get("source_ids", []) if isinstance(s, str) and s in sources] if isinstance(c.get("source_ids"), list) else []
                 origin = c.get("origin") if c.get("origin") in ("fact", "client_data", "bank", "ai") else "ai"
-                if ids and isinstance(c.get("text"), str) and not (origin == "bank" and not all(i.startswith("bank:") for i in ids)):
-                    claims.append(_claim(c["text"][:600], origin, ids))
+                if ids and isinstance(c.get("text"), str):
+                    from app.agent.validators import claim_errors
+                    evidence_theses = {t["id"]: t for t in theses}
+                    for sid in sources:
+                        if sid.startswith("bank:"):
+                            t = kb.thesis(sid[5:])
+                            if t:
+                                evidence_theses[t["id"]] = t
+                    ctx = {"news": store.get(insight["news_id"]), "company": company,
+                           "theses": list(evidence_theses.values()), "products": kb.products()}
+                    cl = _claim(c["text"][:600], origin, ids)
+                    if ctx["news"] and not claim_errors("answer", cl, ctx, set(sources)):
+                        claims.append(cl)
+            if not claims:
+                raise llm.LLMError("Ответ не содержит подтвержденных утверждений")
             used = {i for c in claims for i in c["source_ids"]}
-            return base | {"answer": str(data.get("answer", ""))[:1500], "claims": claims,
+            return base | {"answer": "Ответ основан на перечисленных источниках:", "claims": claims,
                            "sources": [sources[i] for i in used], "mode": "llm", "refused": False}
         except llm.LLMError:
             pass
