@@ -18,10 +18,11 @@ import uuid
 from datetime import datetime, timezone
 
 from app.agent import composer, llm, prompts, review, validators
-from app.agent.tools import REGISTRY, ToolError, ToolRunner
+from app.agent.tools import ToolError, ToolRunner
 from app.companies.sectors import SECTOR_NAMES
 from app.errors import AnalysisUnavailable
-from app.ranking import score
+from app.news.taxonomy import TOPICS
+from app.ranking import ROLES, score
 from app.schemas import SCHEMA_VERSION, Insight
 
 logger = logging.getLogger("app.agent")
@@ -48,43 +49,58 @@ class Trace:
                            "status": status, "duration_ms": round(duration_ms, 1), "output": output})
 
 
+MAX_EXTRA_QUERIES = 3
+MAX_THESES = 8  # тезисов банка в контексте модели после основного и уточняющих поисков
+
+
 def _rules_plan(news: dict, company: dict) -> list[dict]:
+    """Обязательные шаги: без них разбор не опирается на данные компании, контрагентов и банка."""
     topics = [t["topic"] for t in news["classification"]["topics"]]
     query = f"{news['title']} {news['lead']}"
-    plan = [
-        {"tool": "get_company_profile", "args": {"company_id": company["company_id"]}, "why": "контекст компании"},
-        {"tool": "get_exposures", "args": {"company_id": company["company_id"], "topics": topics},
+    cid = company["company_id"]
+    return [
+        {"tool": "get_company_profile", "args": {"company_id": cid}, "why": "контекст компании"},
+        {"tool": "get_exposures", "args": {"company_id": cid, "topics": topics},
          "why": "через какие признаки событие касается компании"},
-        {"tool": "search_bank_analytics", "args": {"query": query, "topics": topics, "sectors": [company["sector"]] + news["classification"]["sectors"]},
+        {"tool": "get_counterparties", "args": {"company_id": cid}, "why": "событие может прийти через цепочку поставок"},
+        {"tool": "search_bank_analytics", "args": {"query": query, "topics": topics,
+                                                   "sectors": [company["sector"]] + news["classification"]["sectors"]},
          "why": "позиция и прогнозы Альфа-Банка по теме"},
         {"tool": "check_forecast_conflicts", "args": {"topics": topics[:2]}, "why": "сверить прогнозы банка из разных материалов"},
-        {"tool": "get_bank_products", "args": {"company_id": company["company_id"], "topics": topics}, "why": "релевантные решения банка"},
+        {"tool": "get_story_history", "args": {"news_id": news["news_id"]}, "why": "тренд или разовое событие"},
+        {"tool": "get_bank_products", "args": {"company_id": cid, "topics": topics}, "why": "релевантные решения банка"},
     ]
-    if {"imports_exports", "fx", "sanctions_geopolitics", "corporate_finance", "fuel_oil"} & set(topics):
-        plan.insert(2, {"tool": "get_counterparties", "args": {"company_id": company["company_id"]},
-                        "why": "событие может прийти через цепочку поставок"})
-    plan.append({"tool": "find_related_news", "args": {"news_id": news["news_id"], "topics": topics}, "why": "связанные события"})
-    return plan
 
 
-def _llm_plan(news: dict, company: dict) -> tuple[list[dict], dict]:
-    data, meta = llm.chat_json(prompts.PLAN_SYSTEM, prompts.plan_user(news, company, REGISTRY), "fast", 1500)
-    steps = []
-    raw_steps = data.get("steps")
-    if not isinstance(raw_steps, list):
-        raise llm.LLMError("План модели не содержит списка шагов")
-    for s in raw_steps[:10]:
-        if isinstance(s, dict) and s.get("tool") in REGISTRY and isinstance(s.get("args", {}), dict):
-            steps.append({"tool": s["tool"], "args": s.get("args", {}), "why": str(s.get("why", ""))[:200]})
-    if not any(s["tool"] == "search_bank_analytics" for s in steps):
-        raise llm.LLMError("План не содержит поиска по аналитике банка")
-    return steps, meta
+def _llm_queries(news: dict, company: dict, role: str) -> tuple[list[dict], dict]:
+    """Модель-исследователь предлагает уточняющие запросы к аналитике банка — только в темах новости."""
+    data, meta = llm.chat_json(prompts.PLAN_SYSTEM, prompts.plan_user(news, company, role), "plan", 1500)
+    raw = data.get("queries") if isinstance(data, dict) else None
+    if not isinstance(raw, list):
+        raise llm.LLMError("План модели не содержит списка запросов")
+    allowed = {t["topic"] for t in news["classification"]["topics"]}
+    queries = []
+    for q in raw[:MAX_EXTRA_QUERIES]:
+        if not isinstance(q, dict) or not isinstance(q.get("query"), str) or not q["query"].strip():
+            continue
+        topics = [t for t in q.get("topics", []) if isinstance(t, str) and t in allowed] if isinstance(q.get("topics"), list) else []
+        if allowed and not topics:
+            topics = sorted(allowed)
+        if not topics:  # у события нет бизнес-тем — модель не может «притянуть» материалы банка
+            continue
+        queries.append({"tool": "search_bank_analytics", "why": str(q.get("why", "уточняющий запрос"))[:200],
+                        "args": {"query": q["query"].strip()[:300], "topics": topics,
+                                 "sectors": [company["sector"]] + news["classification"]["sectors"], "include_stale": False}})
+    return queries, meta
 
 
 def _sources(ctx: dict) -> list[dict]:
     news = ctx["news"]
     out = [{"source_id": f"news:{news['news_id']}", "kind": "news", "title": news["title"], "url": news.get("url"),
             "date": news["published_at"][:10], "excerpt": news["lead"][:300], "doc_id": None, "page": None}]
+    for n in ctx.get("story", []):
+        out.append({"source_id": f"news:{n['news_id']}", "kind": "news", "title": n["title"], "url": None,
+                    "date": n["published_at"][:10], "excerpt": n["lead"][:300], "doc_id": None, "page": None})
     for t in ctx["theses"]:
         out.append({"source_id": f"bank:{t['id']}", "kind": "bank_analytics", "title": t["doc_title"], "doc_id": t["doc_id"],
                     "page": t["page"], "date": t["doc_date"], "excerpt": t["text"][:300], "url": None})
@@ -103,6 +119,7 @@ def _sources(ctx: dict) -> list[dict]:
 def _grounding_text(ctx: dict) -> str:
     c = ctx["company"]
     parts = [ctx["news"]["title"], ctx["news"]["text"]] + [t["text"] for t in ctx["theses"]]
+    parts += [f"{n['title']} {n['lead']}" for n in ctx.get("story", [])]
     m = c["market"]
     parts += [str(m.get("okved_rank")), str(m.get("okved_peers")), c.get("okved_code") or "", composer.pct(m.get('okved_share') or 0),
               f"{(c.get('revenue') or 0) / 1e9:.1f}", c.get("workers_fns") or ""]
@@ -175,51 +192,37 @@ async def run(company: dict, role: str, news: dict, request_id: str) -> dict:
     model = None
     started = time.perf_counter()
 
-    # 1. План.
+    # 1. План: обязательные шаги сразу, модель-исследователь параллельно придумывает уточняющие запросы.
     t0 = time.perf_counter()
-    plan, plan_source = _rules_plan(news, company), "rules"
-    if use_llm:
-        try:
-            plan, meta = await asyncio.to_thread(_llm_plan, news, company)
-            for step in plan:
-                if "topics" in REGISTRY[step["tool"]].args:
-                    step["args"]["topics"] = [t["topic"] for t in news["classification"]["topics"]]
-                if "company_id" in step["args"]:
-                    step["args"]["company_id"] = company["company_id"]
-                if "news_id" in step["args"]:
-                    step["args"]["news_id"] = news["news_id"]
-                if step["tool"] == "search_bank_analytics":
-                    # A model-selected generic query must not replace the event
-                    # with a different topic just to find some bank material.
-                    step["args"].update(query=f"{news['title']} {news['lead']}",
-                        topics=[t["topic"] for t in news["classification"]["topics"]],
-                        sectors=[company["sector"]] + news["classification"]["sectors"], include_stale=False)
-            if not any(s["tool"] == "get_exposures" for s in plan):
-                plan.insert(0, _rules_plan(news, company)[1])
-            plan_source, model = "llm", meta["model"]
-        except llm.LLMError as exc:
-            trace.add("plan", "llm_plan", f"LLM-план не получен ({exc}); используется план на правилах", "warning")
-    trace.add("plan", "plan", f"План ({plan_source}): " + " → ".join(s["tool"] for s in plan), "ok",
+    plan = _rules_plan(news, company)
+    planner = asyncio.create_task(asyncio.to_thread(_llm_queries, news, company, role)) if use_llm else None
+    trace.add("plan", "plan", "Обязательные шаги: " + " → ".join(s["tool"] for s in plan), "ok",
               (time.perf_counter() - t0) * 1000, {"steps": [{"tool": s["tool"], "why": s["why"]} for s in plan]})
 
     # 2. Инструменты -> общий контекст.
     ctx = {"news": news, "company": company, "role": role, "exposures": [], "theses": [], "products": [],
-           "forecast_conflicts": [], "counterparties": None, "related": [], "bank_search_complete": False}
-    for step in plan:
+           "forecast_conflicts": [], "counterparties": None, "story": [], "bank_search_complete": False,
+           "role_focus": [TOPICS[t]["name"] for t, w in sorted(ROLES.get(role, ROLES["ceo"])["focus"].items(),
+                                                              key=lambda kv: -kv[1]) if t in TOPICS]}
+
+    def run_step(step: dict) -> None:
         try:
             result, ms = runner.call(step["tool"], **step["args"])
         except ToolError as exc:
             trace.add("tool", step["tool"], f"{step['why']}: ошибка — {exc}", "error")
-            continue
+            return
         summary = ""
         if step["tool"] == "get_exposures":
             event_topics = {t["topic"] for t in news["classification"]["topics"]}
             ctx["exposures"] = [e for e in result if e["topic"] in event_topics]
             summary = f"найдено экспозиций: {len(result)}"
         elif step["tool"] == "search_bank_analytics":
-            ctx["theses"] = [t for t in result if not t.get("stale")]
+            known = {t["id"] for t in ctx["theses"]}
+            fresh = [t for t in result if not t.get("stale") and t["id"] not in known]
+            ctx["theses"] = (ctx["theses"] + fresh)[:MAX_THESES]
             ctx["bank_search_complete"] = True
-            summary = "тезисы: " + ", ".join(t["id"] for t in result) if result else "материалы не найдены"
+            summary = ("тезисы: " + ", ".join(t["id"] for t in result) + (f" (новых {len(fresh)})" if known else "")) \
+                if result else "материалы не найдены"
         elif step["tool"] == "get_bank_products":
             ctx["products"] = result
             summary = f"продуктов: {len(result)}"
@@ -229,12 +232,26 @@ async def run(company: dict, role: str, news: dict, request_id: str) -> dict:
         elif step["tool"] == "get_counterparties":
             ctx["counterparties"] = result
             summary = f"поставщиков {result['suppliers']['counterparties']}, покупателей {result['customers']['counterparties']}"
-        elif step["tool"] == "find_related_news":
-            ctx["related"] = result
-            summary = f"связанных новостей: {len(result)}"
+        elif step["tool"] == "get_story_history":
+            ctx["story"] = result
+            summary = (f"ранее по сюжету: {len(result)}, последнее {result[0]['published_at']}" if result
+                       else "предыдущих событий сюжета нет")
         else:
             summary = "получено"
-        trace.add("tool", step["tool"], f"{step['why']}: {summary}", "ok", ms)
+        trace.add("tool", step["tool"], f"{step['why']}: {summary}", "ok", ms,
+                  {"args": {k: v for k, v in step["args"].items() if k != "company_id"}})
+
+    for step in plan:
+        run_step(step)
+    if planner:
+        try:
+            extra, meta = await planner
+            trace.add("plan", "llm_queries", f"Модель {meta['model']} предложила запросов: {len(extra)}" +
+                      ("".join(f"; «{q['args']['query']}» — {q['why']}" for q in extra)), "ok", meta["duration_ms"])
+            for step in extra:
+                run_step(step)
+        except llm.LLMError as exc:
+            trace.add("plan", "llm_queries", f"Уточняющие запросы модели не получены ({exc}); достаточно обязательных шагов", "warning")
 
     # 3. Черновик.
     t0 = time.perf_counter()
@@ -242,7 +259,7 @@ async def run(company: dict, role: str, news: dict, request_id: str) -> dict:
     mode = "rules"
     if use_llm:
         try:
-            data, meta = await asyncio.to_thread(llm.chat_json, prompts.COMPOSE_SYSTEM, prompts.compose_user(ctx, _sources(ctx)), "reasoning", 4000)
+            data, meta = await asyncio.to_thread(llm.chat_json, prompts.COMPOSE_SYSTEM, prompts.compose_user(ctx, _sources(ctx)), "compose", 8000)
             draft = _merge_llm(draft, data)
             mode, model = "llm", meta["model"]
             trace.add("compose", "llm_compose", f"Черновик модели {meta['model']}, токенов {meta['tokens']}", "ok", meta["duration_ms"])

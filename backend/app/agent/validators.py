@@ -41,7 +41,8 @@ def claim_errors(section: str, c: dict, ctx: dict, source_ids: set[str]) -> set[
         elif evidence.normalized(c["text"]) not in {evidence.normalized(texts.get(s, "")) for s in ids}:
             errors.add("origin")
     if c.get("origin") == "fact":
-        if not any(s.startswith("news:") for s in ids) or evidence.normalized(c["text"]) not in evidence.normalized(texts.get(f"news:{ctx['news']['news_id']}", "")):
+        # Факт — дословно из новости, на которую ссылается: текущей или более ранней из истории сюжета.
+        if not any(s.startswith("news:") and evidence.normalized(c["text"]) in evidence.normalized(texts.get(s, "")) for s in ids):
             errors.add("origin")
     if c.get("origin") == "client_data" and not any(s.startswith("client:") for s in ids):
         errors.add("origin")
@@ -123,11 +124,53 @@ def check(draft: dict, ctx: dict, source_ids: set[str], grounding_text: str) -> 
     return results
 
 
+def _repair(draft: dict, ctx: dict, source_ids: set[str]) -> list[str]:
+    """Исправить, а не удалить, утверждения с поправимыми ошибками.
+
+    1. Модель пометила свой пересказ тезиса банка как «Альфа-Банк» (или пересказ новости как «факт»).
+       Позиция банка — только дословный тезис, поэтому такое утверждение становится «Выводом AI»
+       со ссылкой на тот же тезис: граница сохраняется, содержание не теряется.
+    2. Число есть в данных, но модель не сослалась на нужный источник — добавляем источник,
+       где это число действительно встречается. Число, которого нет ни в одном источнике, по-прежнему удаляется.
+    """
+    texts = evidence.source_texts(ctx)
+    relabeled = recited = 0
+    claims = [(sec, c) for sec in ("why_important", "risks", "opportunities", "actions") for c in draft[sec]]
+    claims += [("what_happened", c) for c in draft["what_happened"]["assumptions"]]
+    for section, c in claims:
+        errors = claim_errors(section, c, ctx, source_ids)
+        # Только пересказ настоящего тезиса банка (или новости). «Позиция банка» со ссылкой на данные компании
+        # — это подмена источника, такое утверждение удаляется, а не переклассифицируется.
+        based_on = "bank:" if c["origin"] == "bank" else "news:"
+        if "origin" in errors and c["origin"] in ("bank", "fact") and any(sid.startswith(based_on) for sid in c["source_ids"]):
+            c["origin"] = "ai"
+            c["text"] = re.sub(r"^(?:Альфа-)?Банк\s*:\s*", "", c["text"]).strip()
+            c["text"] = c["text"][:1].upper() + c["text"][1:]
+            relabeled += 1
+            errors = claim_errors(section, c, ctx, source_ids)
+        if "numbers" in errors and c["origin"] in ("ai", "client_data"):
+            missing = _norm_numbers(c["text"]) - _norm_numbers(" ".join(texts.get(s, "") for s in c["source_ids"]))
+            extra = [sid for sid, text in texts.items() if sid in source_ids and sid not in c["source_ids"]
+                     and missing & _norm_numbers(text)]
+            covered = set().union(*(_norm_numbers(texts[sid]) for sid in extra)) if extra else set()
+            if extra and missing <= covered:
+                c["source_ids"] = c["source_ids"] + extra[:3]
+                recited += 1
+    done = []
+    if relabeled:
+        done.append(f"переклассифицировано в «Вывод AI» (пересказ, а не дословный тезис): {relabeled}")
+    if recited:
+        done.append(f"добавлены источники, где встречаются числа: {recited}")
+    return done
+
+
 def apply_fix(draft: dict, results: list[dict], source_ids: set[str], grounding_text: str, ctx: dict | None = None) -> list[str]:
     """Чинит черновик по провалившимся проверкам. Возвращает список выполненных исправлений."""
     done = []
     fixes = {r["fix"] for r in results if not r["passed"]}
     grounded = _norm_numbers(grounding_text)
+    if ctx is not None:
+        done += _repair(draft, ctx, source_ids)
 
     def keep(section: str, c: dict) -> bool:
         if ctx is not None and claim_errors(section, c, ctx, source_ids):

@@ -166,6 +166,13 @@ def compose(ctx: dict) -> dict:
     assumptions = []
     if direction is None:
         assumptions.append(_claim("Направление события из текста однозначно не определяется — оценка влияния дана в виде сценариев.", "ai", [news_src]))
+    # История сюжета: тренд или разовое событие — по последним предыдущим новостям того же сюжета.
+    story = ctx.get("story") or []
+    if story:
+        latest = story[0]
+        tail = ", до этого были и другие события по теме" if len(story) > 1 else ""  # без цифр: число не из источника
+        assumptions.append(_claim(f"Событие продолжает сюжет: {latest['published_at']} — «{latest['title']}»{tail}.", "ai",
+                                  [f"news:{n['news_id']}" for n in story[:3]]))
     strength = cls.get("magnitude")
     if strength and strength.get("evidence"):
         # Сила события: цитата из новости, поэтому числа в утверждении подтверждаются ее текстом.

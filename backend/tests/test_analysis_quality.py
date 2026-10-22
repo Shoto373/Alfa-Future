@@ -78,3 +78,20 @@ def test_critic_bad_answer_raises(monkeypatch):
     monkeypatch.setattr(llm, "chat_json", lambda *a, **k: ({"risks": []}, {"model": "m"}))
     with pytest.raises(llm.LLMError):
         review.review(_draft(), _ctx(), [])
+
+
+def test_repair_relabels_bank_paraphrase_and_keeps_source_boundary(company):
+    from app.agent import validators
+    from app.knowledge import kb
+    thesis = next(t for t in kb._kb()["theses"] if not t["stale"])
+    news = {"news_id": "n1", "title": "Событие", "text": "Банк России сохранил ставку.", "lead": "", "classification": {}}
+    ctx = {"news": news, "company": company, "theses": [thesis], "products": [], "story": [], "exposures": []}
+    paraphrase = {"text": "Банк: " + thesis["text"].split(";")[0][:60].lower() + " — это важно", "origin": "bank",
+                  "source_ids": [f"bank:{thesis['id']}"], "features": []}
+    forged = {"text": "Банк гарантирует доходность", "origin": "bank", "source_ids": ["client:profile"], "features": []}
+    draft = {"why_important": [paraphrase, forged], "risks": [], "opportunities": [], "actions": [],
+             "what_happened": {"facts": [], "assumptions": []}}
+    ids = {f"bank:{thesis['id']}", "client:profile", "news:n1"}
+    validators._repair(draft, ctx, ids)
+    assert paraphrase["origin"] == "ai" and not paraphrase["text"].startswith("Банк:")
+    assert forged["origin"] == "bank"  # подмена источника не переклассифицируется и будет удалена проверкой

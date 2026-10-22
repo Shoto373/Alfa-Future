@@ -70,8 +70,8 @@ def test_behavioral_scenarios(client, company, case, monkeypatch):
             assert "999" not in json.dumps(result["what_happened"], ensure_ascii=False)
             return
         monkeypatch.setattr(llm, "available", lambda: True)
-        def hostile(system, user, kind="reasoning", max_tokens=0):
-            if kind == "fast":
+        def hostile(system, user, kind="compose", max_tokens=0):
+            if kind == "plan":
                 raise llm.LLMError("use rules plan")
             bad = {"text": "У компании кредит составит 999 млрд рублей", "origin": "ai",
                    "source_ids": [f"news:{news['news_id']}"], "features": ["products.loans"]}

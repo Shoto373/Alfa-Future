@@ -92,9 +92,8 @@ def test_llm_mode_used_when_connected_and_falls_back(client, company, monkeypatc
     monkeypatch.setenv("LLM_API_KEY", "k")
 
     def fake_post(url, json, timeout, headers):
-        if "Планировщик" in json["messages"][0]["content"] or "планировщик" in json["messages"][0]["content"]:
-            content = '{"steps": [{"tool": "get_exposures", "args": {"company_id": "%s", "topics": ["key_rate"]}, "why": "x"},' \
-                      ' {"tool": "search_bank_analytics", "args": {"query": "ставка", "topics": ["key_rate"], "sectors": []}, "why": "y"}]}' % company["company_id"]
+        if "исследователь" in json["messages"][0]["content"]:
+            content = '{"queries": [{"query": "прогноз ключевой ставки на конец года", "topics": ["key_rate", "gold"], "why": "горизонт"}]}'
         else:
             content = ('{"headline": "Для компании ставка 14% сохраняет дорогой долг", "risks": [{"text": "Долг остается дорогим", '
                        '"origin": "ai", "source_ids": ["news:seed-rate-hold"], "features": ["products.loans"]}]}')
@@ -104,7 +103,11 @@ def test_llm_mode_used_when_connected_and_falls_back(client, company, monkeypatc
     monkeypatch.setattr(llm.httpx, "post", fake_post)
     ins = run(company, "cfo", "seed-rate-hold")
     assert ins["mode"] == "llm" and llm.is_allowed(ins["model"])
-    assert any("план (llm)" in s["detail"].lower() for s in ins["trace"])
+    queries = next(s for s in ins["trace"] if s["name"] == "llm_queries")
+    assert queries["status"] == "ok" and "прогноз ключевой ставки" in queries["detail"]
+    # Тема не из новости («gold») отброшена: уточняющий поиск идет только в темах события.
+    extra = [s for s in ins["trace"] if s["name"] == "search_bank_analytics"][-1]
+    assert "gold" not in str(extra.get("output"))
 
     def broken(*a, **k):
         raise httpx.ConnectError("down")

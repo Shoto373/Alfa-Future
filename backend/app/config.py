@@ -103,10 +103,19 @@ def llm_settings() -> dict:
         "base_url": os.environ.get("LLM_BASE_URL", "").rstrip("/"),
         "fallback_base_url": os.environ.get("LLM_FALLBACK_BASE_URL", "").rstrip("/"),
         "api_key": os.environ.get("LLM_API_KEY", ""),
-        "model_reasoning": _env("LLM_MODEL_REASONING", "z-ai/glm-5.3-flash"),
-        "model_fast": _env("LLM_MODEL_FAST", "deepseek/deepseek-v4.1-flash"),
-        # GLM без ограничения тратит весь лимит на рассуждения и не успевает ответить; "" — не передавать.
+        # Модель на каждую роль агента. Выбор по сравнению всех моделей кейса на одной реальной задаче:
+        # DeepSeek пишет самые конкретные выводы (≈26 с, 0,3 ₽), GLM быстрая и точная для плана и проверки
+        # (≈13 с, 0,1 ₽), Kimi-K2.6 тратит >7000 токенов на рассуждения и не укладывается во время ответа.
+        # Критик — другая модель, чем автор разбора, чтобы проверка была независимой.
+        "models": {
+            "plan": _env("LLM_MODEL_PLAN", "z-ai/glm-5.3-flash"),
+            "compose": _env("LLM_MODEL_COMPOSE", "deepseek/deepseek-v4.1-flash"),
+            "review": _env("LLM_MODEL_REVIEW", "z-ai/glm-5.3-flash"),
+            "qa": _env("LLM_MODEL_QA", "deepseek/deepseek-v4.1-flash"),
+        },
+        # GLM без ограничения тратит весь лимит на рассуждения; DeepSeek с ним, наоборот, рассуждает дольше.
         "reasoning_effort": os.environ.get("LLM_REASONING_EFFORT", "low"),
+        "reasoning_effort_models": [m.strip() for m in _env("LLM_REASONING_EFFORT_MODELS", "glm").split(",") if m.strip()],
         "daily_token_limit": int(_env("LLM_DAILY_TOKEN_LIMIT", "400000")),
         "timeout": float(_env("LLM_TIMEOUT_SECONDS", "75")),
         # Провайдер кейса возвращает usage.cost в рублях; бюджет — 500 ₽/день на команду.

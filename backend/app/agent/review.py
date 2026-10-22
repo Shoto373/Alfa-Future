@@ -15,8 +15,8 @@ from app.agent.prompts import GUARD
 
 SECTIONS = ("why_important", "risks", "opportunities", "actions")
 MAX_CLAIMS = 10  # бюджет токенов: модель-критик рассуждает над каждым выводом
-# Критик — модель рассуждений с коротким рассуждением (GLM, reasoning_effort=low): на реальном разборе
-# ~300 токенов и ~0,04 ₽; быстрая DeepSeek тратила >2000 токенов на рассуждения и упиралась в лимит.
+# Критик — GLM с коротким рассуждением (~300 токенов, ~0,04 ₽ на разбор) и не та модель, что писала разбор:
+# DeepSeek в роли критика тратила >2000 токенов на рассуждения и упиралась в лимит.
 
 REVIEW_SYSTEM = f"""Ты — строгий рецензент аналитики банка. Для каждого вывода реши, следует ли он из указанных источников.
 supported — прямо следует из источников; partial — правдоподобен, но в источниках подтверждена только часть;
@@ -46,7 +46,7 @@ def review(draft: dict, ctx: dict, sources: list[dict]) -> dict:
                     "sources": {sid: texts.get(sid, "")[:500] for sid in c["source_ids"][:3]}}
                    for n, (sec, _, c) in enumerate(claims)],
     }
-    data, meta = llm.chat_json(REVIEW_SYSTEM, json.dumps(payload, ensure_ascii=False), "reasoning", 2000)
+    data, meta = llm.chat_json(REVIEW_SYSTEM, json.dumps(payload, ensure_ascii=False), "review", 2000)
     verdicts = data.get("verdicts") if isinstance(data, dict) else None
     if not isinstance(verdicts, list):
         raise llm.LLMError("критик вернул ответ без verdicts")

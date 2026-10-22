@@ -53,8 +53,12 @@ def source_texts(ctx: dict) -> dict[str, str]:
             payments += f" {s['share'] * 100:.0f}%"
         if c.get(side, {}).get("top1_share") is not None:
             payments += f" {c[side]['top1_share'] * 100:.0f}%"
+        total = c.get(side, {}).get("total_amount")
+        if total:  # суммы платежей в тех единицах, в которых их пишут в тексте
+            payments += f" {total / 1e6:.1f} млн руб. {total / 1e9:.2f} млрд руб."
     result = {f"news:{ctx['news']['news_id']}": safe_text(ctx["news"]["title"] + " " + ctx["news"]["text"]),
               "client:profile": profile, "client:payments": payments}
+    result.update({f"news:{n['news_id']}": safe_text(f"{n['title']} {n['lead']} {n['published_at']}") for n in ctx.get("story", [])})
     result.update({f"bank:{t['id']}": t["text"] for t in ctx.get("theses", [])})
     result.update({f"product:{p['id']}": p["text"] for p in ctx.get("products", [])})
     return result

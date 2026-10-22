@@ -8,8 +8,8 @@ from app.news import store
 
 def test_model_cannot_change_event_topic_to_fetch_unrelated_products(client, company, monkeypatch):
     monkeypatch.setattr(llm, "available", lambda: True)
-    def response(system, user, kind="reasoning", max_tokens=0):
-        if kind == "fast":
+    def response(system, user, kind="compose", max_tokens=0):
+        if kind == "plan":
             steps = [{"tool": name, "args": args, "why": "test"} for name, args in [
                 ("get_exposures", {"company_id": company["company_id"], "topics": ["key_rate"]}),
                 ("search_bank_analytics", {"query": "ключевая ставка", "topics": ["key_rate"], "sectors": []}),
@@ -28,8 +28,8 @@ def test_model_cannot_change_event_topic_to_fetch_unrelated_products(client, com
 @pytest.mark.parametrize("malformed", ["plan", "draft"])
 def test_malformed_model_structure_does_not_break_analysis(client, company, monkeypatch, malformed):
     monkeypatch.setattr(llm, "available", lambda: True)
-    def response(system, user, kind="reasoning", max_tokens=0):
-        if kind == "fast":
+    def response(system, user, kind="compose", max_tokens=0):
+        if kind == "plan":
             if malformed == "plan":
                 return {"steps": None}, {"model": "deepseek-v4.1-flash"}
             raise llm.LLMError("rules plan")

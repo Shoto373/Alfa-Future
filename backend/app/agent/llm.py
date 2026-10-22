@@ -94,12 +94,14 @@ def _extract_json(text: str) -> dict:
     return json.loads(text[start:end + 1])
 
 
-def chat_json(system: str, user: str, model_kind: str = "reasoning", max_tokens: int = 2000) -> tuple[dict, dict]:
-    """Вызов модели с ответом в JSON. Возвращает (json, meta)."""
+def chat_json(system: str, user: str, model_kind: str = "compose", max_tokens: int = 2000) -> tuple[dict, dict]:
+    """Вызов модели роли model_kind (plan | compose | review | qa) с ответом в JSON. Возвращает (json, meta)."""
     s = config.llm_settings()
     if not available():
         raise LLMError("LLM не подключена")
-    model = s["model_reasoning"] if model_kind == "reasoning" else s["model_fast"]
+    model = s["models"].get(model_kind)
+    if not model:
+        raise LLMError(f"Неизвестная роль модели: {model_kind}")
     if not is_allowed(model):
         raise LLMError(f"Модель {model} не входит в список разрешенных кейсом")
     u = usage()
@@ -113,7 +115,7 @@ def chat_json(system: str, user: str, model_kind: str = "reasoning", max_tokens:
         "max_tokens": max_tokens,
         "response_format": {"type": "json_object"},
     }
-    if model_kind == "reasoning" and s["reasoning_effort"]:
+    if s["reasoning_effort"] and any(m in model for m in s["reasoning_effort_models"]):
         payload["reasoning_effort"] = s["reasoning_effort"]
     started = time.perf_counter()
     recorded = False

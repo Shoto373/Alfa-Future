@@ -8,13 +8,17 @@
 from dataclasses import dataclass
 from typing import Callable
 
+from app import embeddings
 from app.agent import audit
 from app.companies import profiles
 from app.companies.sectors import SECTOR_NAMES
 from app.knowledge import kb
 from app.news import store
 
-MAX_CALLS_PER_RUN = 16
+# Обычный разбор — 7 обязательных вызовов + до 3 поисков, предложенных моделью, + 1 расширенный поиск
+# при коррекции. Бюджет защищает от зацикливания плана, а не экономит деньги.
+MAX_CALLS_PER_RUN = 20
+STORY_SIMILARITY = 0.55  # сходство заголовков, с которого новости считаются одним сюжетом
 
 
 class ToolError(Exception):
@@ -44,28 +48,27 @@ def _exposures(company_id: str, topics: list[str]) -> list[dict]:
     return [e for e in profiles.exposures(company_id) if not wanted or e["topic"] in wanted]
 
 
-def _news(news_id: str) -> dict:
-    n = store.get(news_id)
-    if n is None:
-        raise ToolError("Новость не найдена")
-    return n
-
-
 def _search(query: str, topics: list[str], sectors: list[str], include_stale: bool = False) -> list[dict]:
     return kb.search(query, topics, sectors, limit=6, include_stale=include_stale)
 
 
-def _related(news_id: str, topics: list[str]) -> list[dict]:
-    wanted = set(topics)
-    out = []
-    for n in store.all_items():
-        if n["news_id"] == news_id:
-            continue
-        overlap = wanted & {t["topic"] for t in n["classification"]["topics"]}
-        if overlap:
-            out.append({"news_id": n["news_id"], "title": n["title"], "published_at": n["published_at"],
-                        "source": n["source"], "overlap": sorted(overlap)})
-    return out[:4]
+def _story(news_id: str) -> list[dict]:
+    """Предыдущие события того же сюжета: близкие по смыслу и более ранние новости, от новых к старым."""
+    current = store.get(news_id)
+    if current is None:
+        raise ToolError("Новость не найдена")
+    main = {t["topic"] for t in current["classification"]["topics"][:2]}
+    earlier = [n for n in store.all_items() if n["news_id"] != news_id and n["published_at"] < current["published_at"]
+               and main & {t["topic"] for t in n["classification"]["topics"]}]
+    if not earlier:
+        return []
+    vectors = embeddings.embed([current["title"]] + [n["title"] for n in earlier])
+    if vectors:
+        scored = [(embeddings.cosine(vectors[0], v), n) for v, n in zip(vectors[1:], earlier)]
+        earlier = [n for sim, n in sorted(scored, key=lambda x: -x[0]) if sim >= STORY_SIMILARITY][:6]
+    earlier.sort(key=lambda n: n["published_at"], reverse=True)
+    return [{"news_id": n["news_id"], "title": n["title"], "lead": n["lead"][:300], "published_at": n["published_at"][:10],
+             "source": n["source"], "magnitude": n["classification"].get("magnitude")} for n in earlier[:4]]
 
 
 def _counterparties(company_id: str) -> dict:
@@ -129,10 +132,9 @@ REGISTRY: dict[str, Tool] = {t.name: t for t in [
          {"company_id": str}, _profile),
     Tool("get_exposures", "Чувствительность компании к темам новостей с обоснованием по признакам",
          {"company_id": str, "topics": list}, _exposures),
-    Tool("get_news", "Новость с классификацией: темы, отрасли, страны, факты", {"news_id": str}, _news),
-    Tool("search_bank_analytics", "Поиск тезисов аналитики Альфа-Банка (BM25 + темы + отрасли)",
+    Tool("search_bank_analytics", "Поиск тезисов аналитики Альфа-Банка (слова + смысл + темы + отрасли)",
          {"query": str, "topics": list, "sectors": list, "include_stale": bool}, _search),
-    Tool("find_related_news", "Другие новости по тем же темам — для контекста", {"news_id": str, "topics": list}, _related),
+    Tool("get_story_history", "Предыдущие события того же сюжета: тренд или разовое событие", {"news_id": str}, _story),
     Tool("get_counterparties", "Структура платежей: поставщики и покупатели по отраслям", {"company_id": str}, _counterparties),
     Tool("get_bank_products", "Подходящие продукты банка для темы и профиля", {"company_id": str, "topics": list}, _products),
     Tool("check_forecast_conflicts", "Прогнозы банка по теме из разных документов — проверка противоречий",
