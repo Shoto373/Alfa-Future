@@ -7,7 +7,7 @@ import { Card, ErrorBox } from "./ui";
 
 export default function AddNews({ onAdded, compact = false }: { onAdded: () => void; compact?: boolean }) {
   const router = useRouter();
-  const [mode, setMode] = useState<"text" | "url">("text");
+  const [mode, setMode] = useState<"text" | "url">("url");
   const [text, setText] = useState("");
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);

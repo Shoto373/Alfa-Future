@@ -6,7 +6,7 @@ import NewsCard from "@/components/NewsCard";
 import { Card, ErrorBox, Icon, Loading } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { useFeed } from "@/lib/hooks";
-import { ROLE_NAMES, useSession } from "@/lib/session";
+import { useSession } from "@/lib/session";
 import type { Meta } from "@/lib/types";
 
 const TOPICS_SHOWN = 10;
@@ -54,7 +54,6 @@ export default function PulsePage() {
         <div>
           <span className="eyebrow"><Icon name="spark" /> Альфа.Пульс</span>
           <h1>Лента {session!.companyName}</h1>
-          <p className="muted">Ранжировано под профиль компании и роль «{ROLE_NAMES[session!.role]}». Смените роль в шапке — лента перестроится.</p>
         </div>
         <button className="btn btn-white" onClick={refresh} disabled={refreshing}>
           <Icon name="refresh" /> {refreshing ? "Собираем новости…" : "Обновить из RSS"}
