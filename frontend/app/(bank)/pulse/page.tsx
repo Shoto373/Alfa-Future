@@ -9,7 +9,7 @@ import { useFeed } from "@/lib/hooks";
 import { ROLE_NAMES, useSession } from "@/lib/session";
 import type { Meta } from "@/lib/types";
 
-const TOPICS_SHOWN = 7;
+const TOPICS_SHOWN = 10;
 
 export default function PulsePage() {
   const { session } = useSession();
@@ -28,7 +28,7 @@ export default function PulsePage() {
     if (t) setTopic(t);
   }, []);
 
-  // Первые 7 тем видны сразу, остальные — по кнопке; выбранная тема видна всегда.
+  // Первые 10 тем видны сразу, остальные — по кнопке; выбранная тема видна всегда.
   const topics = meta?.topics ?? [];
   const visibleTopics = allTopics ? topics : topics.filter((t, i) => i < TOPICS_SHOWN || t.topic === topic);
   const hiddenCount = topics.length - topics.filter((t, i) => i < TOPICS_SHOWN || t.topic === topic).length;
