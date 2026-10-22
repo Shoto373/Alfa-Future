@@ -24,7 +24,6 @@ class Strict(BaseModel):
 
 class InsightRequest(Strict):
     company_id: str = Field(..., min_length=1, max_length=64)
-    role: Role
     news_id: str = Field(..., min_length=1, max_length=64)
     force_refresh: bool = False
 
@@ -44,7 +43,6 @@ class FeedbackRequest(Strict):
     rating: Literal[1, -1]
     section: str | None = Field(None, max_length=40)
     comment: str | None = Field(None, max_length=1000)
-    role: Role | None = None
 
 
 class Claim(Strict):

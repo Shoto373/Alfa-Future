@@ -14,7 +14,7 @@ export default function PulsePage() {
   const { session } = useSession();
   const [topic, setTopic] = useState<string | undefined>();
   const [meta, setMeta] = useState<Meta | null>(null);
-  const feed = useFeed(session!.companyId, session!.role, topic);
+  const feed = useFeed(session!.companyId, topic);
   const company = useCompany(session!.companyId);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshNote, setRefreshNote] = useState<string | null>(null);
@@ -50,7 +50,7 @@ export default function PulsePage() {
         <div>
           <span className="eyebrow"><Icon name="spark" /> Альфа.Пульс</span>
           <h1>Лента {session!.companyName}</h1>
-          <p className="muted">Ранжировано под профиль компании и роль «{ROLE_NAMES[session!.role]}». Смените роль в шапке — лента перестроится.</p>
+          <p className="muted">Ранжировано под профиль компании и роль «{ROLE_NAMES[session!.role]}».</p>
         </div>
         <button className="btn btn-secondary" onClick={refresh} disabled={refreshing}>
           <Icon name="refresh" /> {refreshing ? "Собираем новости…" : "Обновить из RSS"}

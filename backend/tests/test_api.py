@@ -34,7 +34,9 @@ def test_companies_search_and_profile(client, company):
     assert found["items"][0]["company_id"] == company["company_id"]
     detail = client.get(f"/api/v1/companies/{company['company_id']}").json()
     assert detail["profile"]["company_id"] == company["company_id"] and detail["exposures"]
-    assert_error(client.get("/api/v1/companies/U_nope"), 404, "COMPANY_NOT_FOUND")
+    assert body["total"] == 1 and body["items"][0]["company_id"] == company["company_id"]
+    # Несуществующая и чужая компании неразличимы.
+    assert_error(client.get("/api/v1/companies/U_nope"), 403, "FORBIDDEN")
 
 
 def test_feed_is_personalized(client):
@@ -42,19 +44,20 @@ def test_feed_is_personalized(client):
     data = profiles._load()["companies"]
     a = next(c for c in data if c["products"]["loans"])
     b = next(c for c in data if c["sector"] != a["sector"] and not c["products"]["loans"])
-    fa = client.get("/api/v1/feed", params={"company_id": a["company_id"], "role": "cfo"}).json()["items"]
-    fb = client.get("/api/v1/feed", params={"company_id": b["company_id"], "role": "ceo"}).json()["items"]
+    client.post(f"/api/v1/companies/{a['company_id']}/claim", json={"role": "cfo"})
+    client.post(f"/api/v1/companies/{b['company_id']}/claim", json={"role": "ceo"})
+    fa = client.get("/api/v1/feed", params={"company_id": a["company_id"]}).json()["items"]
+    fb = client.get("/api/v1/feed", params={"company_id": b["company_id"]}).json()["items"]
     assert fa and fb
     assert fa[0]["relevance"]["reasons"]
     assert [i["news"]["news_id"] for i in fa[:5]] != [i["news"]["news_id"] for i in fb[:5]] or \
         [i["relevance"]["score"] for i in fa[:5]] != [i["relevance"]["score"] for i in fb[:5]]
     scores = [i["relevance"]["score"] for i in fa]
     assert scores == sorted(scores, reverse=True)
-    assert_error(client.get("/api/v1/feed", params={"company_id": a["company_id"], "role": "intern"}), 400, "INVALID_REQUEST")
 
 
 def test_insight_flow_with_cache_question_feedback_metrics(client, company):
-    req = {"company_id": company["company_id"], "role": "cfo", "news_id": "seed-rate-hold"}
+    req = {"company_id": company["company_id"], "news_id": "seed-rate-hold"}
     first = client.post("/api/v1/insights", json=req)
     assert first.status_code == 200, first.text
     ins = first.json()
@@ -75,10 +78,10 @@ def test_insight_flow_with_cache_question_feedback_metrics(client, company):
 
 
 def test_insight_errors(client, company, monkeypatch):
-    base = {"company_id": company["company_id"], "role": "cfo", "news_id": "seed-rate-hold"}
+    base = {"company_id": company["company_id"], "news_id": "seed-rate-hold"}
     assert_error(client.post("/api/v1/insights", json=base | {"news_id": "nope"}), 404, "NEWS_NOT_FOUND")
-    assert_error(client.post("/api/v1/insights", json=base | {"company_id": "nope"}), 404, "COMPANY_NOT_FOUND")
-    assert_error(client.post("/api/v1/insights", json=base | {"role": "intern"}), 400, "INVALID_REQUEST")
+    assert_error(client.post("/api/v1/insights", json=base | {"company_id": "nope"}), 403, "FORBIDDEN")
+    assert_error(client.post("/api/v1/insights", json=base | {"role": "cfo"}), 400, "INVALID_REQUEST")
     assert_error(client.post("/api/v1/insights", json=base | {"extra": 1}), 400, "INVALID_REQUEST")
     assert_error(client.post("/api/v1/insights", content=b"{bad", headers={"Content-Type": "application/json"}), 400, "INVALID_REQUEST")
     body = json.dumps(base | {"pad": "x" * MAX_BODY_BYTES}).encode()
@@ -139,11 +142,16 @@ def test_openapi_uses_400_instead_of_422(client):
         for op in ops.values():
             assert "422" not in op["responses"] or op["responses"]["422"]["description"].endswith("(FETCH_FAILED)")
     assert "HTTPValidationError" not in spec.get("components", {}).get("schemas", {})
+    assert "role" not in {p["name"] for p in spec["paths"]["/api/v1/feed"]["get"]["parameters"]}
+    assert "role" not in spec["components"]["schemas"]["InsightRequest"]["properties"]
 
 
 def test_cors(client):
     ok = client.options("/api/v1/feed", headers={"Origin": ORIGIN, "Access-Control-Request-Method": "GET"})
     assert ok.headers["access-control-allow-origin"] == ORIGIN
+    assert ok.headers["access-control-allow-credentials"] == "true"
+    patch = client.options("/api/v1/companies/x/members/y", headers={"Origin": ORIGIN, "Access-Control-Request-Method": "PATCH"})
+    assert "PATCH" in patch.headers["access-control-allow-methods"] and "DELETE" in patch.headers["access-control-allow-methods"]
     denied = client.get("/api/v1/meta", headers={"Origin": "http://evil.example"})
     assert "access-control-allow-origin" not in denied.headers
 

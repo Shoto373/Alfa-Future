@@ -3,12 +3,14 @@ import logging
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse
 
 from app import config, storage
 from app.agent import audit, llm, orchestrator, qa
 from app.api.errors import ApiError
+from app.auth import store as auth_store
+from app.auth.deps import check_origin, current_user, member_of, require_any_admin
 from app.companies import profiles
 from app.companies.sectors import SECTOR_NAMES
 from app.errors import AnalysisUnavailable, InvalidAnalysisResult
@@ -17,19 +19,23 @@ from app.news import parser, store
 from app.news.taxonomy import TOPICS
 from app.ranking import ROLES, feed
 from app.schemas import (Answer, ErrorResponse, FeedbackRequest, Insight, InsightRequest, NewsCreateRequest,
-                         QuestionRequest, Role)
+                         QuestionRequest)
 
 logger = logging.getLogger("app.api")
-router = APIRouter(prefix="/api/v1")
+router = APIRouter(prefix="/api/v1", dependencies=[Depends(check_origin)])
 # Описания заданы явно: иначе FastAPI берет их из http.HTTPStatus, а они различаются
 # между версиями Python (413 в 3.13+ — «Content Too Large»), и контракт перестает совпадать.
 ERROR_DESCRIPTIONS = {
     400: "Некорректный запрос (INVALID_REQUEST)",
-    404: "Объект не найден (*_NOT_FOUND)",
+    401: "Нет действительной сессии (UNAUTHORIZED, INVALID_CREDENTIALS)",
+    403: "Недостаточно прав (FORBIDDEN)",
+    404: "Объект не найден (*_NOT_FOUND, MEMBER_NOT_FOUND)",
+    409: "Конфликт (EMAIL_TAKEN, COMPANY_CLAIMED, TOO_MANY_COMPANIES, MEMBER_EXISTS, LAST_ADMIN)",
     413: "Тело запроса больше 64 КиБ (REQUEST_TOO_LARGE)",
     422: "Не удалось загрузить материал по ссылке (FETCH_FAILED)",
     500: "Внутренняя ошибка (INTERNAL_ERROR, INVALID_ANALYSIS_RESULT)",
     503: "Сервис или данные временно недоступны (ANALYSIS_UNAVAILABLE, DATA_UNAVAILABLE)",
+    429: "Слишком много неудачных попыток входа (TOO_MANY_ATTEMPTS)",
     504: "Превышено время анализа (ANALYSIS_TIMEOUT)",
 }
 ERRORS = {s: {"model": ErrorResponse, "description": d} for s, d in ERROR_DESCRIPTIONS.items()}
@@ -47,6 +53,9 @@ def _company(company_id: str) -> dict:
     if c is None:
         raise ApiError("COMPANY_NOT_FOUND")
     return c
+
+
+company_or_404 = _company
 
 
 def _news(news_id: str) -> dict:
@@ -83,25 +92,45 @@ async def meta() -> dict:
     }
 
 
-@router.get("/companies", responses=ERRORS)
-async def list_companies(q: str = Query("", max_length=100), sector: str | None = Query(None, max_length=40),
-                         limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)) -> dict:
+@router.get("/companies/lookup", responses=ERRORS)
+async def lookup_companies(q: str = Query("", max_length=100), limit: int = Query(20, ge=1, le=50),
+                           offset: int = Query(0, ge=0), _user: dict = Depends(current_user)) -> dict:
+    """Поиск компании для привязки: только публичные поля, без финансовых данных."""
     try:
-        total, items = profiles.list_companies(q, sector, limit, offset)
+        total, items = profiles.list_companies(q, None, limit, offset)
     except profiles.ProfilesError:
         raise ApiError("DATA_UNAVAILABLE")
-    return {"total": total, "items": items}
+    claimed = auth_store.claimed_ids()
+    return {"total": total, "items": [
+        {"company_id": c["company_id"], "display_name": c["display_name"], "sector_name": c["sector_name"],
+         "region": c["region"], "claimed": c["company_id"] in claimed} for c in items]}
+
+
+@router.get("/companies", responses=ERRORS)
+async def list_companies(q: str = Query("", max_length=100), sector: str | None = Query(None, max_length=40),
+                         limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
+                         user: dict = Depends(current_user)) -> dict:
+    """Только компании, в которых состоит пользователь."""
+    mine = {m["company_id"] for m in user["memberships"]}
+    try:
+        _, items = profiles.list_companies(q, sector, 100000, 0)
+    except profiles.ProfilesError:
+        raise ApiError("DATA_UNAVAILABLE")
+    items = [c for c in items if c["company_id"] in mine]
+    return {"total": len(items), "items": items[offset:offset + limit]}
 
 
 @router.get("/companies/{company_id}", responses=ERRORS)
-async def company(company_id: str) -> dict:
+async def company(company_id: str, user: dict = Depends(current_user)) -> dict:
+    member_of(user, company_id)
     c = _company(company_id)
     return {"profile": c, "exposures": list(profiles.exposures(company_id))}
 
 
 @router.get("/feed", responses=ERRORS)
-async def news_feed(company_id: str, role: Role, topic: str | None = Query(None, max_length=40),
-                    limit: int = Query(30, ge=1, le=100)) -> dict:
+async def news_feed(company_id: str, topic: str | None = Query(None, max_length=40),
+                    limit: int = Query(30, ge=1, le=100), user: dict = Depends(current_user)) -> dict:
+    role = member_of(user, company_id)["role"]  # роль берется из членства, не от клиента
     _company(company_id)
     ranked = feed(store.all_items(), company_id, role, topic, limit)
     storage.log_event("feed_view", company_id=company_id, role=role)
@@ -111,12 +140,12 @@ async def news_feed(company_id: str, role: Role, topic: str | None = Query(None,
         for r in ranked]}
 
 
-@router.get("/news/{news_id}", responses=ERRORS)
+@router.get("/news/{news_id}", responses=ERRORS, dependencies=[Depends(current_user)])
 async def news(news_id: str) -> dict:
     return _news(news_id)
 
 
-@router.post("/news", responses=ERRORS)
+@router.post("/news", responses=ERRORS, dependencies=[Depends(current_user)])
 async def add_news(payload: NewsCreateRequest) -> dict:
     if payload.url:
         try:
@@ -135,24 +164,25 @@ async def add_news(payload: NewsCreateRequest) -> dict:
             "classification": saved["classification"]}
 
 
-@router.post("/news/refresh", responses=ERRORS)
+@router.post("/news/refresh", responses=ERRORS, dependencies=[Depends(require_any_admin)])
 async def refresh_news() -> dict:
     return await asyncio.to_thread(parser.refresh)
 
 
 @router.post("/insights", response_model=Insight, responses=ERRORS)
-async def create_insight(payload: InsightRequest, request: Request) -> dict:
+async def create_insight(payload: InsightRequest, request: Request, user: dict = Depends(current_user)) -> dict:
     request_id: str = request.state.request_id
+    role = member_of(user, payload.company_id)["role"]  # роль берется из членства, не от клиента
     c = _company(payload.company_id)
     n = _news(payload.news_id)
     if not payload.force_refresh:
-        cached = storage.cached_insight(c["company_id"], payload.role, n["news_id"])
+        cached = storage.cached_insight(c["company_id"], role, n["news_id"])
         # Карточка на правилах, построенная до подключения LLM, пересчитывается моделью.
         if cached and not (cached["mode"] == "rules" and llm.available()):
             storage.log_event("insight_open", insight_id=cached["insight_id"], cached=True)
             return cached
     try:
-        insight = await asyncio.wait_for(orchestrator.run(c, payload.role, n, request_id), timeout=config.analysis_timeout())
+        insight = await asyncio.wait_for(orchestrator.run(c, role, n, request_id), timeout=config.analysis_timeout())
     except asyncio.TimeoutError:
         raise ApiError("ANALYSIS_TIMEOUT")
     except AnalysisUnavailable:
@@ -163,7 +193,7 @@ async def create_insight(payload: InsightRequest, request: Request) -> dict:
         logger.exception("analysis failed request_id=%s", request_id)
         raise ApiError("INTERNAL_ERROR")
     if (insight["company_id"], insight["news_id"], insight["role"], insight["request_id"]) != (
-            c["company_id"], n["news_id"], payload.role, request_id):
+            c["company_id"], n["news_id"], role, request_id):
         raise ApiError("INVALID_ANALYSIS_RESULT")
     storage.save_insight(insight)
     storage.log_event("insight_open", insight_id=insight["insight_id"], cached=False)
@@ -171,18 +201,20 @@ async def create_insight(payload: InsightRequest, request: Request) -> dict:
 
 
 @router.get("/insights/{insight_id}", response_model=Insight, responses=ERRORS)
-async def get_insight(insight_id: str) -> dict:
+async def get_insight(insight_id: str, user: dict = Depends(current_user)) -> dict:
     ins = storage.get_insight(insight_id)
     if ins is None:
         raise ApiError("INSIGHT_NOT_FOUND")
+    member_of(user, ins["company_id"])
     return ins
 
 
 @router.post("/insights/{insight_id}/questions", response_model=Answer, responses=ERRORS)
-async def ask(insight_id: str, payload: QuestionRequest) -> dict:
+async def ask(insight_id: str, payload: QuestionRequest, user: dict = Depends(current_user)) -> dict:
     ins = storage.get_insight(insight_id)
     if ins is None:
         raise ApiError("INSIGHT_NOT_FOUND")
+    member_of(user, ins["company_id"])
     c = _company(ins["company_id"])
     result = await asyncio.to_thread(qa.answer, ins, c, payload.question.strip())
     storage.log_event("question", insight_id=insight_id, refused=result["refused"], mode=result["mode"])
@@ -190,19 +222,21 @@ async def ask(insight_id: str, payload: QuestionRequest) -> dict:
 
 
 @router.post("/feedback", responses=ERRORS)
-async def feedback(payload: FeedbackRequest) -> dict:
-    if storage.get_insight(payload.insight_id) is None:
+async def feedback(payload: FeedbackRequest, user: dict = Depends(current_user)) -> dict:
+    ins = storage.get_insight(payload.insight_id)
+    if ins is None:
         raise ApiError("INSIGHT_NOT_FOUND")
-    storage.add_feedback(payload.model_dump())
+    role = member_of(user, ins["company_id"])["role"]
+    storage.add_feedback(payload.model_dump() | {"role": role})
     return {"status": "ok"}
 
 
-@router.get("/metrics", responses=ERRORS)
+@router.get("/metrics", responses=ERRORS, dependencies=[Depends(require_any_admin)])
 async def metrics() -> dict:
     return storage.metrics()
 
 
-@router.get("/analytics", responses=ERRORS)
+@router.get("/analytics", responses=ERRORS, dependencies=[Depends(current_user)])
 async def analytics() -> dict:
     docs = sorted(kb.documents(), key=lambda d: d["date"], reverse=True)
     theses = kb.search(topics=list(TOPICS), limit=1000, include_stale=True)
@@ -212,7 +246,7 @@ async def analytics() -> dict:
                           for d in docs]}
 
 
-@router.get("/analytics/{doc_id}/pdf", responses=ERRORS)
+@router.get("/analytics/{doc_id}/pdf", responses=ERRORS, dependencies=[Depends(current_user)])
 async def analytics_pdf(doc_id: str):
     doc = kb.document(doc_id)
     pdf_dir = config.bank_pdf_dir()
@@ -224,6 +258,6 @@ async def analytics_pdf(doc_id: str):
     return FileResponse(path, media_type="application/pdf", filename=Path(doc["file"]).name)
 
 
-@router.get("/audit", responses=ERRORS)
+@router.get("/audit", responses=ERRORS, dependencies=[Depends(require_any_admin)])
 async def audit_log(limit: int = Query(50, ge=1, le=500)) -> dict:
     return {"items": audit.tail(limit)}

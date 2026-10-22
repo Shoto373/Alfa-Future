@@ -48,7 +48,7 @@ function Gauge({ value }: { value: number }) {
 
 export default function HomePage() {
   const { session } = useSession();
-  const feed = useFeed(session!.companyId, session!.role);
+  const feed = useFeed(session!.companyId);
   const [latest, setLatest] = useState<BankDocument | null>(null);
   const [bannerClosed, setBannerClosed] = useState(false);
   const items = feed.data ?? [];
@@ -57,7 +57,7 @@ export default function HomePage() {
   const top5 = items.slice(0, 5);
   const level = top5.length ? top5.reduce((a, i) => a + i.relevance.score, 0) / top5.length : 0;
   const levelText = level >= 70 ? "Требует внимания" : level >= 45 ? "Умеренный фон" : "Спокойный фон";
-  const companies = session!.companies?.length ?? 1;
+  const companies = session!.memberships.length;
 
   useEffect(() => {
     api.analytics()

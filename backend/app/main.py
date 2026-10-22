@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from app import config
 from app.api.router import router
 from app.api.setup import configure_api
+from app.auth.router import router as auth_router
 from app.companies import profiles
 from app.news import parser, store
 
@@ -49,6 +50,7 @@ app = FastAPI(
 
 configure_api(app)
 app.include_router(router)
+app.include_router(auth_router)
 
 
 @app.get("/healthz")

@@ -1,7 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import type { Role } from "./types";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { ApiError, api } from "./api";
+import type { Membership, Role, User } from "./types";
 
 export const ROLE_NAMES: Record<Role, string> = {
   owner: "Собственник",
@@ -12,68 +13,115 @@ export const ROLE_NAMES: Record<Role, string> = {
   clevel: "Другой C-level",
 };
 
-export interface CompanyRef {
-  id: string;
-  name: string;
-}
-
 export interface Session {
+  user: User;
   userName: string;
-  role: Role;
+  memberships: Membership[];
+  /** Активная компания (UI-предпочтение, проверенное по членству); пустая строка, если компаний нет. */
   companyId: string;
   companyName: string;
-  /** Организации, к которым у пользователя есть доступ в интернет-банке (авторизация привязана к человеку). */
-  companies?: CompanyRef[];
+  /** Роль в активной компании (приходит из членства, на клиенте только читается). */
+  role: Role;
+  isAdmin: boolean;
 }
 
 interface Ctx {
   session: Session | null;
   ready: boolean;
-  login: (s: Session) => void;
-  logout: () => void;
-  update: (patch: Partial<Session>) => void;
+  login: (email: string, password: string) => Promise<User>;
+  register: (name: string, email: string, password: string) => Promise<User>;
+  logout: () => Promise<void>;
+  refresh: () => Promise<User | null>;
+  setActiveCompany: (id: string) => void;
 }
 
 const SessionContext = createContext<Ctx | null>(null);
-const KEY = "alfa-pulse-session";
+const ACTIVE_KEY = "alfa-pulse-active-company";
+
+function readActive(): string | null {
+  try {
+    return localStorage.getItem(ACTIVE_KEY);
+  } catch {
+    return null;
+  }
+}
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) setSession(JSON.parse(raw));
-    } catch {
-      /* приватный режим или поврежденные данные — начинаем без сессии */
-    }
-    setReady(true);
+    setActiveId(readActive());
+    api.me()
+      .then(setUser)
+      .catch((e) => {
+        if (!(e instanceof ApiError && e.status === 401)) console.warn("auth/me failed", e);
+        setUser(null);
+      })
+      .finally(() => setReady(true));
   }, []);
 
-  const persist = useCallback((s: Session | null) => {
-    setSession(s);
+  const refresh = useCallback(async () => {
     try {
-      if (s) localStorage.setItem(KEY, JSON.stringify(s));
-      else localStorage.removeItem(KEY);
+      const u = await api.me();
+      setUser(u);
+      return u;
     } catch {
-      /* хранилище недоступно — сессия живет до перезагрузки */
+      setUser(null);
+      return null;
     }
   }, []);
 
-  return (
-    <SessionContext.Provider
-      value={{
-        session,
-        ready,
-        login: persist,
-        logout: () => persist(null),
-        update: (patch) => session && persist({ ...session, ...patch }),
-      }}
-    >
-      {children}
-    </SessionContext.Provider>
+  const login = useCallback(async (email: string, password: string) => {
+    const u = await api.login(email, password);
+    setUser(u);
+    return u;
+  }, []);
+
+  const register = useCallback(async (name: string, email: string, password: string) => {
+    const u = await api.register(name, email, password);
+    setUser(u);
+    return u;
+  }, []);
+
+  const logout = useCallback(async () => {
+    try {
+      await api.logout();
+    } catch {
+      /* cookie истечет сама; локально выходим в любом случае */
+    }
+    setUser(null);
+  }, []);
+
+  const setActiveCompany = useCallback((id: string) => {
+    setActiveId(id);
+    try {
+      localStorage.setItem(ACTIVE_KEY, id);
+    } catch {
+      /* только UI-предпочтение */
+    }
+  }, []);
+
+  const session = useMemo<Session | null>(() => {
+    if (!user) return null;
+    const active = user.memberships.find((m) => m.company_id === activeId) ?? user.memberships[0] ?? null;
+    return {
+      user,
+      userName: user.name,
+      memberships: user.memberships,
+      companyId: active?.company_id ?? "",
+      companyName: active?.company_name ?? "",
+      role: active?.role ?? "clevel",
+      isAdmin: active?.is_admin ?? false,
+    };
+  }, [user, activeId]);
+
+  const value = useMemo(
+    () => ({ session, ready, login, register, logout, refresh, setActiveCompany }),
+    [session, ready, login, register, logout, refresh, setActiveCompany],
   );
+  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 
 /** Короткое имя для шапки: «Анна Морозова» → «Морозова А.». */

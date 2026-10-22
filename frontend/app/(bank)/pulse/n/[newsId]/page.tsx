@@ -29,7 +29,7 @@ export default function InsightPage() {
     setLoading(true);
     setError(null);
     if (!force) setInsight(null);
-    api.insight(session!.companyId, session!.role, decodeURIComponent(newsId), force, c.signal)
+    api.insight(session!.companyId, decodeURIComponent(newsId), force, c.signal)
       .then((ins) => { if (mine === seq.current) setInsight(ins); })
       .catch((e) => {
         if (mine !== seq.current || e instanceof AbortedError) return;
@@ -42,7 +42,7 @@ export default function InsightPage() {
   useEffect(() => {
     load();
     return () => controller.current?.abort();
-  }, [load, session!.companyId, session!.role]);
+  }, [load, session!.companyId]);
 
   useEffect(() => {
     if (!loading) return;

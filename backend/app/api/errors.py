@@ -17,6 +17,16 @@ MESSAGES = {
     "INVALID_ANALYSIS_RESULT": "Модуль анализа вернул некорректный результат",
     "ANALYSIS_UNAVAILABLE": "Анализ временно недоступен",
     "ANALYSIS_TIMEOUT": "Превышено время ожидания анализа",
+    "UNAUTHORIZED": "Требуется вход в систему",
+    "FORBIDDEN": "Недостаточно прав",
+    "INVALID_CREDENTIALS": "Неверный email или пароль",
+    "EMAIL_TAKEN": "Пользователь с таким email уже зарегистрирован",
+    "COMPANY_CLAIMED": "У компании уже есть администратор",
+    "TOO_MANY_COMPANIES": "Нельзя управлять более чем 5 компаниями",
+    "MEMBER_NOT_FOUND": "Участник не найден",
+    "MEMBER_EXISTS": "Участник с таким email уже добавлен в компанию",
+    "LAST_ADMIN": "Нельзя убрать последнего администратора компании",
+    "TOO_MANY_ATTEMPTS": "Слишком много неудачных попыток входа, повторите позже",
 }
 
 STATUS = {
@@ -32,6 +42,16 @@ STATUS = {
     "INVALID_ANALYSIS_RESULT": 500,
     "ANALYSIS_UNAVAILABLE": 503,
     "ANALYSIS_TIMEOUT": 504,
+    "UNAUTHORIZED": 401,
+    "FORBIDDEN": 403,
+    "INVALID_CREDENTIALS": 401,
+    "EMAIL_TAKEN": 409,
+    "COMPANY_CLAIMED": 409,
+    "TOO_MANY_COMPANIES": 409,
+    "MEMBER_NOT_FOUND": 404,
+    "MEMBER_EXISTS": 409,
+    "LAST_ADMIN": 409,
+    "TOO_MANY_ATTEMPTS": 429,
 }
 
 

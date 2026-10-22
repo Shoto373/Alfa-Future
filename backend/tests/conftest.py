@@ -39,20 +39,48 @@ def shared_profiles(tmp_path_factory):
 
 
 @pytest.fixture
-def client(shared_profiles, monkeypatch):
+def raw_client(shared_profiles, monkeypatch):
+    """Клиент без входа в систему."""
     from fastapi.testclient import TestClient
 
+    from app.auth import security
     from app.main import app
 
     monkeypatch.setenv("PROFILES_PATH", str(shared_profiles))
     profiles.reset_cache()
+    security.limiter.clear()
     with TestClient(app) as c:
         yield c
 
 
 @pytest.fixture
-def company(client):
+def new_client(raw_client):
+    """Фабрика клиентов с отдельными cookie (разные пользователи одного приложения)."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    return lambda: TestClient(app)
+
+
+@pytest.fixture
+def company(raw_client):
     from app.companies import profiles as p
 
     data = p._load()["companies"]
     return next(c for c in data if c["products"]["loans"]) if any(c["products"]["loans"] for c in data) else data[0]
+
+
+def register(c, email="owner@example.com", name="Иван", password="correct-horse"):
+    r = c.post("/api/v1/auth/register", json={"name": name, "email": email, "password": password})
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+@pytest.fixture
+def client(raw_client, company):
+    """Вошедший пользователь — администратор company (роль cfo)."""
+    register(raw_client)
+    r = raw_client.post(f"/api/v1/companies/{company['company_id']}/claim", json={"role": "cfo"})
+    assert r.status_code == 201, r.text
+    return raw_client

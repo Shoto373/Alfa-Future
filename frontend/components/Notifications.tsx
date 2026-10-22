@@ -10,7 +10,7 @@ import { Icon, Score } from "./ui";
 /** Колокольчик шапки: проактивная точка входа — важные для компании события. */
 export default function Notifications() {
   const { session } = useSession();
-  const feed = useFeed(session!.companyId, session!.role);
+  const feed = useFeed(session!.companyId);
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const important = (feed.data ?? []).filter((i) => i.relevance.score >= IMPORTANT);
