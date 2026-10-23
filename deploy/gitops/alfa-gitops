@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+# alfa-gitops — агент pull-деплоя (GitOps). Запускается systemd-таймером раз в минуту.
+#
+# Желаемое состояние прода — ветка `deploy` репозитория: docker-compose.yml, nginx/nginx.conf,
+# release.env (теги образов) и release.json (какой коммит main выкатывается). Ветку пишет только
+# CI после зеленых тестов на main. Агент сам забирает ее (deploy key только на чтение) и, если
+# появился новый коммит:
+#   1) ставит мониторинг на паузу и пишет в Telegram «выкатка началась»;
+#   2) делает бэкап БД (pg_dump, хранится BACKUP_KEEP последних);
+#   3) кладет файлы релиза в APP_DIR, тянет образы и поднимает стек;
+#   4) ждет healthy у backend и frontend; при успехе — «✅ на проде»,
+#      при сбое — возвращает прежние файлы и образы и пишет «❌ откат».
+# Неудачный релиз повторно не выкатывается: агент ждет следующий коммит в `deploy`.
+# Ручной откат — `git revert` последнего коммита в ветке `deploy`.
+set -uo pipefail
+
+[ -f /etc/alfa-gitops.env ] && . /etc/alfa-gitops.env
+[ -f /etc/alfa-monitor.env ] && . /etc/alfa-monitor.env   # TG_TOKEN, TG_CHAT_ID — общий бот с мониторингом
+: "${TG_TOKEN:=}" "${TG_CHAT_ID:=}"
+REPO_DIR="${REPO_DIR:-/opt/alfa-gitops/repo}"
+APP_DIR="${APP_DIR:-/home/egor/app}"
+BRANCH="${BRANCH:-deploy}"
+STATE_DIR="${STATE_DIR:-/var/lib/alfa-gitops}"
+BACKUP_DIR="${BACKUP_DIR:-/var/backups/alfa}"
+BACKUP_KEEP="${BACKUP_KEEP:-7}"
+HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-420}"   # секунд; backend при старте прогревает модель и векторы
+SITE="${SITE:-https://pointers-team.online}"
+MAINT_FLAG=/run/alfa-maintenance          # alfa-monitor молчит, пока идет выкатка
+HOST="$(hostname)"
+
+exec 9>/run/alfa-gitops.lock
+flock -n 9 || exit 0
+mkdir -p "$STATE_DIR" "$BACKUP_DIR"
+
+esc() { sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
+
+send() {
+  if [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT_ID" ]; then echo "telegram not configured: $1"; return; fi
+  curl -s -m 15 -o /dev/null "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+    --data-urlencode "chat_id=${TG_CHAT_ID}" --data-urlencode "text=$1" \
+    -d parse_mode=HTML -d disable_web_page_preview=true || echo "telegram send failed"
+}
+
+compose() {
+  docker compose --project-directory "$APP_DIR" -f "$APP_DIR/docker-compose.yml" \
+    --env-file "$APP_DIR/.env" --env-file "$APP_DIR/release.env" "$@"
+}
+
+# --- есть ли новый релиз ------------------------------------------------------
+if ! git -C "$REPO_DIR" fetch -q origin "$BRANCH" 2>"$STATE_DIR/fetch.err"; then
+  echo "fetch failed: $(head -c 300 "$STATE_DIR/fetch.err")"   # сеть мигнула — следующая минута
+  exit 0
+fi
+target=$(git -C "$REPO_DIR" rev-parse "origin/$BRANCH")
+[ "$target" = "$(cat "$STATE_DIR/deployed" 2>/dev/null)" ] && exit 0
+[ "$target" = "$(cat "$STATE_DIR/failed" 2>/dev/null)" ] && exit 0
+git -C "$REPO_DIR" checkout -q --force --detach "$target"
+
+field() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2], ""))' "$REPO_DIR/release.json" "$1" 2>/dev/null; }
+SHORT=$(field short); SUBJECT=$(field subject | esc); AUTHOR=$(field author | esc); URL=$(field url)
+[ -n "$SHORT" ] || SHORT=${target:0:7}
+WHAT="<a href=\"${URL:-#}\">${SHORT}</a> — ${SUBJECT:-без описания}${AUTHOR:+ (${AUTHOR})}"
+
+touch "$MAINT_FLAG"
+trap 'rm -f "$MAINT_FLAG"' EXIT
+started=$(date +%s)
+echo "deploying $target ($SHORT)"
+send "🚀 <b>Выкатка на прод</b>: ${WHAT}"
+
+wait_healthy() {
+  local deadline=$(( $(date +%s) + HEALTH_TIMEOUT )) b f
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    b=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' alfa-backend 2>/dev/null)
+    f=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' alfa-frontend 2>/dev/null)
+    [ "$b" = healthy ] && [ "$f" = healthy ] && return 0
+    sleep 5
+  done
+  return 1
+}
+
+fail() {   # fail <причина> [rollback]
+  local reason="$1" logs restored="не потребовался"
+  logs=$(docker logs --tail 12 alfa-backend 2>&1 | cut -c1-180 | esc)
+  if [ "${2:-}" = rollback ] && [ -f "$STATE_DIR/prev/docker-compose.yml" ]; then
+    cp "$STATE_DIR/prev/docker-compose.yml" "$APP_DIR/docker-compose.yml"
+    cp "$STATE_DIR/prev/nginx.conf" "$APP_DIR/nginx/nginx.conf"
+    cp "$STATE_DIR/prev/release.env" "$APP_DIR/release.env"
+    [ -f "$STATE_DIR/prev/release.json" ] && cp "$STATE_DIR/prev/release.json" "$APP_DIR/release.json"
+    if compose up -d --no-build --remove-orphans && wait_healthy; then
+      docker exec alfa-nginx nginx -s reload >/dev/null 2>&1
+      restored="прежняя версия снова работает"
+    else
+      restored="прежняя версия НЕ поднялась — нужна ручная проверка"
+    fi
+  fi
+  echo "$target" > "$STATE_DIR/failed"
+  send "❌ <b>Выкатка не удалась</b>: ${WHAT}
+Причина: ${reason}
+Откат: ${restored}
+<pre>${logs:-нет логов}</pre>"
+  exit 1
+}
+
+# --- 1. бэкап БД ---------------------------------------------------------------
+if docker inspect app-postgres-1 >/dev/null 2>&1; then
+  dump="$BACKUP_DIR/alfa-$(date -u +%Y%m%dT%H%M%SZ)-${SHORT}.sql.gz"
+  if docker exec app-postgres-1 pg_dump -U alfa -d alfa --no-owner | gzip > "$dump.part"; then
+    mv "$dump.part" "$dump"
+    ls -1t "$BACKUP_DIR"/alfa-*.sql.gz 2>/dev/null | tail -n +$((BACKUP_KEEP + 1)) | xargs -r rm -f
+  else
+    rm -f "$dump.part"
+    fail "не удалось сделать бэкап БД — выкатка отменена, прод не тронут"
+  fi
+fi
+
+# --- 2. файлы релиза (прежние — для отката) ------------------------------------
+rm -rf "$STATE_DIR/prev" && mkdir -p "$STATE_DIR/prev" "$APP_DIR/nginx"
+cp "$APP_DIR/docker-compose.yml" "$STATE_DIR/prev/" 2>/dev/null
+cp "$APP_DIR/nginx/nginx.conf" "$STATE_DIR/prev/" 2>/dev/null
+cp "$APP_DIR/release.env" "$STATE_DIR/prev/" 2>/dev/null
+cp "$APP_DIR/release.json" "$STATE_DIR/prev/" 2>/dev/null
+for f in docker-compose.yml nginx/nginx.conf release.env release.json; do
+  install -m 0644 -o "$(stat -c %u "$APP_DIR")" -g "$(stat -c %g "$APP_DIR")" "$REPO_DIR/$f" "$APP_DIR/$f" \
+    || fail "в релизе нет файла $f"
+done
+
+# --- 3. образы и запуск --------------------------------------------------------
+compose pull --quiet 2>"$STATE_DIR/pull.err" || fail "не удалось скачать образы: $(head -c 200 "$STATE_DIR/pull.err" | esc)" rollback
+compose up -d --no-build --remove-orphans || fail "docker compose up завершился ошибкой" rollback
+wait_healthy || fail "backend или frontend не стали healthy за ${HEALTH_TIMEOUT} с" rollback
+docker exec alfa-nginx nginx -s reload >/dev/null 2>&1
+code=$(curl -s -o /dev/null -m 15 -w '%{http_code}' "$SITE/healthz")
+[ "$code" = 200 ] || fail "сайт $SITE/healthz отвечает HTTP $code" rollback
+
+echo "$target" > "$STATE_DIR/deployed"
+rm -f "$STATE_DIR/failed"
+send "✅ <b>На проде</b>: ${WHAT}
+Выкатка заняла $(( $(date +%s) - started )) с · <a href=\"${SITE}\">${SITE#https://}</a>"
+echo "deployed $target"

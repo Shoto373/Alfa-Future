@@ -1,5 +1,9 @@
 name: CI
 
+# GitOps: CI только проверяет и публикует. На прод выкатывает агент на сервере (deploy/gitops),
+# который сам забирает ветку `deploy`. Входа на сервер из GitHub нет.
+#   PR в main      → тесты backend и frontend;
+#   push в main    → тесты → образы в GHCR → коммит желаемого состояния в ветку `deploy`.
 on:
   pull_request:
     branches: [main]
@@ -7,8 +11,16 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Прогоны main идут строго по очереди: релизы попадают в `deploy` в порядке коммитов.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
 jobs:
-  test:
+  backend:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -43,6 +55,11 @@ jobs:
           python -m unittest discover -s deploy/tests -v
           python -m pytest backend/tests -v
 
+      - name: Check deploy agent scripts
+        run: |
+          bash -n deploy/gitops/alfa-gitops
+          bash -n deploy/gitops/install.sh
+
   frontend:
     runs-on: ubuntu-latest
     steps:
@@ -58,3 +75,90 @@ jobs:
           npm ci
           npm run build
           npm run typecheck
+
+  images:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build backend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: true
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+          tags: |
+            ghcr.io/dvajf/alfa:backend-latest
+            ghcr.io/dvajf/alfa:backend-${{ github.sha }}
+      - name: Build frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: frontend/Dockerfile
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=https://pointers-team.online
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+          tags: |
+            ghcr.io/dvajf/alfa:frontend-latest
+            ghcr.io/dvajf/alfa:frontend-${{ github.sha }}
+
+  release:
+    needs: images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # только push в ветку deploy
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Publish desired state to branch "deploy"
+        env:
+          SHA: ${{ github.sha }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          git config user.name "alfa-ci"
+          git config user.email "alfa-ci@users.noreply.github.com"
+
+          out=$(mktemp -d)
+          if git ls-remote --exit-code --heads origin deploy >/dev/null; then
+            git fetch -q origin deploy
+            git worktree add -q "$out" origin/deploy
+            git -C "$out" switch -q -C deploy
+            # Более новый коммит main уже выкачен — старый релиз не перезаписывает его.
+            current=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["commit"])' "$out/release.json" 2>/dev/null || true)
+            if [ -n "$current" ] && [ "$current" != "$SHA" ] && git merge-base --is-ancestor "$SHA" "$current" 2>/dev/null; then
+              echo "deploy уже содержит более новый $current — пропуск"; exit 0
+            fi
+          else
+            git worktree add -q --orphan -b deploy "$out"
+          fi
+
+          mkdir -p "$out/nginx"
+          cp docker-compose.yml "$out/docker-compose.yml"
+          cp nginx/nginx.conf "$out/nginx/nginx.conf"
+          printf 'BACKEND_IMAGE=ghcr.io/dvajf/alfa:backend-%s\nFRONTEND_IMAGE=ghcr.io/dvajf/alfa:frontend-%s\n' "$SHA" "$SHA" > "$out/release.env"
+          SUBJECT=$(git log -1 --format=%s "$SHA") AUTHOR=$(git log -1 --format=%an "$SHA") \
+            python3 .github/scripts/release_json.py "$out/release.json"
+
+          git -C "$out" add -A
+          if git -C "$out" diff --cached --quiet; then echo "нет изменений"; exit 0; fi
+          git -C "$out" commit -q -m "release ${SHA:0:7}: $(git log -1 --format=%s "$SHA")"
+          git -C "$out" push -q origin HEAD:deploy
+          echo "### Релиз ${SHA:0:7} опубликован в ветку deploy" >> "$GITHUB_STEP_SUMMARY"
