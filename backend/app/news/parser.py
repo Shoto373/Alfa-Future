@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 import httpx
 
 from app import config
-from app.news import store
+from app.news import semantic, store
 
 MAX_BYTES = 2_000_000
 TIMEOUT = 10.0
@@ -73,7 +73,8 @@ def _get(url: str, max_redirects: int = 3) -> str:
     raise FetchError("Слишком много перенаправлений")
 
 
-def parse_rss(xml_text: str, source: str) -> list[dict]:
+def rss_entries(xml_text: str) -> list[dict]:
+    """Сырые записи ленты (без классификации): title, text, url, published_at."""
     root = ET.fromstring(xml_text)
     items = []
     for node in root.iter():
@@ -94,8 +95,13 @@ def parse_rss(xml_text: str, source: str) -> list[dict]:
             except (TypeError, ValueError):
                 published = date_node.text.strip()
         if title and len(text) >= 40:
-            items.append(store.make_item(title, text, source, url, published, "rss"))
+            items.append({"title": title, "text": text, "url": url, "published_at": published})
     return items
+
+
+def parse_rss(xml_text: str, source: str) -> list[dict]:
+    return [store.make_item(e["title"], e["text"], source, e["url"], e["published_at"], "rss")
+            for e in rss_entries(xml_text)]
 
 
 def fetch_rss(source: dict) -> list[dict]:
@@ -120,9 +126,15 @@ def refresh() -> dict:
     for source in config.rss_sources():
         entry = {"name": source["name"], "url": source["url"], "fetched": 0, "error": None}
         try:
-            items = fetch_rss(source)[: config.rss_max_items()]
-            entry["fetched"] = len(items)
-            for item in items:
+            entries = rss_entries(_get(source["url"]))[: config.rss_max_items()]
+            entry["fetched"] = len(entries)
+            # Уже сохраненные новости не классифицируются заново (это самая дорогая часть опроса),
+            # а векторы новых считаются одной пачкой.
+            fresh = [e for e in entries if not store.known(e["title"], e["text"])]
+            report["duplicates"] += len(entries) - len(fresh)
+            semantic.prime([store.clean(e["title"], e["text"]) for e in fresh])
+            for e in fresh:
+                item = store.make_item(e["title"], e["text"], source["name"], e["url"], e["published_at"], "rss")
                 if not item["classification"]["topics"]:
                     report["skipped"] += 1  # не относится к бизнес-темам таксономии
                     continue

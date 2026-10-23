@@ -60,8 +60,8 @@ def test_non_business_news_gets_no_semantic_topics(monkeypatch):
 def test_kb_search_finds_thesis_by_meaning(monkeypatch):
     target = next(t for t in kb._kb()["theses"] if "key_rate" in t["topics"] and not t["stale"])
     _enable(monkeypatch)
-    monkeypatch.setattr(kb, "_dense", lambda q: ({t["id"]: (_vec(key_rate=1) if t["id"] == target["id"] else _vec(fx=1))
-                                                  for t in kb._kb()["theses"]}, _vec(key_rate=1)))
+    monkeypatch.setattr(kb, "_dense", lambda q: {t["id"]: embeddings.cosine(
+        _vec(key_rate=1) if t["id"] == target["id"] else _vec(fx=1), _vec(key_rate=1)) for t in kb._kb()["theses"]})
     found = kb.search(PARAPHRASE, ["key_rate"], [], limit=3)
     assert found and found[0]["id"] == target["id"] and found[0]["match"]["semantic"] > 0.9
 

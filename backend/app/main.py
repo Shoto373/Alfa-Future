@@ -4,13 +4,11 @@ import logging
 
 from fastapi import FastAPI
 
-from app import config, database
+from app import config, database, warmup
 from app.api.router import router
 from app.api.setup import configure_api
 from app.auth.router import router as auth_router
-from app.companies import profiles
-from app.news import parser, store
-from app.knowledge import kb
+from app.news import parser
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("app")
@@ -29,12 +27,8 @@ async def _rss_loop(minutes: int) -> None:
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     await asyncio.to_thread(database.migrate)
-    try:
-        await asyncio.to_thread(profiles.meta)  # прогрев: построить профили, если кэша нет
-    except profiles.ProfilesError:
-        logger.exception("company profiles unavailable at startup")
-    await asyncio.to_thread(store.all_items)
-    await asyncio.to_thread(kb.documents)
+    # Прогрев: профили, модель, векторы, база знаний, новости и ленты — до приема запросов.
+    app.state.warmup = await asyncio.to_thread(warmup.run)
     task = None
     if config.rss_refresh_minutes() > 0:
         task = asyncio.create_task(_rss_loop(config.rss_refresh_minutes()))

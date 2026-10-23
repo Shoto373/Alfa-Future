@@ -34,11 +34,17 @@ def isolated_runtime(tmp_path_factory, monkeypatch):
     # Тесты не скачивают модель: смысловой слой проверяется подменой embeddings.embed.
     monkeypatch.setenv("EMBEDDINGS_ENABLED", "0")
     monkeypatch.setenv("FRONTEND_ORIGIN", "http://localhost:3000")
+    monkeypatch.delenv("REDIS_URL", raising=False)
+    from app import cache, storage
     profiles.reset_cache()
     store.reset_cache()
+    cache.clear()
+    storage.reset_cache()
     yield runtime
     profiles.reset_cache()
     store.reset_cache()
+    cache.clear()
+    storage.reset_cache()
     from app.knowledge import kb
     from app import database, embeddings
     from app.news import semantic

@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse
 
-from app import config, storage
+from app import cache, config, embeddings, storage, vectors
 from app.agent import audit, llm, orchestrator, qa
 from app.api.errors import ApiError
 from app.auth import store as auth_store
@@ -17,7 +17,7 @@ from app.errors import AnalysisUnavailable, InvalidAnalysisResult
 from app.knowledge import kb
 from app.news import parser, store
 from app.news.taxonomy import TOPICS
-from app.ranking import ROLES, feed
+from app.ranking import ROLES, company_feed
 from app.schemas import (Answer, ErrorResponse, FeedbackRequest, Insight, InsightRequest, NewsCreateRequest,
                          QuestionRequest)
 
@@ -67,6 +67,14 @@ def _news(news_id: str) -> dict:
     return n
 
 
+def _llm_answered(insight: dict) -> bool:
+    """Модель уже отвечала для этой карточки, но ее черновик не прошел проверки — повтор даст то же самое.
+
+    Такую карточку пересчитывает только «Пересчитать» (force_refresh), а не каждое открытие.
+    """
+    return any(s.get("name") == "llm_compose" and s.get("status") == "ok" for s in insight.get("trace", []))
+
+
 def _news_brief(n: dict) -> dict:
     cls = n["classification"]
     return {"news_id": n["news_id"], "title": n["title"], "lead": n["lead"], "source": n["source"], "url": n["url"],
@@ -76,7 +84,7 @@ def _news_brief(n: dict) -> dict:
 
 
 @router.get("/meta", responses=ERRORS)
-async def meta() -> dict:
+def meta() -> dict:
     try:
         data = profiles.meta()
     except profiles.ProfilesError:
@@ -85,6 +93,7 @@ async def meta() -> dict:
         "data": data,
         "knowledge": {"documents": len(kb.documents()), "theses": sum(1 for _ in kb.search(topics=list(TOPICS), limit=1000, include_stale=True))},
         "news": len(store.all_items()),
+        "search": {"embeddings": embeddings.signature() != "emb:off", "vectors": vectors.stats(), "redis": cache.ping()},
         "llm": {"connected": llm.available(), "allowed_models": list(config.ALLOWED_MODELS), "usage": llm.usage()},
         "roles": [{"role": k, "name": v["name"]} for k, v in ROLES.items()],
         "topics": [{"topic": k, "name": v["name"]} for k, v in TOPICS.items()],
@@ -93,7 +102,7 @@ async def meta() -> dict:
 
 
 @router.get("/companies/lookup", responses=ERRORS)
-async def lookup_companies(q: str = Query("", max_length=100), limit: int = Query(20, ge=1, le=50),
+def lookup_companies(q: str = Query("", max_length=100), limit: int = Query(20, ge=1, le=50),
                            offset: int = Query(0, ge=0), _user: dict = Depends(current_user)) -> dict:
     """Поиск компании для привязки: только публичные поля, без финансовых данных."""
     try:
@@ -107,7 +116,7 @@ async def lookup_companies(q: str = Query("", max_length=100), limit: int = Quer
 
 
 @router.get("/companies", responses=ERRORS)
-async def list_companies(q: str = Query("", max_length=100), sector: str | None = Query(None, max_length=40),
+def list_companies(q: str = Query("", max_length=100), sector: str | None = Query(None, max_length=40),
                          limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
                          user: dict = Depends(current_user)) -> dict:
     """Только компании, в которых состоит пользователь."""
@@ -121,44 +130,45 @@ async def list_companies(q: str = Query("", max_length=100), sector: str | None 
 
 
 @router.get("/companies/{company_id}", responses=ERRORS)
-async def company(company_id: str, user: dict = Depends(current_user)) -> dict:
+def company(company_id: str, user: dict = Depends(current_user)) -> dict:
     member_of(user, company_id)
     c = _company(company_id)
     return {"profile": c, "exposures": list(profiles.exposures(company_id))}
 
 
 @router.get("/feed", responses=ERRORS)
-async def news_feed(company_id: str, topic: str | None = Query(None, max_length=40),
+def news_feed(company_id: str, topic: str | None = Query(None, max_length=40),
                     limit: int = Query(30, ge=1, le=100), user: dict = Depends(current_user)) -> dict:
     role = member_of(user, company_id)["role"]  # роль берется из членства, не от клиента
     _company(company_id)
     # Вся лента компании без фильтра — для счетчиков тем: показываются только темы, где есть новости.
-    everything = feed(store.all_items(), company_id, role, None, 500)
+    everything = company_feed(company_id, role, 500)
     counts: dict[str, dict] = {}
     for r in everything:
         for t in r["news"]["classification"]["topics"]:
             counts.setdefault(t["topic"], {"topic": t["topic"], "name": t["name"], "count": 0})["count"] += 1
     ranked = [r for r in everything if not topic or topic in {t["topic"] for t in r["news"]["classification"]["topics"]}][:limit]
     storage.log_event("feed_view", company_id=company_id, role=role)
+    cached = storage.cached_insight_ids(company_id, role, [r["news"]["news_id"] for r in ranked])
     return {"company_id": company_id, "role": role,
             "topic_counts": sorted(counts.values(), key=lambda c: (-c["count"], c["name"])), "items": [
         # Склеенные похожие новости других источников добавляются к счетчику «+N источников».
         {"news": {**_news_brief(r["news"]), "duplicates": len(r["news"]["duplicates"]) + r.get("story_size", 0)},
          "relevance": r["relevance"],
-         "cached_insight_id": (storage.cached_insight(company_id, role, r["news"]["news_id"]) or {}).get("insight_id")}
+         "cached_insight_id": cached.get(r["news"]["news_id"])}
         for r in ranked]}
 
 
 @router.get("/news/{news_id}", responses=ERRORS, dependencies=[Depends(current_user)])
-async def news(news_id: str) -> dict:
+def news(news_id: str) -> dict:
     return _news(news_id)
 
 
 @router.post("/news", responses=ERRORS, dependencies=[Depends(current_user)])
-async def add_news(payload: NewsCreateRequest) -> dict:
+def add_news(payload: NewsCreateRequest) -> dict:
     if payload.url:
         try:
-            item = await asyncio.to_thread(parser.fetch_article, payload.url)
+            item = parser.fetch_article(payload.url)
         except parser.FetchError as exc:
             raise ApiError("FETCH_FAILED", f"Не удалось загрузить материал: {exc}")
         except Exception:
@@ -176,24 +186,32 @@ async def add_news(payload: NewsCreateRequest) -> dict:
 
 
 @router.post("/news/refresh", responses=ERRORS, dependencies=[Depends(require_any_admin)])
-async def refresh_news() -> dict:
-    return await asyncio.to_thread(parser.refresh)
+def refresh_news() -> dict:
+    return parser.refresh()
 
 
 @router.post("/insights", response_model=Insight, responses=ERRORS)
 async def create_insight(payload: InsightRequest, request: Request, user: dict = Depends(current_user)) -> dict:
     request_id: str = request.state.request_id
     role = member_of(user, payload.company_id)["role"]  # роль берется из членства, не от клиента
-    c = _company(payload.company_id)
-    n = _news(payload.news_id)
-    if not payload.force_refresh:
+
+    def prepare():
+        c, n = _company(payload.company_id), _news(payload.news_id)
+        if payload.force_refresh:
+            return c, n, None
         cached = storage.cached_insight(c["company_id"], role, n["news_id"])
-        # Карточка на правилах, построенная до подключения LLM, пересчитывается моделью.
-        if cached and not (cached["mode"] == "rules" and llm.available()):
+        # Карточка на правилах пересчитывается моделью, если LLM подключена; быстрый запрос берет любую готовую.
+        if cached and (payload.fast or not (cached["mode"] == "rules" and llm.available() and not _llm_answered(cached))):
             storage.log_event("insight_open", insight_id=cached["insight_id"], cached=True)
-            return cached
+            return c, n, cached
+        return c, n, None
+
+    c, n, cached = await asyncio.to_thread(prepare)
+    if cached:
+        return cached
     try:
-        insight = await asyncio.wait_for(orchestrator.run(c, role, n, request_id), timeout=config.analysis_timeout())
+        job = orchestrator.run(c, role, n, request_id, use_llm=False) if payload.fast else orchestrator.run(c, role, n, request_id)
+        insight = await asyncio.wait_for(job, timeout=config.analysis_timeout())
     except asyncio.TimeoutError:
         raise ApiError("ANALYSIS_TIMEOUT")
     except AnalysisUnavailable:
@@ -206,13 +224,17 @@ async def create_insight(payload: InsightRequest, request: Request, user: dict =
     if (insight["company_id"], insight["news_id"], insight["role"], insight["request_id"]) != (
             c["company_id"], n["news_id"], role, request_id):
         raise ApiError("INVALID_ANALYSIS_RESULT")
-    storage.save_insight(insight)
-    storage.log_event("insight_open", insight_id=insight["insight_id"], cached=False)
+
+    def save():
+        storage.save_insight(insight)
+        storage.log_event("insight_open", insight_id=insight["insight_id"], cached=False)
+
+    await asyncio.to_thread(save)
     return insight
 
 
 @router.get("/insights/{insight_id}", response_model=Insight, responses=ERRORS)
-async def get_insight(insight_id: str, user: dict = Depends(current_user)) -> dict:
+def get_insight(insight_id: str, user: dict = Depends(current_user)) -> dict:
     ins = storage.get_insight(insight_id)
     if ins is None:
         raise ApiError("INSIGHT_NOT_FOUND")
@@ -221,20 +243,20 @@ async def get_insight(insight_id: str, user: dict = Depends(current_user)) -> di
 
 
 @router.post("/insights/{insight_id}/questions", response_model=Answer, responses=ERRORS)
-async def ask(insight_id: str, payload: QuestionRequest, user: dict = Depends(current_user)) -> dict:
+def ask(insight_id: str, payload: QuestionRequest, user: dict = Depends(current_user)) -> dict:
     ins = storage.get_insight(insight_id)
     if ins is None:
         raise ApiError("INSIGHT_NOT_FOUND")
     member_of(user, ins["company_id"])
     c = _company(ins["company_id"])
-    result = await asyncio.to_thread(qa.answer, ins, c, payload.question.strip())
+    result = qa.answer(ins, c, payload.question.strip())
     storage.save_answer(result)
     storage.log_event("question", insight_id=insight_id, refused=result["refused"], mode=result["mode"])
     return result
 
 
 @router.post("/feedback", responses=ERRORS)
-async def feedback(payload: FeedbackRequest, user: dict = Depends(current_user)) -> dict:
+def feedback(payload: FeedbackRequest, user: dict = Depends(current_user)) -> dict:
     ins = storage.get_insight(payload.insight_id)
     if ins is None:
         raise ApiError("INSIGHT_NOT_FOUND")
@@ -244,12 +266,12 @@ async def feedback(payload: FeedbackRequest, user: dict = Depends(current_user))
 
 
 @router.get("/metrics", responses=ERRORS, dependencies=[Depends(require_any_admin)])
-async def metrics() -> dict:
+def metrics() -> dict:
     return storage.metrics()
 
 
 @router.get("/analytics", responses=ERRORS, dependencies=[Depends(current_user)])
-async def analytics() -> dict:
+def analytics() -> dict:
     docs = sorted(kb.documents(), key=lambda d: d["date"], reverse=True)
     theses = kb.search(topics=list(TOPICS), limit=1000, include_stale=True)
     pdf_dir = config.bank_pdf_dir()
@@ -259,7 +281,7 @@ async def analytics() -> dict:
 
 
 @router.get("/analytics/{doc_id}/pdf", responses=ERRORS, dependencies=[Depends(current_user)])
-async def analytics_pdf(doc_id: str):
+def analytics_pdf(doc_id: str):
     doc = kb.document(doc_id)
     pdf_dir = config.bank_pdf_dir()
     if doc is None or pdf_dir is None:
@@ -272,5 +294,5 @@ async def analytics_pdf(doc_id: str):
 
 
 @router.get("/audit", responses=ERRORS, dependencies=[Depends(require_any_admin)])
-async def audit_log(limit: int = Query(50, ge=1, le=500)) -> dict:
+def audit_log(limit: int = Query(50, ge=1, le=500)) -> dict:
     return {"items": audit.tail(limit)}

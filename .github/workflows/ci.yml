@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17.6
+        image: pgvector/pgvector:0.8.1-pg17-trixie
         env:
           POSTGRES_DB: alfa_test
           POSTGRES_USER: alfa

@@ -7,9 +7,13 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Identity, Index, Integer, Numeric, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+# Размерность векторов embedding-модели (paraphrase-multilingual-MiniLM-L12-v2).
+VECTOR_DIM = 384
 
 
 class Base(DeclarativeBase):
@@ -73,19 +77,23 @@ class Insight(Base, Payload):
     role: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     cache_version: Mapped[str] = mapped_column(Text)
-    __table_args__ = (Index("insights_cache_idx", company_id, role, news_id, created_at.desc()),)
+    # Лента ищет готовые карточки пачкой: компания, роль и версия кэша фиксированы, news_id — список.
+    __table_args__ = (Index("insights_lookup_idx", company_id, role, cache_version, news_id, created_at.desc()),
+                      Index("insights_news_idx", news_id))
 
 
 class Feedback(Base, Payload, Timestamped):
     __tablename__ = "feedback"
     id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
     insight_id: Mapped[str] = mapped_column(ForeignKey("insights.insight_id"))
+    __table_args__ = (Index("feedback_insight_idx", "insight_id"),)
 
 
 class Event(Base, Payload, Timestamped):
     __tablename__ = "events"
     id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
     kind: Mapped[str] = mapped_column(Text)
+    __table_args__ = (Index("events_kind_idx", "kind"),)
 
 
 class ToolAudit(Base, Payload, Timestamped):
@@ -99,6 +107,7 @@ class Answer(Base, Payload, Timestamped):
     __tablename__ = "answers"
     id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
     insight_id: Mapped[str] = mapped_column(ForeignKey("insights.insight_id"))
+    __table_args__ = (Index("answers_insight_idx", "insight_id"),)
 
 
 class LLMUsage(Base):
@@ -108,3 +117,21 @@ class LLMUsage(Base):
     cost: Mapped[Decimal] = mapped_column(Numeric, server_default="0")
     calls: Mapped[int] = mapped_column(Integer, server_default="0")
     errors: Mapped[int] = mapped_column(Integer, server_default="0")
+
+
+class VectorItem(Base, Payload):
+    """Векторное хранилище (pgvector): смысловые векторы и метаданные для поиска.
+
+    collection: cache — любой текст, который уже считала модель (ключ — хэш текста);
+    news — заголовки новостей; thesis — тезисы аналитики банка. text_hash показывает,
+    что вектор посчитан для текущего текста; payload — поля для фильтров поиска.
+    """
+    __tablename__ = "vector_items"
+    collection: Mapped[str] = mapped_column(Text, primary_key=True)
+    model: Mapped[str] = mapped_column(Text, primary_key=True)
+    item_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    text_hash: Mapped[str] = mapped_column(Text)
+    embedding: Mapped[Any] = mapped_column(Vector(VECTOR_DIM))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (Index("vector_items_embedding_idx", embedding, postgresql_using="hnsw",
+                            postgresql_ops={"embedding": "vector_cosine_ops"}),)

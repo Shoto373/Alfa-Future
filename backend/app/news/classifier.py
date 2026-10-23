@@ -6,6 +6,7 @@
 """
 
 import re
+from bisect import bisect_left
 from dataclasses import dataclass, field
 
 from app.news import magnitude, semantic
@@ -34,20 +35,39 @@ def tokenize(text: str) -> list[str]:
     return [w.strip(".,").lower().replace("ё", "е") for w in _WORD.findall(text or "") if w.strip(".,")]
 
 
-def _count_stem(tokens: list[str], stem: str) -> int:
+def _index(tokens: list[str]) -> tuple[list[str], list[int], list[str]]:
+    """Токены, их позиции в порядке сортировки и сами отсортированные токены (поиск по префиксу)."""
+    order = sorted(range(len(tokens)), key=tokens.__getitem__)
+    return tokens, order, [tokens[i] for i in order]
+
+
+_MAX_CHAR = "􏿿"
+
+
+def _count_stem(tokens: list[str], stem: str, index=None) -> int:
+    """Число позиций, где подряд идущие токены начинаются с частей стема.
+
+    Токены с нужным префиксом — непрерывный диапазон отсортированного списка (bisect),
+    поэтому стем не сравнивается с каждым токеном текста.
+    """
     parts = stem.split()
+    if not parts:
+        return len(tokens) + 1
+    toks, order, ordered = index or _index(tokens)
+    lo = bisect_left(ordered, parts[0])
+    hi = bisect_left(ordered, parts[0] + _MAX_CHAR, lo)
     n = len(parts)
-    hits = 0
-    for i in range(len(tokens) - n + 1):
-        if all(tokens[i + j].startswith(parts[j]) for j in range(n)):
-            hits += 1
-    return hits
+    if n == 1:
+        return hi - lo
+    limit = len(toks) - n
+    return sum(1 for i in order[lo:hi] if i <= limit and all(toks[i + j].startswith(parts[j]) for j in range(1, n)))
 
 
 def _score(tokens: list[str], stems: list[str]) -> tuple[int, list[str]]:
     total, matched = 0, []
+    index = _index(tokens)
     for stem in stems:
-        c = _count_stem(tokens, stem)
+        c = _count_stem(tokens, stem, index)
         if c:
             total += c * len(stem.split())  # многословные совпадения весомее
             matched.append(stem)
@@ -127,10 +147,11 @@ def classify(title: str, text: str) -> Classification:
     # Направление по каждой теме — по предложениям, где тема упоминается.
     # Для кредитования «ужесточение» означает меньше кредита (down), «смягчение» — больше (up).
     sentences_all = split_sentences(full) or [full]
+    sentence_tokens = [tokenize(s) for s in sentences_all]
     topic_directions = {}
     for t in topics:
         stems = TOPICS[t["topic"]]["stems"]
-        local = [tokenize(s) for s in sentences_all if _score(tokenize(s), stems)[0]]
+        local = [tk for tk in sentence_tokens if _score(tk, stems)[0]]
         counts = {d: sum(_score(tk, st)[0] for tk in local) for d, st in DIRECTION_STEMS.items()}
         if t["topic"] == "credit_market":
             tight = sum(_score(tk, ["ужесточ"])[0] for tk in local)
@@ -157,7 +178,7 @@ def classify(title: str, text: str) -> Classification:
 
     # Сила события — по предложениям о главной теме; если их нет, по заголовку и началу текста.
     main = topics[0]["topic"] if topics else None
-    about_main = [s for s in sentences_all if main and _score(tokenize(s), TOPICS[main]["stems"])[0]]
+    about_main = [s for s, tk in zip(sentences_all, sentence_tokens) if main and _score(tk, TOPICS[main]["stems"])[0]]
     strength = magnitude.assess(main, about_main or sentences_all[:3])
     return Classification(topics, sectors, countries, direction, topic_directions, actors, dates, numbers, key_sentences,
                           importance, strength)
