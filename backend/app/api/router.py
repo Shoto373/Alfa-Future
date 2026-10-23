@@ -147,14 +147,16 @@ def news_feed(company_id: str, topic: str | None = Query(None, max_length=40),
     ranked = [r for r in everything if (not topic or topic in {t["topic"] for t in r["news"]["classification"]["topics"]})
               and (not story or r.get("story_id") == story)][:limit]
     storage.log_event("feed_view", company_id=company_id, role=role)
-    cached = storage.cached_insight_ids(company_id, role, [r["news"]["news_id"] for r in ranked])
+    cached = storage.cached_insight_refs(company_id, role, [r["news"]["news_id"] for r in ranked])
     return {"company_id": company_id, "role": role,
             "topic_counts": sorted(counts.values(), key=lambda c: (-c["count"], c["name"])), "stories": stories, "items": [
         # Склеенные похожие новости других источников добавляются к счетчику «+N источников».
         {"news": {**_news_brief(r["news"]), "duplicates": len(r["news"]["duplicates"]) + r.get("story_size", 0),
                   "story_id": r.get("story_id")},
          "relevance": r["relevance"],
-         "cached_insight_id": cached.get(r["news"]["news_id"])}
+         # Знак эффекта — из готового разбора: метка «скорее риск / возможность» в карточке ленты.
+         "cached_insight_id": cached.get(r["news"]["news_id"], (None, None))[0],
+         "cached_effect": cached.get(r["news"]["news_id"], (None, None))[1]}
         for r in ranked]}
 
 

@@ -10,7 +10,9 @@ from app.agent import llm
 from sqlalchemy import select
 from app.models import AppState, Insight, Feedback, Answer, Event
 
-CACHE_VERSION = "p0-quality-2"
+# Меняется, когда правила меняют содержание карточек: старые перестают быть актуальным кэшем.
+# quality-3: знак эффекта (направление курса, санкций, форм глаголов) и поле effect.
+CACHE_VERSION = "p0-quality-3"
 
 
 VERSION_TTL = 5.0  # секунд; подписи источников меняются только при импорте
@@ -89,18 +91,18 @@ def llm_attempted(insight: dict) -> bool:
     return any(s.get("name") == "llm_compose" and s.get("status") == "ok" for s in insight.get("trace", []))
 
 
-def cached_insight_ids(company_id: str, role: str, news_ids: list[str]) -> dict[str, str]:
-    """news_id -> id последней актуальной карточки; один запрос на всю ленту (индекс insights_lookup_idx)."""
+def cached_insight_refs(company_id: str, role: str, news_ids: list[str]) -> dict[str, tuple[str, str | None]]:
+    """news_id -> (id, знак эффекта) последней актуальной карточки; один запрос на всю ленту (индекс insights_lookup_idx)."""
     if not news_ids:
         return {}
     version = cache_version()
     with database.session() as db:
-        rows = db.execute(select(Insight.news_id, Insight.insight_id)
+        rows = db.execute(select(Insight.news_id, Insight.insight_id, Insight.payload["effect"].astext)
             .where(Insight.company_id == company_id, Insight.role == role, Insight.cache_version == version,
                    Insight.news_id.in_(news_ids))
             .order_by(Insight.news_id, *_newest_first())
             .distinct(Insight.news_id)).all()
-    return dict(rows)
+    return {news_id: (insight_id, effect) for news_id, insight_id, effect in rows}
 
 
 FEEDBACK_TTL = 60.0

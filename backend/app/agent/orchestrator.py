@@ -462,6 +462,7 @@ async def run(company: dict, role: str, news: dict, request_id: str, use_llm: bo
         "model": model,
         "title": draft["title"],
         "headline": draft["headline"],
+        "effect": composer.overall_effect(draft),
         "what_happened": draft["what_happened"],
         "why_important": draft["why_important"],
         "risks": draft["risks"],

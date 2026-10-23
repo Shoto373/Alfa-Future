@@ -16,6 +16,8 @@ SCHEMA_VERSION = "1.0.0"
 Role = Literal["owner", "ceo", "cfo", "accountant", "treasurer", "clevel"]
 Origin = Literal["fact", "client_data", "bank", "ai"]
 SourceKind = Literal["news", "bank_analytics", "client_data", "bank_product"]
+# Общий знак события для компании: скорее риск, скорее возможность, и то и другое, зависит от операций, нет влияния.
+Effect = Literal["neg", "pos", "mixed", "unclear", "none"]
 
 
 class Strict(BaseModel):
@@ -142,6 +144,7 @@ class Insight(Strict):
     model: str | None
     title: str
     headline: str
+    effect: Effect | None = None  # None — карточки, созданные до появления поля
     what_happened: WhatHappened
     why_important: list[Claim]
     risks: list[Claim]

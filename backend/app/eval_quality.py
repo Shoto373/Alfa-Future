@@ -4,7 +4,7 @@
     python -m app.eval_quality --make-set eval_set.json --size 12     # собрать выборку из текущей БД
     python -m app.eval_quality --set eval_set.json --out report.json  # прогнать агента и посчитать метрики
 
-Golden set (tests/golden/cases.json): 30 синтетических пар с ожиданиями, записанными до прогона —
+Golden set (tests/golden/cases.json): синтетические пары с ожиданиями, записанными до прогона —
 тема, знак эффекта, тема обязательного тезиса банка, запрещенные утверждения. Метрики golden set:
 first_pass_rate, pass_rate, sourced_rate, topic_match, sign_match, bank_coverage, forbidden_ok,
 причины провала первой попытки по коду проверки, задержка p50/p95, токены и стоимость LLM.
@@ -157,12 +157,10 @@ def golden_company(base: dict, spec: dict) -> dict:
 
 
 def observed_effect(ins: dict) -> str:
-    """Знак влияния по разделам разбора; оговорки «Возможный риск — …» / «Возможность — …» знак не задают."""
-    if not ins["risks"] and not ins["opportunities"]:
-        return "none"
-    firm_risk = any(not c["text"].startswith("Возможный риск —") for c in ins["risks"])
-    firm_opp = any(not c["text"].startswith("Возможность —") for c in ins["opportunities"])
-    return "mixed" if firm_risk and firm_opp else "neg" if firm_risk else "pos" if firm_opp else "unclear"
+    """Знак влияния по итоговым разделам — тот же, что метка effect в разборе и ленте."""
+    from app.agent import composer
+
+    return composer.overall_effect(ins)
 
 
 def golden_metrics(case: dict, news: dict, ins: dict) -> dict:

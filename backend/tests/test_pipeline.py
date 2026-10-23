@@ -49,6 +49,7 @@ def test_cycle_collects_news_and_prepares_cards(client, company, monkeypatch):
 
     feed = client.get("/api/v1/feed", params={"company_id": company["company_id"]}).json()["items"]
     ready = [i for i in feed[:3] if i["cached_insight_id"]]
+    assert all(i["cached_effect"] in {"neg", "pos", "mixed", "unclear", "none"} for i in ready), "метка знака в ленте"
     assert len(ready) == min(3, len(feed)), "лучшие новости ленты уже разобраны"
 
     again = asyncio.run(pipeline.cycle())

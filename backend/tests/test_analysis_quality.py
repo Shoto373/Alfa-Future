@@ -147,3 +147,37 @@ def test_sanctions_tightening_is_a_risk_for_exposed_sector():
 
     assert composer._effect("sanctions_geopolitics", "up", -1) < 0
     assert composer._effect("sanctions_geopolitics", "down", -1) > 0
+
+
+@pytest.mark.parametrize("risks,opps,expected", [
+    ([], [], "none"),
+    (["Стоимость заимствований может вырасти"], [], "neg"),
+    ([], ["Валютная выручка дает больше рублей"], "pos"),
+    (["Издержки растут"], ["Спрос растет"], "mixed"),
+    (["Возможный риск — издержки растут."], ["Возможность — спрос растет."], "unclear"),
+    (["Возможный риск — издержки растут."], ["Спрос растет"], "pos"),
+])
+def test_overall_effect_label(risks, opps, expected):
+    from app.agent import composer
+
+    claim = lambda text: {"text": text, "origin": "ai", "source_ids": [], "features": []}
+    card = {"risks": [claim(t) for t in risks], "opportunities": [claim(t) for t in opps]}
+    assert composer.overall_effect(card) == expected
+
+
+def test_insight_and_feed_carry_effect(client, company):
+    import asyncio
+
+    from app import storage
+    from app.agent import composer, orchestrator
+    from app.news import store
+
+    news = store.make_item("Банк России повысил ключевую ставку до 16%",
+                           "Совет директоров Банка России повысил ключевую ставку до 16% годовых.", "Проверка")
+    ins = asyncio.run(orchestrator.run(company, "cfo", news, "req_effect", use_llm=False))
+    assert ins["effect"] == composer.overall_effect(ins) and ins["effect"] != "none"
+
+    store.add(news)
+    storage.save_insight(ins)
+    refs = storage.cached_insight_refs(company["company_id"], "cfo", [news["news_id"]])
+    assert refs[news["news_id"]] == (ins["insight_id"], ins["effect"])

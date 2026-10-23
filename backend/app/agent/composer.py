@@ -123,6 +123,22 @@ QUESTIONS = {
 
 ORIGIN_SOURCE = {"client_data": "client:profile", "payments": "client:payments", "sector_model": "client:profile"}
 
+# Оговорки, когда знак влияния зависит от операций компании: такие выводы не задают общий знак события.
+HEDGED_RISK, HEDGED_OPP = "Возможный риск —", "Возможность —"
+
+
+def overall_effect(card: dict) -> str:
+    """Общий знак события для компании по итоговым разделам разбора (метка в ленте и шапке разбора).
+
+    neg — скорее риск, pos — скорее возможность, mixed — и то и другое, unclear — зависит от операций
+    компании (только оговорки), none — влияния на бизнес не найдено.
+    """
+    if not card["risks"] and not card["opportunities"]:
+        return "none"
+    risk = any(not c["text"].startswith(HEDGED_RISK) for c in card["risks"])
+    opp = any(not c["text"].startswith(HEDGED_OPP) for c in card["opportunities"])
+    return "mixed" if risk and opp else "neg" if risk else "pos" if opp else "unclear"
+
 
 def _claim(text: str, origin: str, sources: list[str], features: list[str] | None = None) -> dict:
     return {"text": text, "origin": origin, "source_ids": sources, "features": features or []}
@@ -250,10 +266,10 @@ def compose(ctx: dict) -> dict:
         if groups["amb"]:
             srcs, feats = basis(groups["amb"])
             if not groups["neg"]:
-                risks.append(_claim(f"Возможный риск — {neg}. Знак влияния зависит от развития ситуации и структуры операций компании: "
+                risks.append(_claim(f"{HEDGED_RISK} {neg}. Знак влияния зависит от развития ситуации и структуры операций компании: "
                                     f"{because(groups['amb'])}.", "ai", srcs, feats))
             if not groups["pos"]:
-                opps.append(_claim(f"Возможность — {pos}, если ситуация развернется в пользу компании: "
+                opps.append(_claim(f"{HEDGED_OPP} {pos}, если ситуация развернется в пользу компании: "
                                    f"{because(groups['amb'])}.", "ai", srcs, feats))
     risks = _dedupe(risks)[:4]
     opps = _dedupe(opps)[:4]

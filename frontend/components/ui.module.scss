@@ -72,6 +72,45 @@ $tile-colors: (
   background: var(--muted);
 }
 
+.effect {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+
+  &::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+}
+
+.effectNeg {
+  background: var(--red-soft);
+  color: var(--red-dark);
+}
+
+.effectPos {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.effectMixed {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.effectUnclear {
+  background: var(--bg);
+  color: var(--ink-2);
+}
+
 .origin {
   font-size: 10.5px;
   font-weight: 700;

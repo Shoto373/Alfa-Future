@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { date } from "@/lib/format";
 import type { Claim, Insight, Source } from "@/lib/types";
 import Chat from "./Chat";
-import { Card, Icon, OriginTag, Score } from "./ui";
+import { Card, EffectBadge, Icon, OriginTag, Score } from "./ui";
 import styles from "@/components/InsightView.module.scss";
 import common from "@/styles/common.module.scss";
 
@@ -119,6 +119,7 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
       <div className={styles.insightHead} data-testid="insight-header">
         <div className={styles.insightBadges}>
           <Score value={ins.relevance.score} />
+          <EffectBadge effect={ins.effect} />
         </div>
         <p className={styles.newsTitle}>{ins.title}</p>
         <h1>{ins.headline}</h1>

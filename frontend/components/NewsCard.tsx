@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { date } from "@/lib/format";
 import type { FeedItem } from "@/lib/types";
-import { Score } from "./ui";
+import { EffectBadge, Score } from "./ui";
 import styles from "@/components/NewsCard.module.scss";
 import common from "@/styles/common.module.scss";
 
@@ -22,6 +22,7 @@ export default function NewsCard({ item, compact = false }: { item: FeedItem; co
         <span>{date(news.published_at)}</span>
         {news.kind === "user" && <span className={styles.kind}>Добавлено вами</span>}
         {news.duplicates > 0 && <span className={styles.kind}>+{news.duplicates} источн.</span>}
+        <EffectBadge effect={item.cached_effect} className={styles.effect} />
       </div>
       <h3><Link href={`/pulse/n/${encodeURIComponent(news.news_id)}`}>{news.title}</Link></h3>
       {!compact && <p className={styles.lead}>{news.lead}</p>}
