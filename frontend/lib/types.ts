@@ -88,7 +88,7 @@ export interface Insight {
   created_at: string;
   mode: "llm" | "rules";
   model: string | null;
-  fallback_reason?: "disabled" | "budget" | "unavailable" | "checks" | null;
+  fallback_reason?: "paused" | "disabled" | "budget" | "unavailable" | "checks" | null;
   title: string;
   headline: string;
   effect?: Effect | null;

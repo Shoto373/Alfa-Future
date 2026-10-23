@@ -27,6 +27,7 @@ MESSAGES = {
     "MEMBER_EXISTS": "Участник с таким email уже добавлен в компанию",
     "LAST_ADMIN": "Нельзя убрать последнего администратора компании",
     "TOO_MANY_ATTEMPTS": "Слишком много неудачных попыток входа, повторите позже",
+    "RATE_LIMITED": "Слишком много запросов к AI за час, повторите позже",
 }
 
 STATUS = {
@@ -52,6 +53,7 @@ STATUS = {
     "MEMBER_EXISTS": 409,
     "LAST_ADMIN": 409,
     "TOO_MANY_ATTEMPTS": 429,
+    "RATE_LIMITED": 429,
 }
 
 

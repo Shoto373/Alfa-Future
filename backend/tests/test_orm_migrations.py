@@ -33,7 +33,7 @@ def test_legacy_adoption_keeps_records_and_removes_custom_versioning():
     with database.session() as db:
         assert db.scalar(select(Event.payload)) == {"preserve": [1, "original"]}
         assert "schema_migrations" not in inspect(db.connection()).get_table_names()
-        assert MigrationContext.configure(db.connection(), opts={"version_table_schema": database.schema()}).get_current_revision() == "0004"
+        assert MigrationContext.configure(db.connection(), opts={"version_table_schema": database.schema()}).get_current_revision() == "0005"
 
 
 def test_unknown_legacy_schema_is_not_stamped():

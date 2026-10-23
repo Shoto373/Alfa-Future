@@ -43,6 +43,10 @@ class NewsCreateRequest(Strict):
     url: str | None = Field(None, max_length=2000)
 
 
+class LLMSwitchRequest(Strict):
+    paused: bool
+
+
 class FeedbackRequest(Strict):
     insight_id: str = Field(..., min_length=1, max_length=64)
     rating: Literal[1, -1]
@@ -142,8 +146,8 @@ class Insight(Strict):
     created_at: str
     mode: Literal["llm", "rules"]
     model: str | None
-    # Почему разбор на правилах: модель не подключена, лимит бюджета, модель не ответила, выводы не прошли проверки.
-    fallback_reason: Literal["disabled", "budget", "unavailable", "checks"] | None = None
+    # Почему разбор на правилах: AI выключен банком, не подключен, лимит бюджета, модель не ответила, не прошли проверки.
+    fallback_reason: Literal["paused", "disabled", "budget", "unavailable", "checks"] | None = None
     title: str
     headline: str
     effect: Effect | None = None  # None — карточки, созданные до появления поля

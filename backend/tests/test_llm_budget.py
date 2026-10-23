@@ -236,3 +236,115 @@ def test_cached_rules_card_reports_disabled_when_opened_without_key(client, comp
     assert client.post("/api/v1/insights", json={**body, "fast": True}).json()["fallback_reason"] is None
     opened = client.post("/api/v1/insights", json=body).json()
     assert opened["insight_id"] == card["insight_id"] and opened["fallback_reason"] == "disabled"
+
+
+# --- Защита общего бюджета: доля компании, частота, один разбор, оповещения, экономный режим, выключатель ---
+
+def test_one_company_cannot_spend_the_whole_day(client, gateway, monkeypatch):
+    _, cost = gateway
+    monkeypatch.setenv("LLM_DAILY_COST_LIMIT", str(round(cost * 10.5, 4)))
+    monkeypatch.setenv("LLM_COMPANY_SHARE", "0.2")  # 20% лимита — ровно 2 вызова на компанию
+    with llm_usage.for_company("A"):
+        results = [_call(i) for i in range(4)]
+    assert results.count("ok") == 2 and all("доля компании" in r for r in results if r != "ok")
+    with llm_usage.for_company("B"):
+        assert _call(0) == "ok", "доля другой компании не тронута"
+    rows = {r["company_id"]: r for r in llm_usage.by_company()}
+    assert rows["A"]["calls"] == 2 and rows["A"]["rejected_by_share"] == 2 and rows["B"]["calls"] == 1
+    assert llm_usage.usage()["reserved_cost"] == 0
+
+
+def test_refresh_and_questions_are_rate_limited_per_user(client, company, gateway, monkeypatch):
+    monkeypatch.setenv("LLM_USER_REFRESH_PER_HOUR", "2")
+    monkeypatch.setenv("LLM_USER_QUESTIONS_PER_HOUR", "1")
+    req = {"company_id": company["company_id"], "news_id": "seed-rate-hold", "force_refresh": True}
+    assert client.post("/api/v1/insights", json=req).status_code == 200
+    ins = client.post("/api/v1/insights", json=req).json()
+    r = client.post("/api/v1/insights", json=req)
+    assert r.status_code == 429 and r.json()["error"]["code"] == "RATE_LIMITED"
+    assert client.post(f"/api/v1/insights/{ins['insight_id']}/questions", json={"question": "Что дальше?"}).status_code == 200
+    r = client.post(f"/api/v1/insights/{ins['insight_id']}/questions", json={"question": "А риски?"})
+    assert r.status_code == 429 and r.json()["error"]["code"] == "RATE_LIMITED"
+
+
+def test_rate_limit_is_off_without_model(client, company, monkeypatch):
+    monkeypatch.setenv("LLM_USER_REFRESH_PER_HOUR", "1")
+    req = {"company_id": company["company_id"], "news_id": "seed-rate-hold", "force_refresh": True}
+    assert all(client.post("/api/v1/insights", json=req).status_code == 200 for _ in range(3)), "без модели запрос бесплатен"
+
+
+def test_same_analysis_is_built_once(client, company, monkeypatch):
+    import asyncio
+
+    from app.agent import orchestrator
+    from app.news import store
+
+    real, calls = orchestrator.run, []
+
+    async def slow(*a, **k):
+        calls.append(1)
+        await asyncio.sleep(0.2)  # второй запрос приходит, пока первый строится
+        return await real(*a, **k)
+
+    monkeypatch.setattr(orchestrator, "run", slow)
+    news = store.get("seed-rate-hold")
+
+    async def both():
+        return await asyncio.gather(orchestrator.run_once(company, "cfo", news, "req_a"),
+                                    orchestrator.run_once(company, "cfo", news, "req_b"))
+
+    (first, lead_a), (second, lead_b) = asyncio.run(both())
+    assert len(calls) == 1 and first["insight_id"] == second["insight_id"] and {lead_a, lead_b} == {True, False}
+    asyncio.run(orchestrator.run_once(company, "cfo", news, "req_c"))
+    assert len(calls) == 2, "после завершения следующий запрос строит заново (кэш — забота API)"
+
+
+def test_budget_alerts_fire_once_per_threshold(client, monkeypatch):
+    from app import notify
+
+    sent = []
+    monkeypatch.setattr(notify, "send_async", sent.append)
+    monkeypatch.setenv("LLM_DAILY_COST_LIMIT", "1")
+    llm_usage.commit(llm_usage.reserve(MODEL, 30, 10), 100, 0.6)   # 60% — порог 50%
+    llm_usage.commit(llm_usage.reserve(MODEL, 30, 10), 100, 0.25)  # 85% — порог 80%
+    llm_usage.commit(llm_usage.reserve(MODEL, 30, 10), 100, 0.05)  # 90% — новых порогов нет
+    assert len(sent) == 2 and "50%" in sent[0] and "80%" in sent[1]
+    with pytest.raises(llm_usage.BudgetExceeded):
+        llm_usage.reserve(MODEL, 30, 2000)                         # не помещается — 100%, вызовы отклоняются
+    with pytest.raises(llm_usage.BudgetExceeded):
+        llm_usage.reserve(MODEL, 30, 2000)
+    assert len(sent) == 3 and "100%" in sent[2], "о исчерпании — одно сообщение, не на каждый отказ"
+
+
+def test_economy_model_near_the_limit(client, gateway, monkeypatch):
+    models = []
+    real = llm.httpx.post
+
+    def capture(url, json, timeout, headers):
+        models.append(json["model"])
+        return real(url, json=json, timeout=timeout, headers=headers)
+
+    monkeypatch.setattr(llm.httpx, "post", capture)
+    monkeypatch.setenv("LLM_DAILY_COST_LIMIT", "100")
+    llm.chat_json(SYSTEM, USER, "compose", MAX_TOKENS)
+    llm_usage.commit(llm_usage.reserve(MODEL, 30, 10), 1000, 85)  # потрачено 85% дня
+    llm.chat_json(SYSTEM, USER, "compose", MAX_TOKENS)
+    llm.chat_json(SYSTEM, USER, "plan", MAX_TOKENS)
+    assert models == [MODEL, "z-ai/glm-5.3-flash", "z-ai/glm-5.3-flash"], "у края лимита черновик пишет GLM"
+
+
+def test_operator_can_pause_ai_without_removing_key(client, company, gateway, new_client, monkeypatch):
+    import asyncio
+
+    from app.agent import orchestrator
+    from app.news import store
+
+    assert client.post("/api/v1/ops/llm", json={"paused": True}).status_code == 403, "администратор клиента — не банк"
+    monkeypatch.setenv("OPERATOR_EMAILS", "owner@example.com")
+    assert client.post("/api/v1/ops/llm", json={"paused": True}).json()["paused"] is True
+    assert not llm.available() and llm.configured()
+    ins = asyncio.run(orchestrator.run(company, "cfo", store.get("seed-rate-hold"), "req_paused"))
+    assert ins["mode"] == "rules" and ins["fallback_reason"] == "paused"
+    assert llm_usage.usage()["calls"] == 0, "модель не вызывалась"
+    state = client.post("/api/v1/ops/llm", json={"paused": False}).json()
+    assert state["paused"] is False and state["connected"] is True and state["by"] == "owner@example.com"

@@ -48,8 +48,14 @@ def configured() -> bool:
     return bool(s["base_url"] and s["api_key"])
 
 
+def unavailable_reason() -> str:
+    """Почему модель сейчас не вызывается — для плашки в карточке: paused, disabled или unavailable."""
+    return "paused" if llm_usage.paused() else "unavailable" if configured() else "disabled"
+
+
 def available() -> bool:
-    return configured() and time.monotonic() >= _down_until
+    """Ключ задан, шлюз не на паузе после сбоя и сотрудник банка не выключил AI."""
+    return configured() and time.monotonic() >= _down_until and not llm_usage.paused()
 
 
 def _post(payload: dict, s: dict) -> httpx.Response:
@@ -104,6 +110,11 @@ def chat_json(system: str, user: str, model_kind: str = "compose", max_tokens: i
     model = s["models"].get(model_kind)
     if not model:
         raise LLMError(f"Неизвестная роль модели: {model_kind}")
+    if model_kind in ("compose", "qa"):
+        # У края дневного лимита черновики и ответы чата пишет более дешевая модель: AI-версии держатся дольше.
+        economy_at, economy_model = config.llm_economy()
+        if llm_usage.spent_share() >= economy_at:
+            model = economy_model
     if not is_allowed(model):
         raise LLMError(f"Модель {model} не входит в список разрешенных кейсом")
     try:

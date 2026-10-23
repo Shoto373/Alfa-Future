@@ -134,11 +134,25 @@ class LLMUsageModel(Base):
     errors: Mapped[int] = mapped_column(Integer, server_default="0")
 
 
+class LLMUsageCompany(Base):
+    """Дневной учет по компании-клиенту: одна компания не может израсходовать общий бюджет (LLM_COMPANY_SHARE)."""
+    __tablename__ = "llm_usage_companies"
+    day: Mapped[date] = mapped_column(ForeignKey("llm_usage.day"), primary_key=True)
+    company_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tokens: Mapped[int] = mapped_column(BigInteger, server_default="0")
+    cost: Mapped[Decimal] = mapped_column(Numeric, server_default="0")
+    calls: Mapped[int] = mapped_column(Integer, server_default="0")
+    reserved_tokens: Mapped[int] = mapped_column(BigInteger, server_default="0")
+    reserved_cost: Mapped[Decimal] = mapped_column(Numeric, server_default="0")
+    rejected: Mapped[int] = mapped_column(Integer, server_default="0")
+
+
 class LLMReservation(Base):
     """Резерв одного идущего вызова LLM: снимается при списании факта, ошибке или через 10 минут."""
     __tablename__ = "llm_reservations"
     id: Mapped[str] = mapped_column(Text, primary_key=True)
     day: Mapped[date] = mapped_column(ForeignKey("llm_usage.day"))
+    company_id: Mapped[str | None] = mapped_column(Text)
     tokens: Mapped[int] = mapped_column(BigInteger)
     cost: Mapped[Decimal] = mapped_column(Numeric)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

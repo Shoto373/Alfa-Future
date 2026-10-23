@@ -90,26 +90,26 @@ def test_insight_errors(client, company, monkeypatch):
     body = json.dumps(base | {"pad": "x" * MAX_BODY_BYTES}).encode()
     assert_error(client.post("/api/v1/insights", content=body, headers={"Content-Type": "application/json"}), 413, "REQUEST_TOO_LARGE")
 
-    async def unavailable(*a):
+    async def unavailable(*a, **k):
         raise AnalysisUnavailable()
 
     monkeypatch.setattr(orchestrator, "run", unavailable)
     assert_error(client.post("/api/v1/insights", json=base | {"force_refresh": True}), 503, "ANALYSIS_UNAVAILABLE")
 
-    async def slow(*a):
+    async def slow(*a, **k):
         await asyncio.sleep(5)
 
     monkeypatch.setenv("ANALYSIS_TIMEOUT_SECONDS", "0.2")
     monkeypatch.setattr(orchestrator, "run", slow)
     assert_error(client.post("/api/v1/insights", json=base | {"force_refresh": True}), 504, "ANALYSIS_TIMEOUT")
 
-    async def wrong(company, role, news, request_id):
+    async def wrong(company, role, news, request_id, use_llm=None):
         return {"company_id": "other", "news_id": news["news_id"], "role": role, "request_id": request_id}
 
     monkeypatch.setattr(orchestrator, "run", wrong)
     assert_error(client.post("/api/v1/insights", json=base | {"force_refresh": True}), 500, "INVALID_ANALYSIS_RESULT")
 
-    async def boom(*a):
+    async def boom(*a, **k):
         raise RuntimeError("secret")
 
     monkeypatch.setattr(orchestrator, "run", boom)

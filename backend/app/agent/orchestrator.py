@@ -17,6 +17,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 
+from app import llm_usage
 from app.agent import composer, llm, prompts, review, validators
 from app.agent.tools import ToolError, ToolRunner
 from app.companies.sectors import SECTOR_NAMES
@@ -236,15 +237,60 @@ def _merge_llm(draft: dict, data: dict) -> dict:
     return draft
 
 
+_inflight: dict[tuple, asyncio.Future] = {}
+
+
+async def run_once(company: dict, role: str, news: dict, request_id: str, use_llm: bool | None = None) -> tuple[dict, bool]:
+    """Один и тот же разбор (компания, роль, новость, режим) не строится дважды одновременно.
+
+    Второй запрос, пришедший, пока первый еще строится (два сотрудника открыли одну новость, конвейер
+    и пользователь), ждет первый и получает его результат — модель вызывается и оплачивается один раз.
+    Возвращает (разбор, leader): leader=False — результат чужого запроса, сохранять его повторно не нужно.
+    Действует внутри процесса; разборы разных воркеров разводит кэш.
+    """
+    loop = asyncio.get_running_loop()
+    key = (company["company_id"], role, news["news_id"], use_llm is False)
+    shared = _inflight.get(key)
+    if shared is not None and shared.get_loop() is loop:
+        try:
+            return await asyncio.shield(shared), False
+        except asyncio.CancelledError:
+            if not shared.cancelled():
+                raise  # отменили этот запрос, а не первый
+    future = loop.create_future()
+    future.add_done_callback(lambda f: f.cancelled() or f.exception())  # ошибку без ждущих не логировать
+    _inflight[key] = future
+    try:
+        insight = await run(company, role, news, request_id, use_llm=use_llm)
+        future.set_result(insight)
+        return insight, True
+    except asyncio.CancelledError:
+        future.cancel()
+        raise
+    except BaseException as exc:
+        future.set_exception(exc)
+        raise
+    finally:
+        if _inflight.get(key) is future:
+            del _inflight[key]
+
+
 async def run(company: dict, role: str, news: dict, request_id: str, use_llm: bool | None = None) -> dict:
-    """use_llm=False — только правила (быстрый черновой разбор), None — LLM, если подключена."""
+    """use_llm=False — только правила (быстрый черновой разбор), None — LLM, если подключена.
+
+    Вызовы модели учитываются в доле компании в общем дневном бюджете (llm_usage.for_company)."""
+    with llm_usage.for_company(company["company_id"]):
+        return await _run(company, role, news, request_id, use_llm)
+
+
+async def _run(company: dict, role: str, news: dict, request_id: str, use_llm: bool | None = None) -> dict:
     trace = Trace()
     runner = ToolRunner(request_id)
     wanted = use_llm is not False  # модель нужна, если ее не отключили явно (быстрый разбор, правила конвейера)
     use_llm = llm.available() if use_llm is None else (use_llm and llm.available())
-    # Почему модель не дала итог — для плашки в карточке: disabled — ключ не задан, unavailable — шлюз
-    # не отвечает (предохранитель), budget — лимит, checks — выводы модели не прошли проверки.
-    fallback_reason = None if use_llm or not wanted else "unavailable" if llm.configured() else "disabled"
+    # Почему модель не дала итог — для плашки в карточке: paused — AI выключен банком, disabled — ключ
+    # не задан, unavailable — шлюз не отвечает, budget — лимит, checks — выводы модели не прошли проверки.
+    fallback_reason = None if use_llm or not wanted else llm.unavailable_reason()
     model = None
     started = time.perf_counter()
 

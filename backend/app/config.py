@@ -163,6 +163,22 @@ def llm_settings() -> dict:
     }
 
 
+def llm_company_share() -> float:
+    """Доля общего дневного бюджета LLM, которую может израсходовать одна компания-клиент."""
+    return float(_env("LLM_COMPANY_SHARE", "0.2"))
+
+
+def llm_user_limits() -> dict[str, int]:
+    """Запросы к модели на пользователя в час: «Пересчитать» и вопросы в чате (0 — без ограничения)."""
+    return {"refresh": int(_env("LLM_USER_REFRESH_PER_HOUR", "10")),
+            "question": int(_env("LLM_USER_QUESTIONS_PER_HOUR", "30"))}
+
+
+def llm_economy() -> tuple[float, str]:
+    """С какой доли дневного лимита черновики и ответы чата пишет более дешевая модель, и какая."""
+    return float(_env("LLM_ECONOMY_AT", "0.8")), _env("LLM_MODEL_ECONOMY", "z-ai/glm-5.3-flash")
+
+
 # Оценка цены, ₽ за 1000 токенов (вход + выход), с запасом — по замерам выбора моделей (см. llm_settings).
 # Нужна для резерва бюджета до ответа и для учета, если шлюз не вернул usage.cost; списывается факт.
 LLM_PRICES = {"deepseek": 0.06, "glm": 0.04, "gemma": 0.03, "qwen3-vl": 0.06, "qwen": 0.06, "kimi": 0.6}

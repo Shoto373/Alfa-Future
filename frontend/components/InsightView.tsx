@@ -33,8 +33,10 @@ const CHECK: Record<string, string> = {
 };
 
 // Почему показан разбор на правилах — по полю fallback_reason разбора.
+const INFO_REASONS = new Set(["disabled", "paused"]);
 const FALLBACK_NOTE: Record<string, string> = {
   disabled: "AI-модель не подключена — показан проверенный разбор на правилах: данные компании и аналитика банка учтены.",
+  paused: "AI временно выключен банком — показан проверенный разбор на правилах: данные компании и аналитика банка учтены.",
   budget: "Дневной лимит AI исчерпан — он обновится в 03:00 по Москве. Показан проверенный разбор на правилах: данные компании и аналитика банка учтены.",
   unavailable: "AI-модель сейчас не отвечает. Показан проверенный разбор на правилах — можно нажать «Пересчитать» позже.",
   checks: "Выводы AI-модели не прошли проверку фактов, поэтому показан проверенный разбор на правилах.",
@@ -147,8 +149,8 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
           </p>
         )}
         {!upgrading && upgradeFailed && ins.mode === "rules" && (
-          // Модель не подключена — штатный режим прототипа, не сбой: без предупреждающего оформления.
-          <p className={`${styles.upgradeNote} ${ins.fallback_reason === "disabled" ? styles.upgradeNoteInfo : styles.upgradeNoteWarn}`} role="status">
+          // Модель не подключена или выключена банком — штатный режим, не сбой: без предупреждающего оформления.
+          <p className={`${styles.upgradeNote} ${INFO_REASONS.has(ins.fallback_reason ?? "") ? styles.upgradeNoteInfo : styles.upgradeNoteWarn}`} role="status">
             {FALLBACK_NOTE[ins.fallback_reason ?? ""] ?? FALLBACK_NOTE.unknown}
           </p>
         )}

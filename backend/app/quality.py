@@ -18,10 +18,9 @@ import statistics
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
-import httpx
 from sqlalchemy import select
 
-from app import config, database, llm_usage
+from app import config, database, llm_usage, notify
 from app.models import Event, Feedback, Insight
 
 logger = logging.getLogger("app.quality")
@@ -116,12 +115,7 @@ def maybe_send_daily() -> bool:
     day = now.date().isoformat()
     if database.state(REPORT_KEY) == day:
         return False
-    text = report_text(daily())
-    try:
-        httpx.post(f"https://api.telegram.org/bot{token}/sendMessage", timeout=15,
-                   data={"chat_id": chat, "text": text, "parse_mode": "HTML", "disable_web_page_preview": "true"})
-    except httpx.HTTPError:
-        logger.warning("quality report: telegram unavailable")
+    if not notify.send(report_text(daily())):
         return False
     with database.session() as db:
         database.set_state(REPORT_KEY, day, db)

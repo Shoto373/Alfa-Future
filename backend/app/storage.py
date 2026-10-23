@@ -3,11 +3,11 @@
 import hashlib
 import time
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app import config, database, llm_usage
 from app.agent import llm
-from sqlalchemy import select
+from sqlalchemy import func, select
 from app.models import AppState, Insight, Feedback, Answer, Event
 
 # Меняется, когда правила меняют содержание карточек: старые перестают быть актуальным кэшем.
@@ -168,6 +168,16 @@ def log_event(kind: str, **data) -> None:
     _append("events", {"kind": kind} | data)
 
 
+def count_events(kind: str, within_seconds: int, **match) -> int:
+    """События вида kind за последние within_seconds с совпадающими полями (лимиты частоты запросов)."""
+    since = datetime.now(timezone.utc) - timedelta(seconds=within_seconds)
+    query = select(func.count()).select_from(Event).where(Event.kind == kind, Event.created_at >= since)
+    for key, value in match.items():
+        query = query.where(Event.payload[key].astext == str(value))
+    with database.session() as db:
+        return db.scalar(query) or 0
+
+
 def metrics() -> dict:
     insights = _read("insights")
     feedback = _read("feedback")
@@ -225,6 +235,8 @@ def metrics() -> dict:
             "reserved_cost": usage["reserved_cost"],
             "rejected_by_budget": usage["rejected_by_budget"],
             "llm_by_model": llm_usage.by_model(),
+            "llm_by_company": llm_usage.by_company(),
+            "llm_paused": llm_usage.pause_state(),
             "fallback_rate": round(llm_fallback / llm_tried, 3) if llm_tried else None,
         },
         "recent_feedback": [f for f in feedback[-10:] if f.get("comment")],

@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse
 
-from app import cache, config, embeddings, pipeline, storage, vectors
+from app import cache, config, embeddings, llm_usage, pipeline, storage, vectors
 from app.agent import audit, llm, orchestrator, qa
 from app.api.errors import ApiError
 from app.auth import store as auth_store
@@ -18,8 +18,8 @@ from app.knowledge import kb
 from app.news import parser, store
 from app.news.taxonomy import TOPICS
 from app.ranking import ROLES, company_feed
-from app.schemas import (Answer, ErrorResponse, FeedbackRequest, Insight, InsightRequest, NewsCreateRequest,
-                         QuestionRequest)
+from app.schemas import (Answer, ErrorResponse, FeedbackRequest, Insight, InsightRequest, LLMSwitchRequest,
+                         NewsCreateRequest, QuestionRequest)
 
 logger = logging.getLogger("app.api")
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(check_origin)])
@@ -56,6 +56,19 @@ def _company(company_id: str) -> dict:
 
 
 company_or_404 = _company
+
+
+def _limit_llm(user: dict, action: str) -> None:
+    """Частота запросов к модели на пользователя в час («Пересчитать», вопросы в чате).
+
+    Действует, только когда модель подключена: без нее запрос бесплатен. Защищает общий бюджет от
+    случайных и намеренных серий запросов; превышение — 429 RATE_LIMITED."""
+    per_hour = config.llm_user_limits()[action]
+    if not per_hour or not llm.available():
+        return
+    if storage.count_events("llm_request", 3600, user_id=user["user_id"], action=action) >= per_hour:
+        raise ApiError("RATE_LIMITED")
+    storage.log_event("llm_request", user_id=user["user_id"], action=action)
 
 
 def _news(news_id: str) -> dict:
@@ -200,6 +213,7 @@ async def create_insight(payload: InsightRequest, request: Request, user: dict =
     def prepare():
         c, n = _company(payload.company_id), _news(payload.news_id)
         if payload.force_refresh:
+            _limit_llm(user, "refresh")
             return c, n, None
         cached = storage.cached_insight(c["company_id"], role, n["news_id"])
         # Карточка на правилах пересчитывается моделью, если LLM подключена; быстрый запрос берет любую готовую.
@@ -213,11 +227,12 @@ async def create_insight(payload: InsightRequest, request: Request, user: dict =
         # Готовый разбор на правилах (часто — от конвейера, без модели) не знает, почему модели нет сейчас:
         # причина — состояние сервера в момент открытия, для плашки «не подключена» / «не отвечает».
         if cached["mode"] == "rules" and not cached.get("fallback_reason") and not payload.fast and not llm.available():
-            cached = {**cached, "fallback_reason": "unavailable" if llm.configured() else "disabled"}
+            cached = {**cached, "fallback_reason": llm.unavailable_reason()}
         return cached
     try:
-        job = orchestrator.run(c, role, n, request_id, use_llm=False) if payload.fast else orchestrator.run(c, role, n, request_id)
-        insight = await asyncio.wait_for(job, timeout=config.analysis_timeout())
+        # Тот же разбор уже строится (другой сотрудник, конвейер) — ждем его, а не платим за модель второй раз.
+        job = orchestrator.run_once(c, role, n, request_id, use_llm=False if payload.fast else None)
+        insight, leader = await asyncio.wait_for(job, timeout=config.analysis_timeout())
     except asyncio.TimeoutError:
         raise ApiError("ANALYSIS_TIMEOUT")
     except AnalysisUnavailable:
@@ -227,9 +242,12 @@ async def create_insight(payload: InsightRequest, request: Request, user: dict =
     except Exception:
         logger.exception("analysis failed request_id=%s", request_id)
         raise ApiError("INTERNAL_ERROR")
-    if (insight["company_id"], insight["news_id"], insight["role"], insight["request_id"]) != (
-            c["company_id"], n["news_id"], role, request_id):
+    if (insight["company_id"], insight["news_id"], insight["role"]) != (c["company_id"], n["news_id"], role) \
+            or (leader and insight["request_id"] != request_id):
         raise ApiError("INVALID_ANALYSIS_RESULT")
+    if not leader:  # разбор построил и сохраняет первый запрос
+        await asyncio.to_thread(storage.log_event, "insight_open", insight_id=insight["insight_id"], cached=True)
+        return insight
 
     def save():
         storage.save_insight(insight)
@@ -255,7 +273,9 @@ def ask(insight_id: str, payload: QuestionRequest, user: dict = Depends(current_
         raise ApiError("INSIGHT_NOT_FOUND")
     member_of(user, ins["company_id"])
     c = _company(ins["company_id"])
-    result = qa.answer(ins, c, payload.question.strip())
+    _limit_llm(user, "question")
+    with llm_usage.for_company(c["company_id"]):  # ответ модели — в доле компании в общем бюджете
+        result = qa.answer(ins, c, payload.question.strip())
     storage.save_answer(result)
     storage.log_event("question", insight_id=insight_id, refused=result["refused"], mode=result["mode"])
     return result
@@ -309,3 +329,15 @@ def analytics_pdf(doc_id: str):
 @router.get("/audit", responses=ERRORS, dependencies=[Depends(require_operator)])
 def audit_log(limit: int = Query(50, ge=1, le=500)) -> dict:
     return {"items": audit.tail(limit)}
+
+
+@router.get("/ops/llm", responses=ERRORS, dependencies=[Depends(require_operator)])
+def llm_switch_state() -> dict:
+    return llm_usage.pause_state() | {"connected": llm.available()}
+
+
+@router.post("/ops/llm", responses=ERRORS)
+def llm_switch(payload: LLMSwitchRequest, user: dict = Depends(require_operator)) -> dict:
+    """Выключатель AI для сотрудника банка: подозрение на утечку ключа, защита — без удаления ключа с сервера.
+    Пока выключено, разборы строятся правилами, в карточке — «AI временно выключен банком»."""
+    return llm_usage.set_paused(payload.paused, user["email"]) | {"connected": llm.available()}

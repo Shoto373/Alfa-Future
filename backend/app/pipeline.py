@@ -103,9 +103,11 @@ async def _analyze(company: dict, role: str, news: dict, use_llm: bool) -> dict 
 
     request_id = f"req_auto_{uuid.uuid4().hex}"
     try:
-        job = orchestrator.run(company, role, news, request_id, use_llm=use_llm)
-        insight = await asyncio.wait_for(job, timeout=config.analysis_timeout())
-        await asyncio.to_thread(storage.save_insight, insight)
+        # Тот же разбор уже строит пользователь — ждем его результат, модель вызывается один раз.
+        job = orchestrator.run_once(company, role, news, request_id, use_llm=use_llm)
+        insight, leader = await asyncio.wait_for(job, timeout=config.analysis_timeout())
+        if leader:
+            await asyncio.to_thread(storage.save_insight, insight)
     except Exception as exc:  # одна неудачная карточка не останавливает конвейер
         logger.warning("auto analysis failed company=%s news=%s llm=%s: %s",
                        company["company_id"], news["news_id"], use_llm, type(exc).__name__)
