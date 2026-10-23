@@ -14,9 +14,27 @@ _NUM = re.compile(r"\d+(?:[.,]\d+)?")
 _THOUSANDS = re.compile(r"(?<=\d)[  ](?=\d{3}(?!\d))")
 
 
+# Метки периодов аналитики («7М26», «2П27», «3К26») — обозначения, а не числовые утверждения.
+_PERIOD = re.compile(r"\b\d{1,2}[МПКMH]\d{2}\b")
+_YEAR = re.compile(r"^(19|20)\d{2}$")
+
+
 def _norm_numbers(text: str) -> set[str]:
     return {n.replace(",", ".").rstrip("0").rstrip(".") if "." in n.replace(",", ".") else n
             for n in _NUM.findall(_THOUSANDS.sub("", text))}
+
+
+def missing_numbers(text: str, cited: str, everything: str) -> set[str]:
+    """Числа утверждения, которых нет в указанных источниках.
+
+    Год (2027) и метку периода («2П27») достаточно найти в любом собранном источнике: это горизонт
+    планирования, а не числовой факт. Проценты, суммы и ставки должны быть в источнике, на который сослались.
+    """
+    labels = set(_PERIOD.findall(text))
+    missing = _norm_numbers(_PERIOD.sub(" ", text)) - _norm_numbers(cited)
+    years = {n for n in missing if _YEAR.match(n)}
+    known = _norm_numbers(everything)
+    return (missing - years) | (years - known) | {m for m in labels if m not in everything}
 
 
 def _claims(draft: dict) -> list[tuple[str, dict]]:
@@ -46,8 +64,7 @@ def claim_errors(section: str, c: dict, ctx: dict, source_ids: set[str]) -> set[
             errors.add("origin")
     if c.get("origin") == "client_data" and not any(s.startswith("client:") for s in ids):
         errors.add("origin")
-    grounded = _norm_numbers(" ".join(texts.get(s, "") for s in ids))
-    if _norm_numbers(c["text"]) - grounded:
+    if missing_numbers(c["text"], " ".join(texts.get(s, "") for s in ids), " ".join(texts.values())):
         errors.add("numbers")
     if c.get("origin") in ("ai", "client_data") and evidence.contradictions(c["text"], ctx["company"]):
         errors.add("contradictions")
@@ -89,8 +106,9 @@ def check(draft: dict, ctx: dict, source_ids: set[str], grounding_text: str) -> 
     # 4. Цифры в выводах есть в источниках (минимизация фактологических ошибок).
     ungrounded = []
     source_texts = evidence.source_texts(ctx)
+    everything = " ".join(source_texts.values())
     for section, c in _claims(draft):
-        bad = _norm_numbers(c["text"]) - _norm_numbers(" ".join(source_texts.get(s, "") for s in c["source_ids"]))
+        bad = missing_numbers(c["text"], " ".join(source_texts.get(s, "") for s in c["source_ids"]), everything)
         if bad:
             ungrounded.append((c["text"][:60], sorted(bad)))
     add("numbers_grounded", not ungrounded, "Все числа подтверждены источниками" if not ungrounded

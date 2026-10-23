@@ -23,6 +23,8 @@ CONNECT_TIMEOUT = 10.0
 BREAKER_SECONDS = 60.0  # после сбоя соединения LLM не вызывается, чтобы не ждать тайм-аут на каждом шаге
 
 _down_until = 0.0
+PRIMARY_RETRY_SECONDS = 300.0  # после сбоя основного шлюза запросы сразу идут на запасной
+_primary_down_until = 0.0
 
 
 def _budget_day() -> date:
@@ -50,16 +52,21 @@ def available() -> bool:
 
 def _post(payload: dict, s: dict) -> httpx.Response:
     """POST на основной адрес шлюза; при ошибке соединения — на запасной (LLM_FALLBACK_BASE_URL)."""
-    global _down_until
+    global _down_until, _primary_down_until
     timeout = httpx.Timeout(s["timeout"], connect=CONNECT_TIMEOUT)
     headers = {"Authorization": f"Bearer {s['api_key']}"}
     bases = [b for b in (s["base_url"], s["fallback_base_url"]) if b]
+    # Основной шлюз недавно не ответил — не ждем тайм-аут соединения на каждом вызове.
+    if len(bases) > 1 and time.monotonic() < _primary_down_until:
+        bases = bases[1:] + bases[:1]
     last: Exception | None = None
     for base in bases:
         try:
             return httpx.post(f"{base}/chat/completions", json=payload, timeout=timeout, headers=headers)
         except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
             last = exc
+            if base == s["base_url"]:
+                _primary_down_until = time.monotonic() + PRIMARY_RETRY_SECONDS
             logger.warning("llm gateway unreachable base=%s", base)
     _down_until = time.monotonic() + BREAKER_SECONDS
     raise last or httpx.ConnectError("no LLM base url")

@@ -27,12 +27,35 @@ COMPOSE_SYSTEM = f"""Ты — аналитик Альфа-Банка. Подго
 - features — ключи признаков компании из exposures[].feature, на которые опирается вывод;
 - действия конкретные для роли пользователя (role_focus — что важно этой роли), без общих советов;
 - если есть story — учитывай, тренд это или разовое событие, и ссылайся на эти новости по их source_id;
+- coverage — то же событие в других СМИ: сверь факты; если источники расходятся в цифрах или оценках,
+  напиши об этом в assumptions со ссылками на оба источника;
 - если данных не хватает — так и напиши в assumptions;
 - не утверждай наличие долга, импорта, экспорта или продуктов, если этого нет в профиле;
 - кратко: не больше 3 пунктов в каждом разделе, каждый text до 250 символов.
 {GUARD}
 Формат ответа: {{"facts": [Claim], "assumptions": [Claim], "why_important": [Claim], "risks": [Claim],
 "opportunities": [Claim], "actions": [Claim], "questions": [str]}}"""
+
+REPAIR_SYSTEM = f"""Ты — редактор аналитического агента банка. Детерминированная проверка нашла ошибки в утверждениях
+черновика. Исправь каждое утверждение так, чтобы оно прошло проверку, сохранив смысл, или удали его.
+Правила проверки:
+- source_ids — только из списка sources; каждое число в text должно встречаться в тексте одного из указанных источников;
+  если числа нет в источниках — перефразируй без него;
+- origin=fact — дословное предложение из текста новости (news:*); origin=bank — дословный тезис банка (bank:*);
+  пересказ или вывод — origin=ai со ссылкой на источник, на котором он основан;
+- origin=client_data — только со ссылкой client:profile или client:payments;
+- features — только из списка allowed_features;
+- не утверждай наличие у компании долга, импорта, экспорта или продуктов, если этого нет в профиле.
+errors: sources — неизвестный источник; numbers — число не найдено в указанных источниках; origin — тип источника
+не соответствует тексту; features — недоступный признак; contradictions — противоречит профилю компании.
+{GUARD}
+Формат: {{"claims": [{{"id": <id>, "drop": false, "text": str, "origin": str, "source_ids": [str], "features": [str]}}]}}
+Для удаления: {{"id": <id>, "drop": true}}."""
+
+STORY_SYSTEM = f"""Ты называешь новостной сюжет для ленты руководителя: по заголовкам сообщений разных СМИ
+об одном событии дай короткое нейтральное название (2–6 слов, без кавычек и оценок), понятное без контекста.
+Числа — только если они есть в заголовках. {GUARD}
+Формат: {{"label": "<название>"}}"""
 
 QA_SYSTEM = f"""Ты отвечаешь на уточняющий вопрос руководителя по уже подготовленной карточке анализа.
 Используй только контекст: карточку, профиль компании и найденные тезисы банка. Разделяй позицию банка (origin=bank)
@@ -66,6 +89,8 @@ def compose_user(ctx: dict, sources: list[dict]) -> str:
         "forecast_conflicts": ctx.get("forecast_conflicts", []),
         "story": [{"source_id": f"news:{n['news_id']}", "date": n["published_at"], "title": n["title"], "lead": n["lead"]}
                   for n in ctx.get("story", [])],
+        "coverage": [{"source_id": f"news:{n['news_id']}", "source": n["source"], "date": n["published_at"],
+                      "title": n["title"], "lead": n["lead"]} for n in ctx.get("coverage", [])],
         "products": [{"source_id": f"product:{p['id']}", "title": p["title"], "text": p["text"]} for p in ctx.get("products", [])],
         "role_focus": ctx.get("role_focus", []),
         "sources": [{"source_id": s["source_id"], "kind": s["kind"], "title": s["title"]} for s in sources],
@@ -78,3 +103,13 @@ def qa_user(insight: dict, company: dict, theses: list[dict], question: str) -> 
                        "bank_theses": [{"source_id": f"bank:{t['id']}", "text": t["text"], "doc": t["doc_title"]} for t in theses],
                        "sources": [s["source_id"] for s in insight["sources"]] + [f"bank:{t['id']}" for t in theses]},
                       ensure_ascii=False)
+
+
+def repair_user(bad: list[dict], source_texts: dict[str, str], allowed_features: list[str]) -> str:
+    """bad: [{id, section, claim, errors}] — только проблемные утверждения и тексты их возможных источников."""
+    return json.dumps({
+        "claims": [{"id": b["id"], "section": b["section"], "errors": sorted(b["errors"]), **{k: b["claim"].get(k) for k in
+                    ("text", "origin", "source_ids", "features")}} for b in bad],
+        "sources": [{"source_id": sid, "text": text[:1500]} for sid, text in source_texts.items()],
+        "allowed_features": allowed_features,
+    }, ensure_ascii=False)

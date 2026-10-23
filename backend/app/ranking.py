@@ -12,6 +12,7 @@ score = важность × (совпадение тем с экспозиция
 поднялась в ленте, а эксперт — как воспроизвести оценку.
 """
 
+import hashlib
 import math
 import re
 from datetime import datetime, timezone
@@ -26,9 +27,9 @@ from app.news.taxonomy import TOPICS
 
 ROLES = {
     "owner": {"name": "Собственник", "focus": {"sanctions_geopolitics": 1.3, "gdp_industry": 1.2, "consumer_demand": 1.2, "corporate_finance": 1.3, "construction_realestate": 1.1}},
-    "ceo": {"name": "Генеральный директор", "focus": {"consumer_demand": 1.3, "gdp_industry": 1.3, "imports_exports": 1.2, "sanctions_geopolitics": 1.2, "labor": 1.2, "key_rate": 1.0}},
-    "cfo": {"name": "Финансовый директор", "focus": {"key_rate": 1.4, "credit_market": 1.3, "bonds": 1.3, "fx": 1.3, "deposits": 1.2, "inflation": 1.2, "corporate_finance": 1.2}},
-    "accountant": {"name": "Главный бухгалтер", "focus": {"budget": 1.4, "imports_exports": 1.2, "labor": 1.1, "corporate_finance": 1.2}},
+    "ceo": {"name": "Генеральный директор", "focus": {"consumer_demand": 1.3, "gdp_industry": 1.3, "imports_exports": 1.2, "sanctions_geopolitics": 1.2, "labor": 1.2, "logistics": 1.2, "key_rate": 1.0}},
+    "cfo": {"name": "Финансовый директор", "focus": {"key_rate": 1.4, "credit_market": 1.3, "bonds": 1.3, "fx": 1.3, "deposits": 1.2, "inflation": 1.2, "corporate_finance": 1.2, "taxes_regulation": 1.2}},
+    "accountant": {"name": "Главный бухгалтер", "focus": {"taxes_regulation": 1.5, "budget": 1.2, "imports_exports": 1.2, "labor": 1.1, "corporate_finance": 1.2}},
     "treasurer": {"name": "Руководитель казначейства", "focus": {"key_rate": 1.4, "fx": 1.4, "deposits": 1.3, "bonds": 1.3, "credit_market": 1.2}},
     "clevel": {"name": "Другой C-level руководитель", "focus": {"gdp_industry": 1.1, "consumer_demand": 1.1, "labor": 1.1}},
 }
@@ -41,8 +42,17 @@ REGION_WEIGHT = 0.5
 # не про регион; к тому же здесь половина компаний — сигнал региона для них не различает новости.
 REGION_SKIP = {"москв", "московск"}
 COUNTERPARTY_MIN_SHARE = 0.15
+FEEDBACK_STEP, FEEDBACK_MIN, FEEDBACK_MAX = 0.1, 0.6, 1.3
 STORY_SIMILARITY = 0.88  # заголовки ближе этого — один сюжет из разных источников
 NOW_OVERRIDE: datetime | None = None  # для тестов
+
+
+def _topic_feedback(company_id: str, role: str) -> dict[str, int]:
+    from app import storage
+    try:
+        return storage.topic_feedback(company_id, role)
+    except Exception:  # оценки — уточнение, а не условие ранжирования
+        return {}
 
 
 def _age_days(published_at: str) -> float:
@@ -126,6 +136,20 @@ def score(news: dict, company_id: str, role: str) -> dict:
 
     role_spec = ROLES.get(role, ROLES["ceo"])
     role_mult = sum(share * role_spec["focus"].get(t, 1.0) for t, share in shares.items()) if shares else 1.0
+
+    # Обратная связь: оценки разборов этой компании и роли поднимают или опускают темы (×0.6…×1.3).
+    feedback_mult = 1.0
+    net = _topic_feedback(company_id, role)
+    if net and shares:
+        feedback_mult = sum(share * min(FEEDBACK_MAX, max(FEEDBACK_MIN, 1 + FEEDBACK_STEP * net.get(t, 0)))
+                            for t, share in shares.items())
+        liked = [TOPICS[t]["name"] for t in shares if net.get(t, 0) > 0 and t in TOPICS]
+        disliked = [TOPICS[t]["name"] for t in shares if net.get(t, 0) < 0 and t in TOPICS]
+        if liked or disliked:
+            reasons.append({"kind": "feedback", "feature": "feedback", "origin": "user", "weight": round(feedback_mult, 2),
+                            "text": "Учтены ваши оценки: " + "; ".join(
+                                ([f"полезно — {', '.join(liked)}"] if liked else []) +
+                                ([f"не интересно — {', '.join(disliked)}"] if disliked else []))})
     if role_mult > 1.05:
         reasons.append({"kind": "role", "feature": "role", "origin": "user", "weight": round(role_mult, 2),
                         "text": f"Тема в фокусе роли «{role_spec['name']}»"})
@@ -140,7 +164,8 @@ def score(news: dict, company_id: str, role: str) -> dict:
     freshness = 0.5 ** (age / HALF_LIFE_DAYS)
     importance = 0.5 + sum(share * TOPICS[t]["importance"] for t, share in shares.items() if t in TOPICS)
     # No permanent 40% freshness floor: old external events must leave the feed.
-    raw = importance * (exposure_sum + direct + supply_chain + country_hit + region_hit) * role_mult * strength_mult * freshness
+    raw = importance * (exposure_sum + direct + supply_chain + country_hit + region_hit) * role_mult * strength_mult * freshness \
+        * feedback_mult
     value = round(100 * (1 - math.exp(-raw / 2.5)), 1)
 
     reasons.sort(key=lambda r: r["weight"], reverse=True)
@@ -149,7 +174,31 @@ def score(news: dict, company_id: str, role: str) -> dict:
 
 
 def _collapse_stories(ranked: list[dict]) -> list[dict]:
-    """Один сюжет из разных источников показывается один раз: похожие заголовки склеиваются."""
+    """Один сюжет из разных источников показывается один раз.
+
+    Сначала — по сюжетам хранилища (новости одного события и его продолжения), затем —
+    по похожим заголовкам среди оставшихся. story_size — сколько еще сообщений у сюжета.
+    """
+    from app.news import store
+
+    by_story: dict[str, dict] = {}
+    kept_rows = []
+    for r in ranked:
+        news_id = r["news"].get("news_id")
+        info = store.story(news_id) if news_id else None
+        if info is None or info["size"] < 2:
+            kept_rows.append(r)
+            continue
+        if info["story_id"] in by_story:
+            continue  # менее релевантное сообщение того же сюжета
+        r["story_id"], r["story_size"] = info["story_id"], info["size"] - 1
+        by_story[info["story_id"]] = r
+        kept_rows.append(r)
+    return _collapse_titles(kept_rows)
+
+
+def _collapse_titles(ranked: list[dict]) -> list[dict]:
+    """Похожие заголовки склеиваются (для новостей, у которых нет сюжета)."""
     vectors = embeddings.embed([r["news"]["title"] for r in ranked]) if len(ranked) > 1 else None
     if vectors is None:
         return ranked
@@ -196,15 +245,18 @@ def company_feed(company_id: str, role: str, limit: int = 500) -> list[dict]:
 
     if NOW_OVERRIDE is not None:  # тесты с фиксированным временем считают ленту напрямую
         return feed(store.all_items(), company_id, role, None, limit)
-    key = f"feed:v1:{company_id}:{role}:{limit}:{store.revision()}:{profiles.signature()}:{embeddings.signature()}"
+    # Оценки пользователей меняют ранжирование — их отпечаток входит в ключ.
+    feedback = hashlib.sha1(repr(sorted(_topic_feedback(company_id, role).items())).encode()).hexdigest()[:10]
+    key = (f"feed:v2:{company_id}:{role}:{limit}:{store.revision()}:{profiles.signature()}:{embeddings.signature()}"
+           f":fb{feedback}")
     hit = cache.get(key)
     if hit is not None:
         rows = [(store.get(r["news_id"]), r) for r in hit]
         if all(n is not None for n, _ in rows):
-            return [{"news": n, "relevance": r["relevance"], **({"story_size": r["story_size"]} if "story_size" in r else {})}
+            return [{"news": n, "relevance": r["relevance"], **{k: r[k] for k in ("story_size", "story_id") if k in r}}
                     for n, r in rows]
     result = feed(store.all_items(), company_id, role, None, limit)
     cache.set(key, [{"news_id": r["news"]["news_id"], "relevance": r["relevance"],
-                     **({"story_size": r["story_size"]} if "story_size" in r else {})} for r in result],
+                     **({k: r[k] for k in ("story_size", "story_id") if k in r})} for r in result],
               config.feed_cache_seconds())
     return result

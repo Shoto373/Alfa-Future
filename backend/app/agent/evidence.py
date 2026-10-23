@@ -49,16 +49,18 @@ def source_texts(ctx: dict) -> dict[str, str]:
     profile += f" {(c.get('market', {}).get('okved_share') or 0) * 100:.1f}%"
     payments = json.dumps({k: c.get(k) for k in ("suppliers", "customers")}, ensure_ascii=False)
     for side in ("suppliers", "customers"):
+        # Доли — и округленные, и с одним знаком: модель пишет «24,7%», правила — «25%».
         for s in c.get(side, {}).get("by_sector", []):
-            payments += f" {s['share'] * 100:.0f}%"
+            payments += f" {s['share'] * 100:.0f}% {s['share'] * 100:.1f}%"
         if c.get(side, {}).get("top1_share") is not None:
-            payments += f" {c[side]['top1_share'] * 100:.0f}%"
+            payments += f" {c[side]['top1_share'] * 100:.0f}% {c[side]['top1_share'] * 100:.1f}%"
         total = c.get(side, {}).get("total_amount")
         if total:  # суммы платежей в тех единицах, в которых их пишут в тексте
             payments += f" {total / 1e6:.1f} млн руб. {total / 1e9:.2f} млрд руб."
     result = {f"news:{ctx['news']['news_id']}": safe_text(ctx["news"]["title"] + " " + ctx["news"]["text"]),
               "client:profile": profile, "client:payments": payments}
-    result.update({f"news:{n['news_id']}": safe_text(f"{n['title']} {n['lead']} {n['published_at']}") for n in ctx.get("story", [])})
+    result.update({f"news:{n['news_id']}": safe_text(f"{n['title']} {n['lead']} {n['published_at']}")
+                   for n in ctx.get("story", []) + ctx.get("coverage", [])})
     result.update({f"bank:{t['id']}": t["text"] for t in ctx.get("theses", [])})
     result.update({f"product:{p['id']}": p["text"] for p in ctx.get("products", [])})
     return result

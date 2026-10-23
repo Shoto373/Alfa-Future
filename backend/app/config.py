@@ -94,8 +94,38 @@ def rss_max_items() -> int:
     return int(_env("RSS_MAX_ITEMS", "30"))
 
 
+def rss_full_text() -> bool:
+    """Скачивать полный текст статьи по ссылке из RSS (анонс ленты — запасной вариант)."""
+    return _env("RSS_FULL_TEXT", "1").lower() not in ("0", "false", "no", "off")
+
+
 def rss_refresh_minutes() -> int:
-    return int(_env("RSS_REFRESH_MINUTES", "0"))
+    """Период автоматического конвейера (сбор RSS и разборы); 0 — выключен."""
+    return int(_env("RSS_REFRESH_MINUTES", "15"))
+
+
+def pipeline_rules_top() -> int:
+    """Сколько самых релевантных новостей ленты конвейер разбирает правилами на пару «компания — роль»."""
+    return int(_env("PIPELINE_RULES_TOP", "10"))
+
+
+def pipeline_llm_per_cycle() -> int:
+    """Сколько карточек конвейер пересчитывает моделью за цикл (0 — только правила)."""
+    return int(_env("PIPELINE_LLM_PER_CYCLE", "5"))
+
+
+def pipeline_llm_share() -> float:
+    """Доля дневного лимита LLM, которую может потратить конвейер; остальное — запросам пользователей."""
+    return float(_env("PIPELINE_LLM_SHARE", "0.5"))
+
+
+def pipeline_story_labels() -> int:
+    """Сколько новых сюжетов конвейер называет моделью за цикл."""
+    return int(_env("PIPELINE_STORY_LABELS", "5"))
+
+
+def pipeline_start_delay() -> float:
+    return float(_env("PIPELINE_START_DELAY_SECONDS", "15"))
 
 
 def llm_settings() -> dict:
@@ -112,6 +142,8 @@ def llm_settings() -> dict:
             "compose": _env("LLM_MODEL_COMPOSE", "deepseek/deepseek-v4.1-flash"),
             "review": _env("LLM_MODEL_REVIEW", "z-ai/glm-5.3-flash"),
             "qa": _env("LLM_MODEL_QA", "deepseek/deepseek-v4.1-flash"),
+            # Классификация неуверенных новостей — Gemma 4 (рекомендована кейсом для классификации).
+            "classify": _env("LLM_MODEL_CLASSIFY", "google/gemma-4-26b-a4b-it"),
         },
         # GLM без ограничения тратит весь лимит на рассуждения; DeepSeek с ним, наоборот, рассуждает дольше.
         "reasoning_effort": os.environ.get("LLM_REASONING_EFFORT", "low"),
@@ -151,3 +183,20 @@ def feed_cache_seconds() -> int:
 
 def warm_feeds_on_start() -> bool:
     return _env("WARM_FEEDS_ON_START", "1").lower() not in ("0", "false", "no", "off")
+
+
+def telegram_settings() -> tuple[str, str]:
+    """Бот для ежедневного отчета о качестве (тот же, что у мониторинга сервера)."""
+    return os.environ.get("TELEGRAM_BOT_TOKEN", ""), os.environ.get("TELEGRAM_CHAT_ID", "")
+
+
+def quality_report_hour() -> int:
+    """Час (UTC), после которого уходит ежедневный отчет о качестве; 6 UTC = 9:00 МСК."""
+    return int(_env("QUALITY_REPORT_HOUR_UTC", "6"))
+
+
+def classify_llm_enabled() -> bool:
+    """Модель-классификатор для неуверенных новостей. Выключена: на эталоне и реальной ленте она добавляла
+    ложные срабатывания (политика, иностранные компании) и не находила пропущенных деловых новостей
+    (python -m app.eval_classify --llm). Включение — CLASSIFY_LLM=1."""
+    return _env("CLASSIFY_LLM", "0").lower() in ("1", "true", "yes", "on")

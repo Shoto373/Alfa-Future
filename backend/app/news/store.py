@@ -21,9 +21,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+import numpy as np
 from sqlalchemy import func, select
 
-from app import database, embeddings, vectors
+from app import config, database, embeddings, vectors
 from app.models import News
 from app.news import semantic
 from app.news.classifier import classify, tokenize
@@ -33,6 +34,12 @@ logger = logging.getLogger("app.news.store")
 SEED_FILE = Path(__file__).with_name("seed_news.json")
 DUPLICATE_THRESHOLD = 0.55
 RECHECK_SECONDS = 2.0
+# Сюжет: одно событие из разных источников и его продолжения. Новость присоединяется к самой близкой
+# по смыслу новости за последние STORY_WINDOW_DAYS дней, если сходство не ниже STORY_SIMILARITY
+# (порог подобран на реальной ленте: «Brent выше $115» из Интерфакса, Коммерсанта и ТАСС — один сюжет).
+STORY_SIMILARITY = 0.78
+STORY_WINDOW_DAYS = 10
+STORY_LABELS_KEY = "story_labels"
 VERSION_KEY, REV_KEY = "news_seed", "news_rev"
 NEWS_LOCK = 72810403
 
@@ -46,9 +53,23 @@ class _State:
     checked: float = field(default_factory=time.monotonic)
     ordered: list[dict] = field(default_factory=list)
     shingles: dict[str, set[str]] = field(default_factory=dict)
+    stories: dict[str, str] = field(default_factory=dict)      # news_id -> story_id (id самой ранней новости)
+    members: dict[str, list[str]] = field(default_factory=dict)  # story_id -> news_id от ранних к поздним
 
     def __post_init__(self):
         self.reindex()
+        self.stories = _assign_stories(sorted(self.items.values(), key=lambda i: i["published_at"]))
+        self.members = {}
+        for news_id, story_id in sorted(self.stories.items(), key=lambda kv: self.items[kv[0]]["published_at"]):
+            self.members.setdefault(story_id, []).append(news_id)
+
+    def attach(self, item: dict) -> None:
+        """Новая новость — в сюжет без пересчета остальных."""
+        window = [self.items[i] for i in self.items if i != item["news_id"]]
+        story_id = _nearest_story(item, window, self.stories)
+        self.stories[item["news_id"]] = story_id
+        self.members.setdefault(story_id, []).append(item["news_id"])
+        self.members[story_id].sort(key=lambda i: self.items[i]["published_at"])
 
     def reindex(self) -> None:
         self.ordered = sorted(self.items.values(), key=lambda i: i["published_at"], reverse=True)
@@ -88,10 +109,17 @@ def _digest(title: str, text: str) -> str:
 
 
 def make_item(title: str, text: str, source: str, url: str | None = None,
-              published_at: str | None = None, kind: str = "external", news_id: str | None = None) -> dict:
+              published_at: str | None = None, kind: str = "external", news_id: str | None = None,
+              llm: bool = False, hint: dict | None = None) -> dict:
+    """llm=True — для неуверенной классификации спросить модель (новая новость); hint — уже полученный ответ."""
     original = (title.strip(), text.strip())
     title, text = clean(title, text)
-    cls = classify(title, text)
+    cls = classify(title, text, hint)
+    if llm and hint is None and cls.uncertain and config.classify_llm_enabled():
+        from app.news import llm_classify
+        answer = llm_classify.hint(title, text)
+        if answer:
+            cls = classify(title, text, answer)
     return {
         "news_id": news_id or f"n-{_digest(title, text)}",
         "title": title,
@@ -106,6 +134,55 @@ def make_item(title: str, text: str, source: str, url: str | None = None,
         "duplicates": [],
         "content_filtered": original != (title, text),
     }
+
+
+def _story_text(item: dict) -> str:
+    return f"{item['title']}. {(item.get('lead') or '')[:200]}"
+
+
+def _time(item: dict) -> float:
+    try:
+        dt = datetime.fromisoformat(item["published_at"])
+    except (ValueError, KeyError):
+        return 0.0
+    return (dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)).timestamp()
+
+
+def _assign_stories(items_asc: list[dict]) -> dict[str, str]:
+    """Сюжеты для всех новостей (по времени, скользящее окно). Без модели — каждая новость сама по себе."""
+    vectors = embeddings.embed([_story_text(i) for i in items_asc]) if items_asc else None
+    if vectors is None or len(items_asc) == 0:
+        return {i["news_id"]: i["news_id"] for i in items_asc}
+    matrix = embeddings.as_matrix(vectors)
+    times = [_time(i) for i in items_asc]
+    window = STORY_WINDOW_DAYS * 86400
+    stories: dict[str, str] = {}
+    start = 0
+    for idx, item in enumerate(items_asc):
+        while times[idx] - times[start] > window:
+            start += 1
+        story = item["news_id"]
+        if start < idx:
+            sims = matrix[start:idx] @ matrix[idx]
+            best = int(np.argmax(sims))
+            if sims[best] >= STORY_SIMILARITY:
+                story = stories[items_asc[start + best]["news_id"]]
+        stories[item["news_id"]] = story
+    return stories
+
+
+def _nearest_story(item: dict, others: list[dict], stories: dict[str, str]) -> str:
+    t = _time(item)
+    window = [o for o in others if abs(t - _time(o)) <= STORY_WINDOW_DAYS * 86400 and o["news_id"] in stories]
+    if not window:
+        return item["news_id"]
+    vectors = embeddings.embed([_story_text(item)] + [_story_text(o) for o in window])
+    if vectors is None:
+        return item["news_id"]
+    matrix = embeddings.as_matrix(vectors)
+    sims = matrix[1:] @ matrix[0]
+    best = int(np.argmax(sims))
+    return stories[window[best]["news_id"]] if sims[best] >= STORY_SIMILARITY else item["news_id"]
 
 
 def _version() -> str:
@@ -144,7 +221,8 @@ def _reclassify(db, version: str) -> None:
             continue
         previous = record.payload
         updated = make_item(previous["title"], previous["text"], previous["source"], previous.get("url"),
-                            previous["published_at"], previous["kind"], previous["news_id"])
+                            previous["published_at"], previous["kind"], previous["news_id"],
+                            hint=(previous.get("classification") or {}).get("llm_hint"))
         updated.update(added_at=previous["added_at"], duplicates=previous.get("duplicates") or [],
                        content_filtered=previous.get("content_filtered", False) or updated["content_filtered"])
         record.payload = updated
@@ -222,6 +300,58 @@ def get(news_id: str) -> dict | None:
         return _state_now().items.get(news_id)
 
 
+def story(news_id: str) -> dict | None:
+    """Сюжет новости: id, название, все сообщения (от ранних к поздним) и источники."""
+    with _lock:
+        state = _state_now()
+        story_id = state.stories.get(news_id)
+        if story_id is None:
+            return None
+        items = [state.items[i] for i in state.members.get(story_id, [news_id]) if i in state.items]
+    sources = sorted({i["source"] for i in items} | {d["source"] for i in items for d in i.get("duplicates", [])})
+    return {"story_id": story_id, "label": story_label(story_id, items), "size": len(items),
+            "sources": sources, "items": items}
+
+
+def story_label(story_id: str, items: list[dict] | None = None) -> str:
+    """Название сюжета: от модели (конвейер), иначе — заголовок первой новости."""
+    labels = _labels()
+    if story_id in labels:
+        return labels[story_id]
+    first = (items or [get(story_id)] or [None])[0]
+    title = (first or {}).get("title", "")
+    return title if len(title) <= 70 else title[:67].rsplit(" ", 1)[0] + "…"
+
+
+_labels_memo: tuple[float, dict] = (0.0, {})
+
+
+def _labels() -> dict[str, str]:
+    global _labels_memo
+    if time.monotonic() - _labels_memo[0] > 30:
+        _labels_memo = (time.monotonic(), database.state(STORY_LABELS_KEY) or {})
+    return _labels_memo[1]
+
+
+def set_story_labels(labels: dict[str, str]) -> None:
+    global _labels_memo
+    with database.session() as db:
+        merged = {**(database.state(STORY_LABELS_KEY, db) or {}), **labels}
+        database.set_state(STORY_LABELS_KEY, merged, db)
+    _labels_memo = (time.monotonic(), merged)
+
+
+def stories(min_size: int = 2) -> list[dict]:
+    """Сюжеты из нескольких сообщений — динамические темы ленты."""
+    with _lock:
+        state = _state_now()
+        groups = [(sid, [state.items[i] for i in ids if i in state.items]) for sid, ids in state.members.items()
+                  if len(ids) >= min_size]
+    return [{"story_id": sid, "label": story_label(sid, items), "size": len(items),
+             "news_ids": [i["news_id"] for i in items], "last": max(i["published_at"] for i in items)}
+            for sid, items in groups]
+
+
 def known(title: str, text: str) -> bool:
     """Новость уже есть (тот же id или почти тот же текст) — ее не нужно классифицировать заново."""
     title, text = clean(title, text)
@@ -259,6 +389,8 @@ def add(item: dict) -> tuple[dict, bool]:
             state.shingles[saved["news_id"]] = probe
         state.rev = rev
         state.reindex()
+        if created:
+            state.attach(saved)
     if created:
         _news_vectors([saved])
     return saved, created

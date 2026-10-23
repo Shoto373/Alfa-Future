@@ -55,6 +55,28 @@ jobs:
           python -m unittest discover -s deploy/tests -v
           python -m pytest backend/tests -v
 
+      # Порог качества проверяет tests/test_golden_quality.py; здесь — читаемый отчет по golden set.
+      - name: Quality report (golden set, rules)
+        if: always()
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+          DATABASE_SCHEMA: quality_report
+          DATA_DIR: ../data/synthetic
+          RUNTIME_DIR: ${{ runner.temp }}/runtime
+          EMBEDDINGS_ENABLED: "0"
+          RSS_SOURCES: ""
+          RSS_REFRESH_MINUTES: "0"
+        run: python -m app.eval_quality --set tests/golden --mode rules --out ../quality-rules.json --md ../quality-rules.md
+
+      - name: Upload quality report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-report
+          path: quality-rules.*
+          if-no-files-found: ignore
+
       - name: Check deploy agent scripts
         run: |
           bash -n deploy/gitops/alfa-gitops

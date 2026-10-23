@@ -95,3 +95,98 @@ def test_repair_relabels_bank_paraphrase_and_keeps_source_boundary(company):
     validators._repair(draft, ctx, ids)
     assert paraphrase["origin"] == "ai" and not paraphrase["text"].startswith("Банк:")
     assert forged["origin"] == "bank"  # подмена источника не переклассифицируется и будет удалена проверкой
+
+
+# SPR2-04: причины неверного знака эффекта на golden set (tests/golden) — каждое исправление закреплено тестом.
+
+@pytest.mark.parametrize("title,text,expected", [
+    ("Рубль ослаб до 100 за доллар", "Курс рубля ослаб: доллар превысил 100 рублей.", "up"),
+    ("Рубль подешевел к юаню", "Рубль ослаб к основным валютам: курс юаня вырос до 14 рублей.", "up"),
+    ("Рубль укрепился до максимума", "Рубль укрепился: курс доллара опустился до 78 рублей.", "down"),
+    ("Курс рубля укрепился к евро", "Рубль укрепился к евро: официальный курс снизился до 86 рублей.", "down"),
+])
+def test_fx_direction_is_read_relative_to_ruble(title, text, expected):
+    # up для курса — ослабление рубля: «рубль ослаб» и «доллар вырос» — одно событие.
+    assert classify(title, text).topic_directions["fx"] == expected
+
+
+@pytest.mark.parametrize("title,text,topic,expected", [
+    ("Инфляция ускорилась до 9%", "Годовая инфляция ускорилась до 9% по итогам сентября.", "inflation", "up"),
+    ("Правительство повысит НДПИ", "Минфин предложил повысить налог на добычу полезных ископаемых.", "taxes_regulation", "up"),
+    ("РЖД проиндексирует тарифы", "Тарифы на грузовые железнодорожные перевозки вырастут на 10% с января.", "logistics", "up"),
+])
+def test_direction_from_verb_forms(title, text, topic, expected):
+    assert classify(title, text).topic_directions[topic] == expected
+
+
+@pytest.mark.parametrize("title,text,expected", [
+    ("ЕС ввел новый пакет санкций", "Евросоюз утвердил новый пакет санкций против России.", "up"),
+    ("Часть санкций отменена", "Власти отменили часть санкций против российских компаний.", "down"),
+])
+def test_sanctions_direction(title, text, expected):
+    assert classify(title, text).topic_directions["sanctions_geopolitics"] == expected
+
+
+def test_border_delays_are_logistics():
+    cls = classify("Очереди грузовиков на границе выросли",
+                   "Очереди на погранпереходах с Китаем выросли до недели, сроки доставки грузов увеличились.")
+    assert "logistics" in [t["topic"] for t in cls.topics]
+
+
+def test_topic_found_without_own_sentences_does_not_inherit_direction():
+    # «Ставка повышена» не значит «экономика растет»: тема, добавленная не по словарю (по смыслу или
+    # подсказкой модели), без своих предложений направления другой темы не получает.
+    cls = classify("Ключевая ставка повышена до 17%", "Банк России повысил ключевую ставку до 17% годовых.",
+                   hint={"business": True, "topics": ["gdp_industry"], "model": "test"})
+    assert cls.topic_directions["key_rate"] == "up"
+    assert cls.topic_directions["gdp_industry"] is None
+
+
+def test_sanctions_tightening_is_a_risk_for_exposed_sector():
+    from app.agent import composer
+
+    assert composer._effect("sanctions_geopolitics", "up", -1) < 0
+    assert composer._effect("sanctions_geopolitics", "down", -1) > 0
+
+
+@pytest.mark.parametrize("risks,opps,expected", [
+    ([], [], "none"),
+    (["Стоимость заимствований может вырасти"], [], "neg"),
+    ([], ["Валютная выручка дает больше рублей"], "pos"),
+    (["Издержки растут"], ["Спрос растет"], "mixed"),
+    (["Возможный риск — издержки растут."], ["Возможность — спрос растет."], "unclear"),
+    (["Возможный риск — издержки растут."], ["Спрос растет"], "pos"),
+])
+def test_overall_effect_label(risks, opps, expected):
+    from app.agent import composer
+
+    claim = lambda text: {"text": text, "origin": "ai", "source_ids": [], "features": []}
+    card = {"risks": [claim(t) for t in risks], "opportunities": [claim(t) for t in opps]}
+    assert composer.overall_effect(card) == expected
+
+
+def test_insight_and_feed_carry_effect(client, company):
+    import asyncio
+
+    from app import storage
+    from app.agent import composer, orchestrator
+    from app.news import store
+
+    news = store.make_item("Банк России повысил ключевую ставку до 16%",
+                           "Совет директоров Банка России повысил ключевую ставку до 16% годовых.", "Проверка")
+    ins = asyncio.run(orchestrator.run(company, "cfo", news, "req_effect", use_llm=False))
+    assert ins["effect"] == composer.overall_effect(ins) and ins["effect"] != "none"
+
+    store.add(news)
+    storage.save_insight(ins)
+    refs = storage.cached_insight_refs(company["company_id"], "cfo", [news["news_id"]])
+    assert refs[news["news_id"]] == (ins["insight_id"], ins["effect"])
+
+
+def test_ruble_wording_does_not_leak_into_rate_direction():
+    # «…о ключевой ставке, укреплении рубля…»: укрепление рубля — направление курса, а не ставки.
+    cls = classify("Экономист — о ключевой ставке, укреплении рубля и прогнозах ЦБ",
+                   "Банк России второй раз подряд сохранил ключевую ставку на уровне 14% годовых.")
+    assert cls.topic_directions["key_rate"] == "hold"
+    assert classify("Ослабление рубля продолжилось", "Ослабление рубля продолжилось на фоне спроса на валюту.") \
+        .topic_directions["fx"] == "up"

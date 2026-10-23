@@ -27,6 +27,9 @@ DIRECTION_VALUE = {
     "construction_realestate": {"up": 1, "hold": 0, "down": -1},
     "bonds": {"up": 1, "hold": 0.3, "down": -1},       # up = рост доходностей
     "deposits": {"up": 1, "hold": 0.5, "down": -1},
+    "taxes_regulation": {"up": 1, "hold": 0, "down": -1},   # up = нагрузка и требования растут
+    "logistics": {"up": 1, "hold": 0, "down": -1},          # up = перевозки дорожают или усложняются
+    "sanctions_geopolitics": {"up": 1, "hold": 0, "down": -1},  # up = ограничения вводятся или расширяются
 }
 
 TOPIC_EFFECT = {
@@ -48,7 +51,8 @@ TOPIC_EFFECT = {
     "sanctions_geopolitics": ("ограничения затрудняют платежи и логистику", "появляются ниши после ухода конкурентов"),
     "energy": ("растут расходы на энергию", "растут тарифы и выручка"),
     "corporate_finance": ("ухудшаются финансовые показатели контрагентов", "финансы отрасли улучшаются"),
-    "auto": ("автомобильный рынок замедляется", "автомобильный рынок растет"),
+    "taxes_regulation": ("налоговая и регуляторная нагрузка растет", "нагрузка снижается или появляются льготы"),
+    "logistics": ("перевозки дорожают или задерживаются", "растут тарифы и спрос на перевозки"),
 }
 
 ACTIONS = {
@@ -94,6 +98,13 @@ ACTIONS = {
               "default": ["Учесть рост доходностей ОФЗ при планировании заимствований"]},
     "construction_realestate": {"default": ["Оценить спрос на объекты и условия проектного финансирования"]},
     "gold": {"default": ["Оценить, как цена золота влияет на выручку и стоимость запасов"]},
+    "taxes_regulation": {"accountant": ["Оценить изменение налоговой нагрузки и сроки вступления изменений; обновить налоговый календарь"],
+                         "cfo": ["Пересчитать бюджет и денежный поток с учетом новых налоговых и регуляторных требований"],
+                         "owner": ["Оценить влияние изменений на дивидендную политику и стоимость бизнеса"],
+                         "default": ["Проверить, какие требования затрагивают компанию и с какой даты они действуют"]},
+    "logistics": {"ceo": ["Проверить альтернативные маршруты и сроки поставок; заложить запас по критичным позициям"],
+                  "cfo": ["Пересчитать логистическую составляющую себестоимости и условия поставки в договорах"],
+                  "default": ["Оценить, как изменение тарифов и сроков перевозки влияет на поставки"]},
     "default": {"default": ["Обсудить влияние события с менеджером банка и определить, нужна ли корректировка планов"]},
 }
 
@@ -106,9 +117,27 @@ QUESTIONS = {
     "imports_exports": "Есть ли альтернативные поставщики и маршруты при сбоях?",
     "labor": "Какой рост ФОТ заложен в бюджет на следующий год?",
     "credit_market": "Какие лимиты финансирования согласованы на ближайшие 6 месяцев?",
+    "taxes_regulation": "Какие налоги и требования составляют наибольшую часть нагрузки компании?",
+    "logistics": "Какая доля поставок идет железной дорогой, через порты или транзитом?",
 }
 
 ORIGIN_SOURCE = {"client_data": "client:profile", "payments": "client:payments", "sector_model": "client:profile"}
+
+# Оговорки, когда знак влияния зависит от операций компании: такие выводы не задают общий знак события.
+HEDGED_RISK, HEDGED_OPP = "Возможный риск —", "Возможность —"
+
+
+def overall_effect(card: dict) -> str:
+    """Общий знак события для компании по итоговым разделам разбора (метка в ленте и шапке разбора).
+
+    neg — скорее риск, pos — скорее возможность, mixed — и то и другое, unclear — зависит от операций
+    компании (только оговорки), none — влияния на бизнес не найдено.
+    """
+    if not card["risks"] and not card["opportunities"]:
+        return "none"
+    risk = any(not c["text"].startswith(HEDGED_RISK) for c in card["risks"])
+    opp = any(not c["text"].startswith(HEDGED_OPP) for c in card["opportunities"])
+    return "mixed" if risk and opp else "neg" if risk else "pos" if opp else "unclear"
 
 
 def _claim(text: str, origin: str, sources: list[str], features: list[str] | None = None) -> dict:
@@ -150,6 +179,8 @@ def effect_terms(topic: str, direction: str | None, features: set[str] | None = 
             "bonds": ("снижается доходность новых размещений ликвидности", "стоимость новых рыночных заимствований может снизиться"),
             "deposits": TOPIC_EFFECT["deposits"],
             "construction_realestate": TOPIC_EFFECT["construction_realestate"],
+            "sanctions_geopolitics": ("с ослаблением ограничений на рынок могут вернуться конкуренты",
+                                      "ослабление ограничений упрощает платежи и логистику"),
         }.get(topic, TOPIC_EFFECT[topic])
     return TOPIC_EFFECT[topic]
 
@@ -235,10 +266,10 @@ def compose(ctx: dict) -> dict:
         if groups["amb"]:
             srcs, feats = basis(groups["amb"])
             if not groups["neg"]:
-                risks.append(_claim(f"Возможный риск — {neg}. Знак влияния зависит от развития ситуации и структуры операций компании: "
+                risks.append(_claim(f"{HEDGED_RISK} {neg}. Знак влияния зависит от развития ситуации и структуры операций компании: "
                                     f"{because(groups['amb'])}.", "ai", srcs, feats))
             if not groups["pos"]:
-                opps.append(_claim(f"Возможность — {pos}, если ситуация развернется в пользу компании: "
+                opps.append(_claim(f"{HEDGED_OPP} {pos}, если ситуация развернется в пользу компании: "
                                    f"{because(groups['amb'])}.", "ai", srcs, feats))
     risks = _dedupe(risks)[:4]
     opps = _dedupe(opps)[:4]

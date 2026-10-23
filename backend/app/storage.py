@@ -10,7 +10,9 @@ from app.agent import llm
 from sqlalchemy import select
 from app.models import AppState, Insight, Feedback, Answer, Event
 
-CACHE_VERSION = "p0-quality-2"
+# Меняется, когда правила меняют содержание карточек: старые перестают быть актуальным кэшем.
+# quality-3: знак эффекта (направление курса, санкций, форм глаголов, «укрепление рубля» не про ставку) и поле effect.
+CACHE_VERSION = "p0-quality-3"
 
 
 VERSION_TTL = 5.0  # секунд; подписи источников меняются только при импорте
@@ -67,13 +69,13 @@ def cached_insight(company_id: str, role: str, news_id: str) -> dict | None:
             .order_by(*_newest_first()).limit(1))
 
 
-def cached_insight_ids(company_id: str, role: str, news_ids: list[str]) -> dict[str, str]:
-    """news_id -> id последней актуальной карточки; один запрос на всю ленту (индекс insights_lookup_idx)."""
+def cached_insights(company_id: str, role: str, news_ids: list[str]) -> dict[str, dict]:
+    """news_id -> последняя актуальная карточка (целиком); один запрос на список новостей."""
     if not news_ids:
         return {}
     version = cache_version()
     with database.session() as db:
-        rows = db.execute(select(Insight.news_id, Insight.insight_id)
+        rows = db.execute(select(Insight.news_id, Insight.payload)
             .where(Insight.company_id == company_id, Insight.role == role, Insight.cache_version == version,
                    Insight.news_id.in_(news_ids))
             .order_by(Insight.news_id, *_newest_first())
@@ -81,9 +83,61 @@ def cached_insight_ids(company_id: str, role: str, news_ids: list[str]) -> dict[
     return dict(rows)
 
 
+def llm_attempted(insight: dict) -> bool:
+    """Модель уже отвечала для этой карточки, но ее черновик не прошел проверки — повтор даст то же самое.
+
+    Такую карточку пересчитывает только «Пересчитать» (force_refresh), а не каждое открытие или конвейер.
+    """
+    return any(s.get("name") == "llm_compose" and s.get("status") == "ok" for s in insight.get("trace", []))
+
+
+def cached_insight_refs(company_id: str, role: str, news_ids: list[str]) -> dict[str, tuple[str, str | None]]:
+    """news_id -> (id, знак эффекта) последней актуальной карточки; один запрос на всю ленту (индекс insights_lookup_idx)."""
+    if not news_ids:
+        return {}
+    version = cache_version()
+    with database.session() as db:
+        rows = db.execute(select(Insight.news_id, Insight.insight_id, Insight.payload["effect"].astext)
+            .where(Insight.company_id == company_id, Insight.role == role, Insight.cache_version == version,
+                   Insight.news_id.in_(news_ids))
+            .order_by(Insight.news_id, *_newest_first())
+            .distinct(Insight.news_id)).all()
+    return {news_id: (insight_id, effect) for news_id, insight_id, effect in rows}
+
+
+FEEDBACK_TTL = 60.0
+_feedback_memo: dict[tuple, tuple[float, dict]] = {}
+
+
+def topic_feedback(company_id: str, role: str) -> dict[str, int]:
+    """Сумма оценок пользователей (+1/−1) по темам новостей для компании и роли.
+
+    Оценка разбора относится к темам его новости: так лента учится, какие темы этой роли полезны.
+    """
+    key = (config.database_schema(), company_id, role)
+    hit = _feedback_memo.get(key)
+    if hit and time.monotonic() - hit[0] < FEEDBACK_TTL:
+        return hit[1]
+    from app.news import store
+
+    with database.session() as db:
+        rows = db.execute(select(Insight.news_id, Feedback.payload["rating"].as_integer())
+                          .join(Feedback, Feedback.insight_id == Insight.insight_id)
+                          .where(Insight.company_id == company_id, Insight.role == role)).all()
+    net: dict[str, int] = {}
+    for news_id, rating in rows:
+        news = store.get(news_id)
+        for t in (news or {}).get("classification", {}).get("topics", [])[:2]:
+            net[t["topic"]] = net.get(t["topic"], 0) + int(rating or 0)
+    _feedback_memo[key] = (time.monotonic(), net)
+    return net
+
+
 def _append(table: str, record: dict) -> None:
     record = {"ts": datetime.now(timezone.utc).isoformat(timespec="seconds")} | record
     with database.session() as db:
+        if table == "feedback":
+            _feedback_memo.clear()
         if table in ("feedback", "answers"):
             model = Feedback if table == "feedback" else Answer
             db.add(model(insight_id=record["insight_id"], payload=record))

@@ -1,6 +1,5 @@
 import type {
-  Answer, BankDocument, CompanyProfile, CompanySummary, Exposure, FeedItem, Insight, LookupCompany, Member, Membership, Meta, NewsBrief, Role, TopicCount, User,
-} from "./types";
+  Answer, BankDocument, CompanyProfile, CompanySummary, Exposure, FeedItem, Insight, LookupCompany, Member, Membership, Meta, NewsBrief, Role, TopicCount, StoryChip, User, } from "./types";
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
@@ -80,9 +79,10 @@ export const api = {
   meta: (signal?: AbortSignal) => request<Meta>("/api/v1/meta", {}, { signal }),
   company: (id: string, signal?: AbortSignal) =>
     request<{ profile: CompanyProfile; exposures: Exposure[] }>(`/api/v1/companies/${encodeURIComponent(id)}`, {}, { signal }),
-  feed: (companyId: string, topic?: string, signal?: AbortSignal) =>
-    request<{ items: FeedItem[]; topic_counts: TopicCount[] }>(
-      `/api/v1/feed?company_id=${encodeURIComponent(companyId)}${topic ? `&topic=${encodeURIComponent(topic)}` : ""}`, {}, { signal }),
+  feed: (companyId: string, topic?: string, signal?: AbortSignal, story?: string) =>
+    request<{ items: FeedItem[]; topic_counts: TopicCount[]; stories: StoryChip[] }>(
+      `/api/v1/feed?company_id=${encodeURIComponent(companyId)}${topic ? `&topic=${encodeURIComponent(topic)}` : ""}` +
+      `${story ? `&story=${encodeURIComponent(story)}` : ""}`, {}, { signal }),
   // fast: готовая карточка или разбор на правилах без LLM за доли секунды; без fast — версия модели.
   insight: (companyId: string, newsId: string, opts: { force?: boolean; fast?: boolean } = {}, signal?: AbortSignal) =>
     request<Insight>("/api/v1/insights", json("POST", {
@@ -94,9 +94,6 @@ export const api = {
     request<{ status: string }>("/api/v1/feedback", json("POST", { insight_id: insightId, rating, section, comment: comment || null })),
   addNews: (payload: { title?: string; text?: string; url?: string }) =>
     request<{ created: boolean; duplicate_of: string | null; news: NewsBrief }>("/api/v1/news", json("POST", payload), { timeoutMs: 30_000 }),
-  refreshNews: () =>
-    request<{ added: number; duplicates: number; sources: { name: string; fetched: number; error: string | null }[] }>(
-      "/api/v1/news/refresh", { method: "POST" }, { timeoutMs: 90_000 }),
   analytics: () => request<{ documents: BankDocument[] }>("/api/v1/analytics"),
   metrics: () => request<Record<string, any>>("/api/v1/metrics"),
   audit: () => request<{ items: Record<string, any>[] }>("/api/v1/audit?limit=60"),

@@ -90,6 +90,7 @@ export interface Insight {
   model: string | null;
   title: string;
   headline: string;
+  effect?: Effect | null;
   what_happened: { summary: string; facts: Claim[]; actors: string[]; dates: string[]; assumptions: Claim[] };
   why_important: Claim[];
   risks: Claim[];
@@ -183,10 +184,21 @@ export interface TopicCount {
   count: number;
 }
 
+// Динамическая тема: сюжет из нескольких сообщений разных СМИ (название дает модель).
+export interface StoryChip {
+  story_id: string;
+  label: string;
+  size: number;
+}
+
+// Общий знак события для компании: скорее риск, скорее возможность, и то и другое, зависит от операций, нет влияния.
+export type Effect = "neg" | "pos" | "mixed" | "unclear" | "none";
+
 export interface FeedItem {
   news: NewsBrief;
   relevance: Relevance;
   cached_insight_id: string | null;
+  cached_effect?: Effect | null;
 }
 
 export interface Meta {

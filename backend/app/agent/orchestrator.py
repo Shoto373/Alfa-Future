@@ -68,6 +68,7 @@ def _rules_plan(news: dict, company: dict) -> list[dict]:
          "why": "позиция и прогнозы Альфа-Банка по теме"},
         {"tool": "check_forecast_conflicts", "args": {"topics": topics[:2]}, "why": "сверить прогнозы банка из разных материалов"},
         {"tool": "get_story_history", "args": {"news_id": news["news_id"]}, "why": "тренд или разовое событие"},
+        {"tool": "get_story_coverage", "args": {"news_id": news["news_id"]}, "why": "сверить факты с другими источниками"},
         {"tool": "get_bank_products", "args": {"company_id": cid, "topics": topics}, "why": "релевантные решения банка"},
     ]
 
@@ -101,6 +102,9 @@ def _sources(ctx: dict) -> list[dict]:
     for n in ctx.get("story", []):
         out.append({"source_id": f"news:{n['news_id']}", "kind": "news", "title": n["title"], "url": None,
                     "date": n["published_at"][:10], "excerpt": n["lead"][:300], "doc_id": None, "page": None})
+    for n in ctx.get("coverage", []):
+        out.append({"source_id": f"news:{n['news_id']}", "kind": "news", "title": f"{n['source']}: {n['title']}",
+                    "url": n.get("url"), "date": n["published_at"][:10], "excerpt": n["lead"][:300], "doc_id": None, "page": None})
     for t in ctx["theses"]:
         out.append({"source_id": f"bank:{t['id']}", "kind": "bank_analytics", "title": t["doc_title"], "doc_id": t["doc_id"],
                     "page": t["page"], "date": t["doc_date"], "excerpt": t["text"][:300], "url": None})
@@ -116,10 +120,57 @@ def _sources(ctx: dict) -> list[dict]:
     return out
 
 
+def _llm_repair(draft: dict, ctx: dict, source_ids: set[str]) -> dict | None:
+    """Модель исправляет только утверждения с ошибками проверки (а не весь черновик).
+
+    Возвращает {status, detail} для трассы или None, если исправлять нечего.
+    Ответ модели не принимается на веру: после замены черновик проходит те же проверки.
+    """
+    from app.agent import evidence
+
+    sections = [("why_important", draft["why_important"]), ("risks", draft["risks"]),
+                ("opportunities", draft["opportunities"]), ("actions", draft["actions"]),
+                ("what_happened", draft["what_happened"]["facts"]), ("what_happened", draft["what_happened"]["assumptions"])]
+    bad, where = [], {}
+    for section, items in sections:
+        for idx, c in enumerate(items):
+            errors = validators.claim_errors(section, c, ctx, source_ids)
+            if errors:
+                where[len(bad)] = (items, idx)
+                bad.append({"id": len(bad), "section": section, "claim": c, "errors": errors})
+    if not bad:
+        return None
+    texts = {sid: t for sid, t in evidence.source_texts(ctx).items() if sid in source_ids}
+    features = sorted(evidence.valid_features(ctx["company"]))
+    try:
+        data, meta = llm.chat_json(prompts.REPAIR_SYSTEM, prompts.repair_user(bad, texts, features), "review", 2500)
+    except llm.LLMError as exc:
+        return {"status": "warning", "detail": f"Исправление моделью недоступно ({exc}); неподтвержденное будет удалено"}
+    fixed = dropped = 0
+    drop: list[tuple[list, int]] = []
+    for item in data.get("claims", []) if isinstance(data, dict) else []:
+        if not isinstance(item, dict) or item.get("id") not in where:
+            continue
+        items, idx = where[item["id"]]
+        if item.get("drop"):
+            drop.append((items, idx))
+            dropped += 1
+            continue
+        text, origin, ids = item.get("text"), item.get("origin"), item.get("source_ids")
+        if isinstance(text, str) and text.strip() and origin in ("fact", "client_data", "bank", "ai")                 and isinstance(ids, list) and all(isinstance(x, str) for x in ids):
+            feats = [f for f in item.get("features") or [] if isinstance(f, str)]
+            items[idx] = {"text": text.strip()[:400], "origin": origin, "source_ids": ids[:5], "features": feats[:6]}
+            fixed += 1
+    for items, idx in sorted(drop, key=lambda d: -d[1]):
+        items.pop(idx)
+    return {"status": "ok", "detail": f"Модель {meta['model']} исправила утверждений: {fixed}, убрала: {dropped} "
+                                      f"(из {len(bad)} с ошибками)"}
+
+
 def _grounding_text(ctx: dict) -> str:
     c = ctx["company"]
     parts = [ctx["news"]["title"], ctx["news"]["text"]] + [t["text"] for t in ctx["theses"]]
-    parts += [f"{n['title']} {n['lead']}" for n in ctx.get("story", [])]
+    parts += [f"{n['title']} {n['lead']}" for n in ctx.get("story", []) + ctx.get("coverage", [])]
     m = c["market"]
     parts += [str(m.get("okved_rank")), str(m.get("okved_peers")), c.get("okved_code") or "", composer.pct(m.get('okved_share') or 0),
               f"{(c.get('revenue') or 0) / 1e9:.1f}", c.get("workers_fns") or ""]
@@ -202,7 +253,7 @@ async def run(company: dict, role: str, news: dict, request_id: str, use_llm: bo
 
     # 2. Инструменты -> общий контекст.
     ctx = {"news": news, "company": company, "role": role, "exposures": [], "theses": [], "products": [],
-           "forecast_conflicts": [], "counterparties": None, "story": [], "bank_search_complete": False,
+           "forecast_conflicts": [], "counterparties": None, "story": [], "coverage": [], "bank_search_complete": False,
            "role_focus": [TOPICS[t]["name"] for t, w in sorted(ROLES.get(role, ROLES["ceo"])["focus"].items(),
                                                               key=lambda kv: -kv[1]) if t in TOPICS]}
 
@@ -233,6 +284,11 @@ async def run(company: dict, role: str, news: dict, request_id: str, use_llm: bo
         elif step["tool"] == "get_counterparties":
             ctx["counterparties"] = result
             summary = f"поставщиков {result['suppliers']['counterparties']}, покупателей {result['customers']['counterparties']}"
+        elif step["tool"] == "get_story_coverage":
+            seen = {n["news_id"] for n in ctx["story"]}
+            ctx["coverage"] = [n for n in result if n["news_id"] not in seen]
+            summary = (f"то же событие в других источниках: {', '.join(n['source'] for n in ctx['coverage'])}"
+                       if ctx["coverage"] else "других источников по событию нет")
         elif step["tool"] == "get_story_history":
             ctx["story"] = result
             summary = (f"ранее по сюжету: {len(result)}, последнее {result[0]['published_at']}" if result
@@ -275,20 +331,41 @@ async def run(company: dict, role: str, news: dict, request_id: str, use_llm: bo
 
     # 4–5. Самопроверка и адаптация.
     attempts = 1
+    repaired = False
     for round_no in range(MAX_ADAPT_ROUNDS + 1):
         sources = _sources(ctx)
         source_ids = {s["source_id"] for s in sources}
         grounding = _grounding_text(ctx)
         results = validators.check(draft, ctx, source_ids, grounding)
         failed = [r for r in results if not r["passed"]]
+        # Типы ошибок по утверждениям — для мониторинга качества черновиков (какие правила модель нарушает чаще).
+        claim_errors: dict[str, int] = {}
+        for section, c in validators._claims(draft):
+            for err in validators.claim_errors(section, c, ctx, source_ids):
+                claim_errors[err] = claim_errors.get(err, 0) + 1
         trace.add("check", f"self_check_{round_no + 1}",
                   "Все проверки пройдены" if not failed else "Не пройдено: " + ", ".join(r["name"] for r in failed),
-                  "ok" if not failed else "warning", 0, {"checks": [{k: r[k] for k in ("name", "passed")} for r in results]})
+                  "ok" if not failed else "warning", 0, {"checks": [{k: r[k] for k in ("name", "passed")} for r in results],
+                                                         "claim_errors": claim_errors})
         if not failed or round_no == MAX_ADAPT_ROUNDS:
             break
         attempts += 1
         actions = []
         fixes = {r["fix"] for r in failed}
+        if mode == "llm" and not repaired:
+            repaired = True
+            t1 = time.perf_counter()
+            outcome = await asyncio.to_thread(_llm_repair, draft, ctx, source_ids)
+            if outcome:
+                trace.add("adapt", "llm_repair", outcome["detail"], outcome["status"], (time.perf_counter() - t1) * 1000)
+                if outcome["status"] == "ok":
+                    actions.append(outcome["detail"])
+                    # Исправленный черновик проверяется заново; удаление — только если ошибки остались.
+                    sources = _sources(ctx)
+                    source_ids = {s["source_id"] for s in sources}
+                    results = validators.check(draft, ctx, source_ids, _grounding_text(ctx))
+                    failed = [r for r in results if not r["passed"]]
+                    fixes = {r["fix"] for r in failed}
         if "broaden_search" in fixes:
             try:
                 wider, ms = await asyncio.to_thread(
@@ -306,6 +383,9 @@ async def run(company: dict, role: str, news: dict, request_id: str, use_llm: bo
             for key in ("why_important", "risks", "opportunities", "actions"):
                 if not draft[key] or len({f for c in draft[key] for f in c.get("features", [])}) < 1:
                     draft[key] = rebuilt[key]
+            # Факты «Что произошло» — дословные предложения новости; если проверка их сняла, берутся из правил.
+            if not draft["what_happened"]["facts"]:
+                draft["what_happened"]["facts"] = rebuilt["what_happened"]["facts"]
             if validators.similarity(draft["headline"], news["title"]) > 0.5:
                 draft["headline"] = rebuilt["headline"]
             actions.append("разделы дополнены правилами")
@@ -382,6 +462,7 @@ async def run(company: dict, role: str, news: dict, request_id: str, use_llm: bo
         "model": model,
         "title": draft["title"],
         "headline": draft["headline"],
+        "effect": composer.overall_effect(draft),
         "what_happened": draft["what_happened"],
         "why_important": draft["why_important"],
         "risks": draft["risks"],

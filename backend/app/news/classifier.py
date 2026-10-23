@@ -10,12 +10,16 @@ from bisect import bisect_left
 from dataclasses import dataclass, field
 
 from app.news import magnitude, semantic
-from app.news.taxonomy import ACTORS, COUNTRY_STEMS, DIRECTION_STEMS, SECTOR_STEMS, TOPICS
+from app.news.taxonomy import (ACTORS, COUNTRY_STEMS, DIRECTION_STEMS, FOREIGN_CURRENCY, FOREIGN_DIRECTION,
+                               RUBLE_DIRECTION, SANCTIONS_DIRECTION, SECTOR_STEMS, TOPICS)
 
 # «Санкции» засчитываются только рядом с деловым контекстом — и по словарю, и по смыслу.
 SANCTIONS_BUSINESS_STEMS = ["санкц", "swift", "эмбарго", "экспорт", "импорт", "платеж", "банков", "компани", "торгов",
                             "поставк", "тариф", "пошлин", "финанс"]
 SEMANTIC_TOPIC_SCORE = 2  # как слабое словарное совпадение: тема по смыслу не перевешивает явную
+WEAK_TOPIC_SCORE = 2      # одно упоминание в тексте — слабый сигнал темы
+LLM_TOPIC_SCORE = 3       # тема от модели-классификатора: сильнее одного упоминания, слабее явной словарной
+NON_BUSINESS_MARGIN = 0.15  # насколько новость должна быть ближе к «не про бизнес», чтобы снять слабые темы
 
 _WORD = re.compile(r"[a-zа-я0-9$%.,/-]+", re.IGNORECASE)
 _SENT = re.compile(r"(?<=[.!?…])\s+(?=[А-ЯA-Z«\"0-9])")
@@ -74,6 +78,17 @@ def _score(tokens: list[str], stems: list[str]) -> tuple[int, list[str]]:
     return total, matched
 
 
+def _fx_direction(sentences: list[list[str]]) -> dict[str, int]:
+    """Направление курса (up — ослабление рубля) по глаголам при рубле и при иностранной валюте."""
+    out = {"up": 0, "down": 0}
+    for tk in sentences:
+        for currency, verbs in ((["рубл"], RUBLE_DIRECTION), (FOREIGN_CURRENCY, FOREIGN_DIRECTION)):
+            if _score(tk, currency)[0]:
+                for d, st in verbs.items():
+                    out[d] += _score(tk, st)[0]
+    return out
+
+
 @dataclass
 class Classification:
     topics: list[dict] = field(default_factory=list)       # [{topic, name, score, matched}]
@@ -87,6 +102,8 @@ class Classification:
     key_sentences: list[str] = field(default_factory=list)
     importance: float = 0.0
     magnitude: dict | None = None                           # сила события по главной теме
+    uncertain: bool = False                                 # словари и смысл не уверены — стоит спросить модель
+    llm_hint: dict | None = None                            # ответ модели-классификатора, если спрашивали
 
     def topic_keys(self) -> list[str]:
         return [t["topic"] for t in self.topics]
@@ -97,6 +114,7 @@ class Classification:
             "direction": self.direction, "topic_directions": self.topic_directions, "actors": self.actors, "dates": self.dates,
             "numbers": self.numbers, "key_sentences": self.key_sentences, "importance": round(self.importance, 3),
             "magnitude": self.magnitude,
+            **({"llm_hint": self.llm_hint} if self.llm_hint else {}),
         }
 
 
@@ -104,7 +122,8 @@ def split_sentences(text: str) -> list[str]:
     return [s.strip() for s in _SENT.split((text or "").strip()) if len(s.strip()) > 20]
 
 
-def classify(title: str, text: str) -> Classification:
+def classify(title: str, text: str, hint: dict | None = None) -> Classification:
+    """hint — ответ модели-классификатора (app.news.llm_classify) для неуверенных случаев."""
     full = f"{title}. {text}"
     tokens = tokenize(full)
     title_tokens = tokenize(title)
@@ -128,6 +147,25 @@ def classify(title: str, text: str) -> Classification:
                 continue
             topics.append({"topic": key, "name": TOPICS[key]["name"], "score": SEMANTIC_TOPIC_SCORE,
                            "matched": [f"по смыслу ({meaning['sims'][key]:.2f})"], "semantic": meaning["sims"][key]})
+    # Только слабые словарные совпадения, а по смыслу новость ближе к «не про бизнес» (спорт, политика,
+    # происшествия): «зарплаты футболистов» не делают матч новостью о рынке труда.
+    if meaning and topics and max(t["score"] for t in topics) <= WEAK_TOPIC_SCORE:
+        best = max((meaning["sims"].get(t["topic"], -1.0) for t in topics), default=-1.0)
+        if meaning["non_business"] - best >= NON_BUSINESS_MARGIN:
+            topics = []
+    # Неуверенность: тем нет, но по смыслу новость не явно «не про бизнес», или тема одна и слабая.
+    best_meaning = max(meaning["sims"].values(), default=-1.0) if meaning else -1.0
+    uncertain = (not topics and (meaning is None or meaning["non_business"] - best_meaning < NON_BUSINESS_MARGIN)) \
+        or (len(topics) == 1 and topics[0]["score"] <= WEAK_TOPIC_SCORE)
+    if hint:
+        if not hint.get("business"):
+            topics = []
+        else:
+            have = {t["topic"] for t in topics}
+            for key in hint.get("topics", []):
+                if key in TOPICS and key not in have:
+                    topics.append({"topic": key, "name": TOPICS[key]["name"], "score": LLM_TOPIC_SCORE,
+                                   "matched": [f"модель-классификатор ({hint.get('model', 'LLM')})"]})
     topics.sort(key=lambda t: t["score"], reverse=True)
     if topics:
         top = topics[0]["score"]
@@ -158,8 +196,20 @@ def classify(title: str, text: str) -> Classification:
             soft = sum(_score(tk, ["смягчени", "смягч"])[0] for tk in local)
             counts["up"] = max(counts["up"] - tight, 0) + soft
             counts["down"] = counts["down"] - soft + 2 * tight
+        own = bool(local)
+        if t["topic"] == "fx":
+            # Валюта названа прямо («рубль», «доллар») — направление читается по любому такому предложению,
+            # даже если тема найдена по смыслу, а не по словарю.
+            fx = _fx_direction(sentence_tokens)
+            if fx["up"] or fx["down"]:
+                counts, own = {**fx, "hold": counts["hold"]}, True
+        if t["topic"] == "sanctions_geopolitics":
+            for d, st in SANCTIONS_DIRECTION.items():
+                counts[d] += sum(_score(tk, st)[0] for tk in local)
         best = max(counts, key=counts.get)
-        topic_directions[t["topic"]] = best if counts[best] > 0 else direction
+        # Тема только «по смыслу» (нет своих предложений): направление другой темы ей не переносится —
+        # «ставка повышена» не значит «экономика растет».
+        topic_directions[t["topic"]] = best if counts[best] > 0 else direction if own else None
 
     actors = [a for a in ACTORS if re.search(rf"(?<![А-Яа-яA-Za-z]){re.escape(a)}", full)]
     dates = list(dict.fromkeys(m.group(0).strip() for m in _DATE.finditer(full)))[:6]
@@ -181,4 +231,4 @@ def classify(title: str, text: str) -> Classification:
     about_main = [s for s, tk in zip(sentences_all, sentence_tokens) if main and _score(tk, TOPICS[main]["stems"])[0]]
     strength = magnitude.assess(main, about_main or sentences_all[:3])
     return Classification(topics, sectors, countries, direction, topic_directions, actors, dates, numbers, key_sentences,
-                          importance, strength)
+                          importance, strength, uncertain, hint)

@@ -4,24 +4,13 @@ import logging
 
 from fastapi import FastAPI
 
-from app import config, database, warmup
+from app import config, database, pipeline, warmup
 from app.api.router import router
 from app.api.setup import configure_api
 from app.auth.router import router as auth_router
-from app.news import parser
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("app")
-
-
-async def _rss_loop(minutes: int) -> None:
-    while True:
-        try:
-            report = await asyncio.to_thread(parser.refresh)
-            logger.info("rss refresh added=%s duplicates=%s", report["added"], report["duplicates"])
-        except Exception:  # сбой источника не должен останавливать сервис
-            logger.exception("rss refresh failed")
-        await asyncio.sleep(minutes * 60)
 
 
 @contextlib.asynccontextmanager
@@ -31,10 +20,14 @@ async def lifespan(app: FastAPI):
     app.state.warmup = await asyncio.to_thread(warmup.run)
     task = None
     if config.rss_refresh_minutes() > 0:
-        task = asyncio.create_task(_rss_loop(config.rss_refresh_minutes()))
+        # Конвейер в фоне: сбор новостей из RSS и их разбор для привязанных компаний.
+        task = asyncio.create_task(pipeline.loop(config.rss_refresh_minutes()))
+    app.state.pipeline = task
     yield
     if task:
         task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
 
 
 app = FastAPI(
