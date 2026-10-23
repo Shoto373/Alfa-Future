@@ -30,7 +30,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 
-from app import config, database, quality, ranking, storage
+from app import config, database, llm_usage, quality, ranking, storage
 from app.companies import profiles
 
 logger = logging.getLogger("app.pipeline")
@@ -92,9 +92,10 @@ def _llm_budget_left() -> bool:
 
     if not llm.available():
         return False
-    u = llm.usage()
+    u = llm_usage.usage()
     share = config.pipeline_llm_share()
-    return u["tokens"] < u["limit"] * share and u["cost"] < u["cost_limit"] * share
+    # С резервом идущих вызовов: доля конвейера не съедает бюджет, уже обещанный запросам пользователей.
+    return u["tokens"] + u["reserved_tokens"] < u["limit"] * share and u["cost"] + u["reserved_cost"] < u["cost_limit"] * share
 
 
 async def _analyze(company: dict, role: str, news: dict, use_llm: bool) -> dict | None:

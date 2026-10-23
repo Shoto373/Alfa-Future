@@ -117,6 +117,21 @@ class LLMUsage(Base):
     cost: Mapped[Decimal] = mapped_column(Numeric, server_default="0")
     calls: Mapped[int] = mapped_column(Integer, server_default="0")
     errors: Mapped[int] = mapped_column(Integer, server_default="0")
+    # Резерв идущих вызовов (оценка по max_tokens и цене модели) и отказы по бюджету — app/llm_usage.py.
+    reserved_tokens: Mapped[int] = mapped_column(BigInteger, server_default="0")
+    reserved_cost: Mapped[Decimal] = mapped_column(Numeric, server_default="0")
+    rejected: Mapped[int] = mapped_column(Integer, server_default="0")
+
+
+class LLMReservation(Base):
+    """Резерв одного идущего вызова LLM: снимается при списании факта, ошибке или через 10 минут."""
+    __tablename__ = "llm_reservations"
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    day: Mapped[date] = mapped_column(ForeignKey("llm_usage.day"))
+    tokens: Mapped[int] = mapped_column(BigInteger)
+    cost: Mapped[Decimal] = mapped_column(Numeric)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (Index("llm_reservations_created_idx", "created_at"),)
 
 
 class VectorItem(Base, Payload):

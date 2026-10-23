@@ -155,6 +155,27 @@ def llm_settings() -> dict:
     }
 
 
+# Оценка цены, ₽ за 1000 токенов (вход + выход), с запасом — по замерам выбора моделей (см. llm_settings).
+# Нужна для резерва бюджета до ответа и для учета, если шлюз не вернул usage.cost; списывается факт.
+LLM_PRICES = {"deepseek": 0.06, "glm": 0.04, "gemma": 0.03, "qwen3-vl": 0.06, "qwen": 0.06, "kimi": 0.6}
+LLM_DEFAULT_PRICE = 0.1
+
+
+def llm_price_per_1k(model: str) -> float:
+    """Цена модели по первому совпавшему фрагменту имени; LLM_PRICES=deepseek=0.05,glm=0.03 переопределяет."""
+    overrides = {}
+    for part in os.environ.get("LLM_PRICES", "").split(","):
+        if "=" in part:
+            key, value = part.split("=", 1)
+            overrides[key.strip().lower()] = float(value)
+    name = model.lower()
+    for prices in (overrides, LLM_PRICES):
+        for key, price in prices.items():
+            if key in name:
+                return price
+    return LLM_DEFAULT_PRICE
+
+
 def bank_pdf_dir() -> Path | None:
     value = os.environ.get("BANK_PDF_DIR")
     return Path(value) if value and Path(value).is_dir() else None

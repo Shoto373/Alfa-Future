@@ -5,7 +5,7 @@ import time
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
-from app import config, database
+from app import config, database, llm_usage
 from app.agent import llm
 from sqlalchemy import select
 from app.models import AppState, Insight, Feedback, Answer, Event
@@ -176,8 +176,13 @@ def metrics() -> dict:
     checks: dict[str, list[bool]] = defaultdict(list)
     first_pass, claims_total, claims_linked, latency = 0, 0, 0, []
     modes = Counter()
+    llm_tried = llm_fallback = 0
     for ins in insights:
         modes[ins["mode"]] += 1
+        # Откат к правилам: модель вызывалась (шаг llm_compose в трассе), а итоговый разбор — на правилах.
+        if any(s["name"] == "llm_compose" for s in ins["trace"]):
+            llm_tried += 1
+            llm_fallback += ins["mode"] == "rules"
         first_pass += int(ins["quality"]["attempts"] == 1 and ins["quality"]["passed"])
         for c in ins["quality"]["checks"]:
             checks[c["name"]].append(c["passed"])
@@ -193,6 +198,7 @@ def metrics() -> dict:
     by_section = defaultdict(Counter)
     for f in feedback:
         by_section[f.get("section") or "card"][f["rating"]] += 1
+    usage = llm_usage.usage()
     feed_views = sum(1 for e in events if e["kind"] == "feed_view")
     opens = sum(1 for e in events if e["kind"] == "insight_open")
     n = len(insights) or 1
@@ -214,8 +220,11 @@ def metrics() -> dict:
         "ai": {
             "modes": dict(modes),
             "avg_latency_ms": round(sum(latency) / len(latency), 1) if latency else None,
-            "llm_usage": llm.usage(),
+            "llm_usage": usage,
             "llm_connected": llm.available(),
+            "reserved_cost": usage["reserved_cost"],
+            "rejected_by_budget": usage["rejected_by_budget"],
+            "fallback_rate": round(llm_fallback / llm_tried, 3) if llm_tried else None,
         },
         "recent_feedback": [f for f in feedback[-10:] if f.get("comment")],
     }
