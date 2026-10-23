@@ -10,6 +10,7 @@ import ipaddress
 import re
 import socket
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor
 from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse
 
@@ -108,6 +109,44 @@ def fetch_rss(source: dict) -> list[dict]:
     return parse_rss(_get(source["url"]), source["name"])
 
 
+_ARTICLE = re.compile(r"<article[^>]*>(.*?)</article>", re.IGNORECASE | re.DOTALL)
+# Служебные абзацы сайтов: подписки, cookies, «читайте также», копирайт.
+_BOILERPLATE = re.compile(r"подпис(ывайтесь|ка)|cookie|читайте также|telegram-канал|все права защищены|©|"
+                          r"нашли ошибку|реклама|присоединяйтесь", re.IGNORECASE)
+FULL_TEXT_LIMIT = 8000
+LEAD_OVERLAP = 0.5  # доля слов анонса, которые должны найтись в тексте статьи
+
+
+def article_text(raw_html: str) -> str:
+    """Основной текст статьи: абзацы из <article> (или всей страницы) без служебных блоков."""
+    raw = _DROP.sub(" ", raw_html)
+
+    def paragraphs(body: str) -> str:
+        found = [clean_html(p) for p in _P.findall(body)]
+        return " ".join(p for p in found if len(p) > 40 and not _BOILERPLATE.search(p))
+
+    # Сначала — внутри <article>; если там нет абзацев (разметка сайта другая) — по всей странице.
+    text = paragraphs(max(_ARTICLE.findall(raw), key=len, default="")) or paragraphs(raw)
+    return text[:FULL_TEXT_LIMIT]
+
+
+def full_text(url: str | None, rss_text: str) -> str:
+    """Полный текст по ссылке из RSS; если не удалось или он не богаче анонса — анонс из ленты."""
+    if not url or not config.rss_full_text():
+        return rss_text
+    try:
+        text = article_text(_get(url))
+    except (FetchError, httpx.HTTPError, ValueError):
+        return rss_text
+    # Текст статьи должен быть заметно длиннее анонса и содержать большую часть его слов:
+    # иначе это служебная часть страницы (подвал, меню), а не сама статья.
+    if len(text) < max(300, int(len(rss_text) * 1.3)):
+        return rss_text
+    lead = {w for w in store.tokenize(rss_text) if len(w) > 3}
+    found = {w for w in store.tokenize(text) if len(w) > 3}
+    return text if not lead or len(lead & found) / len(lead) >= LEAD_OVERLAP else rss_text
+
+
 def fetch_article(url: str) -> dict:
     raw = _DROP.sub(" ", _get(url))
     title_match = _TITLE.search(raw)
@@ -117,12 +156,12 @@ def fetch_article(url: str) -> dict:
     if len(text) < 80:
         raise FetchError("Не удалось извлечь текст статьи")
     host = urlparse(url).hostname or "web"
-    return store.make_item(title, text, host, url, None, "user")
+    return store.make_item(title, text, host, url, None, "user", llm=True)
 
 
 def refresh() -> dict:
     """Опрашивает настроенные RSS-ленты. Ошибки источников не прерывают сбор."""
-    report = {"added": 0, "duplicates": 0, "skipped": 0, "sources": []}
+    report = {"added": 0, "duplicates": 0, "skipped": 0, "full_text": 0, "sources": []}
     for source in config.rss_sources():
         entry = {"name": source["name"], "url": source["url"], "fetched": 0, "error": None}
         try:
@@ -132,9 +171,15 @@ def refresh() -> dict:
             # а векторы новых считаются одной пачкой.
             fresh = [e for e in entries if not store.known(e["title"], e["text"])]
             report["duplicates"] += len(entries) - len(fresh)
+            # Полный текст статьи (параллельно): больше фактов, чисел и участников, чем в анонсе ленты.
+            with ThreadPoolExecutor(max_workers=6) as pool:
+                texts = list(pool.map(lambda e: full_text(e["url"], e["text"]), fresh))
+            for e, text in zip(fresh, texts):
+                report["full_text"] += text is not e["text"]
+                e["text"] = text
             semantic.prime([store.clean(e["title"], e["text"]) for e in fresh])
             for e in fresh:
-                item = store.make_item(e["title"], e["text"], source["name"], e["url"], e["published_at"], "rss")
+                item = store.make_item(e["title"], e["text"], source["name"], e["url"], e["published_at"], "rss", llm=True)
                 if not item["classification"]["topics"]:
                     report["skipped"] += 1  # не относится к бизнес-темам таксономии
                     continue

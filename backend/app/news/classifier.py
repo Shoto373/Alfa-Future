@@ -16,6 +16,9 @@ from app.news.taxonomy import ACTORS, COUNTRY_STEMS, DIRECTION_STEMS, SECTOR_STE
 SANCTIONS_BUSINESS_STEMS = ["санкц", "swift", "эмбарго", "экспорт", "импорт", "платеж", "банков", "компани", "торгов",
                             "поставк", "тариф", "пошлин", "финанс"]
 SEMANTIC_TOPIC_SCORE = 2  # как слабое словарное совпадение: тема по смыслу не перевешивает явную
+WEAK_TOPIC_SCORE = 2      # одно упоминание в тексте — слабый сигнал темы
+LLM_TOPIC_SCORE = 3       # тема от модели-классификатора: сильнее одного упоминания, слабее явной словарной
+NON_BUSINESS_MARGIN = 0.15  # насколько новость должна быть ближе к «не про бизнес», чтобы снять слабые темы
 
 _WORD = re.compile(r"[a-zа-я0-9$%.,/-]+", re.IGNORECASE)
 _SENT = re.compile(r"(?<=[.!?…])\s+(?=[А-ЯA-Z«\"0-9])")
@@ -87,6 +90,8 @@ class Classification:
     key_sentences: list[str] = field(default_factory=list)
     importance: float = 0.0
     magnitude: dict | None = None                           # сила события по главной теме
+    uncertain: bool = False                                 # словари и смысл не уверены — стоит спросить модель
+    llm_hint: dict | None = None                            # ответ модели-классификатора, если спрашивали
 
     def topic_keys(self) -> list[str]:
         return [t["topic"] for t in self.topics]
@@ -97,6 +102,7 @@ class Classification:
             "direction": self.direction, "topic_directions": self.topic_directions, "actors": self.actors, "dates": self.dates,
             "numbers": self.numbers, "key_sentences": self.key_sentences, "importance": round(self.importance, 3),
             "magnitude": self.magnitude,
+            **({"llm_hint": self.llm_hint} if self.llm_hint else {}),
         }
 
 
@@ -104,7 +110,8 @@ def split_sentences(text: str) -> list[str]:
     return [s.strip() for s in _SENT.split((text or "").strip()) if len(s.strip()) > 20]
 
 
-def classify(title: str, text: str) -> Classification:
+def classify(title: str, text: str, hint: dict | None = None) -> Classification:
+    """hint — ответ модели-классификатора (app.news.llm_classify) для неуверенных случаев."""
     full = f"{title}. {text}"
     tokens = tokenize(full)
     title_tokens = tokenize(title)
@@ -128,6 +135,25 @@ def classify(title: str, text: str) -> Classification:
                 continue
             topics.append({"topic": key, "name": TOPICS[key]["name"], "score": SEMANTIC_TOPIC_SCORE,
                            "matched": [f"по смыслу ({meaning['sims'][key]:.2f})"], "semantic": meaning["sims"][key]})
+    # Только слабые словарные совпадения, а по смыслу новость ближе к «не про бизнес» (спорт, политика,
+    # происшествия): «зарплаты футболистов» не делают матч новостью о рынке труда.
+    if meaning and topics and max(t["score"] for t in topics) <= WEAK_TOPIC_SCORE:
+        best = max((meaning["sims"].get(t["topic"], -1.0) for t in topics), default=-1.0)
+        if meaning["non_business"] - best >= NON_BUSINESS_MARGIN:
+            topics = []
+    # Неуверенность: тем нет, но по смыслу новость не явно «не про бизнес», или тема одна и слабая.
+    best_meaning = max(meaning["sims"].values(), default=-1.0) if meaning else -1.0
+    uncertain = (not topics and (meaning is None or meaning["non_business"] - best_meaning < NON_BUSINESS_MARGIN)) \
+        or (len(topics) == 1 and topics[0]["score"] <= WEAK_TOPIC_SCORE)
+    if hint:
+        if not hint.get("business"):
+            topics = []
+        else:
+            have = {t["topic"] for t in topics}
+            for key in hint.get("topics", []):
+                if key in TOPICS and key not in have:
+                    topics.append({"topic": key, "name": TOPICS[key]["name"], "score": LLM_TOPIC_SCORE,
+                                   "matched": [f"модель-классификатор ({hint.get('model', 'LLM')})"]})
     topics.sort(key=lambda t: t["score"], reverse=True)
     if topics:
         top = topics[0]["score"]
@@ -181,4 +207,4 @@ def classify(title: str, text: str) -> Classification:
     about_main = [s for s, tk in zip(sentences_all, sentence_tokens) if main and _score(tk, TOPICS[main]["stems"])[0]]
     strength = magnitude.assess(main, about_main or sentences_all[:3])
     return Classification(topics, sectors, countries, direction, topic_directions, actors, dates, numbers, key_sentences,
-                          importance, strength)
+                          importance, strength, uncertain, hint)

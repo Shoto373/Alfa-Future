@@ -20,6 +20,7 @@ from app.news import store
 MAX_CALLS_PER_RUN = 20
 STORY_SIMILARITY = 0.55  # сходство заголовков, с которого новости считаются одним сюжетом
 STORY_CANDIDATES = 24  # ближайших заголовков из векторного хранилища
+COVERAGE_MAX = 4  # сообщений других источников о том же событии
 
 
 class ToolError(Exception):
@@ -92,6 +93,17 @@ def _story_by_vectors(current: dict, main: set[str]) -> list[dict] | None:
     return [n for n in items if n is not None][:6]
 
 
+def _coverage(news_id: str) -> list[dict]:
+    """То же событие в других источниках (сюжет хранилища): сверка фактов и расхождений между СМИ."""
+    info = store.story(news_id)
+    if info is None:
+        raise ToolError("Новость не найдена")
+    current = store.get(news_id)
+    others = [n for n in info["items"] if n["news_id"] != news_id and n["source"] != (current or {}).get("source")]
+    return [{"news_id": n["news_id"], "title": n["title"], "lead": n["lead"][:400], "source": n["source"],
+             "published_at": n["published_at"][:10], "url": n.get("url")} for n in others[-COVERAGE_MAX:]]
+
+
 def _counterparties(company_id: str) -> dict:
     c = profiles.get(company_id)
     if c is None:
@@ -156,6 +168,7 @@ REGISTRY: dict[str, Tool] = {t.name: t for t in [
     Tool("search_bank_analytics", "Поиск тезисов аналитики Альфа-Банка (слова + смысл + темы + отрасли)",
          {"query": str, "topics": list, "sectors": list, "include_stale": bool}, _search),
     Tool("get_story_history", "Предыдущие события того же сюжета: тренд или разовое событие", {"news_id": str}, _story),
+    Tool("get_story_coverage", "То же событие в других СМИ: сверка фактов и расхождений", {"news_id": str}, _coverage),
     Tool("get_counterparties", "Структура платежей: поставщики и покупатели по отраслям", {"company_id": str}, _counterparties),
     Tool("get_bank_products", "Подходящие продукты банка для темы и профиля", {"company_id": str, "topics": list}, _products),
     Tool("check_forecast_conflicts", "Прогнозы банка по теме из разных документов — проверка противоречий",

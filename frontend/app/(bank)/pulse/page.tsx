@@ -7,7 +7,7 @@ import NewsCard from "@/components/NewsCard";
 import { Card, ErrorBox, Icon, Loading } from "@/components/ui";
 import { useFeedWithTopics } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
-import type { TopicCount } from "@/lib/types";
+import type { StoryChip, TopicCount } from "@/lib/types";
 import common from "@/styles/common.module.scss";
 import styles from "@/app/(bank)/pulse/page.module.scss";
 
@@ -23,14 +23,19 @@ function PulseFeed() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const topic = searchParams.get("topic") || undefined;
-  const setTopic = (value?: string) => {
+  const story = searchParams.get("story") || undefined;
+  // Тема и сюжет — взаимоисключающие фильтры: выбор одного сбрасывает другой.
+  const setFilter = (key: "topic" | "story", value?: string) => {
     const params = new URLSearchParams(searchParams.toString());
-    if (value) params.set("topic", value);
-    else params.delete("topic");
+    params.delete("topic");
+    params.delete("story");
+    if (value) params.set(key, value);
     const query = params.toString();
     router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
   };
-  const page = useFeedWithTopics(session!.companyId, topic);
+  const setTopic = (value?: string) => setFilter("topic", value);
+  const setStory = (value?: string) => setFilter("story", value);
+  const page = useFeedWithTopics(session!.companyId, topic, story);
   const feed = { ...page, data: page.data?.items ?? null };
   const [allTopics, setAllTopics] = useState(false);
 
@@ -39,6 +44,9 @@ function PulseFeed() {
   const [topics, setTopics] = useState<TopicCount[]>([]);
   useEffect(() => { if (page.data) setTopics(page.data.topic_counts); }, [page.data]);
   useEffect(() => setTopics([]), [session!.companyId]);
+  const [stories, setStories] = useState<StoryChip[]>([]);
+  useEffect(() => { if (page.data) setStories(page.data.stories ?? []); }, [page.data]);
+  useEffect(() => setStories([]), [session!.companyId]);
   const visibleTopics = allTopics ? topics : topics.filter((t, i) => i < TOPICS_SHOWN || t.topic === topic);
   const hiddenCount = topics.length - topics.filter((t, i) => i < TOPICS_SHOWN || t.topic === topic).length;
 
@@ -53,9 +61,23 @@ function PulseFeed() {
 
       <div className={styles.feedTop}>
         <section className={`${common.card} ${styles.topicsCard}`}>
+          {stories.length > 0 && (
+            <>
+              <h2>Сюжеты</h2>
+              <div className={`${styles.chips} ${styles.storyChips}`} role="toolbar" aria-label="Фильтр по сюжетам">
+                {stories.map((s) => (
+                  <button key={s.story_id} className={story === s.story_id ? `${styles.chip} ${styles.on}` : styles.chip}
+                    aria-pressed={story === s.story_id} onClick={() => setStory(story === s.story_id ? undefined : s.story_id)}
+                    title={`Одно событие: ${s.size} сообщений разных источников`}>
+                    {s.label} <span className={styles.chipCount}>{s.size}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
           <h2>Темы</h2>
           <div className={styles.chips} role="toolbar" aria-label="Фильтр по темам">
-            <button className={!topic ? `${styles.chip} ${styles.on}` : styles.chip} aria-pressed={!topic} onClick={() => setTopic(undefined)}>Все темы</button>
+            <button className={!topic && !story ? `${styles.chip} ${styles.on}` : styles.chip} aria-pressed={!topic && !story} onClick={() => setTopic(undefined)}>Все темы</button>
             {visibleTopics.map((t) => (
               <button key={t.topic} className={topic === t.topic ? `${styles.chip} ${styles.on}` : styles.chip} aria-pressed={topic === t.topic} onClick={() => setTopic(t.topic)}>
                 {t.name} <span className={styles.chipCount}>{t.count}</span>

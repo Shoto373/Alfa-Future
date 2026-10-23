@@ -44,6 +44,33 @@ def audience() -> list[tuple[str, str]]:
     return sorted((cid, role) for cid, role in pairs if profiles.get(cid) is not None)
 
 
+def _name_stories() -> int:
+    """Динамические темы: сюжеты из 3+ сообщений получают короткое название от быстрой модели."""
+    import json
+
+    from app.agent import llm, prompts
+    from app.news import store
+
+    if not _llm_budget_left():
+        return 0
+    known = store._labels()
+    todo = sorted((s for s in store.stories(min_size=3) if s["story_id"] not in known),
+                  key=lambda s: s["last"], reverse=True)[: config.pipeline_story_labels()]
+    labels = {}
+    for s in todo:
+        titles = [store.get(i)["title"] for i in s["news_ids"][-6:] if store.get(i)]
+        try:
+            data, _ = llm.chat_json(prompts.STORY_SYSTEM, json.dumps({"titles": titles}, ensure_ascii=False), "plan", 300)
+        except llm.LLMError:
+            break
+        label = data.get("label") if isinstance(data, dict) else None
+        if isinstance(label, str) and 3 <= len(label.strip()) <= 80:
+            labels[s["story_id"]] = label.strip().strip('"«»')
+    if labels:
+        store.set_story_labels(labels)
+    return len(labels)
+
+
 def _llm_budget_left() -> bool:
     from app.agent import llm
 
@@ -81,10 +108,12 @@ async def cycle() -> dict:
     if config.rss_sources():
         try:
             rss = await asyncio.to_thread(parser.refresh)
-            report["rss"] = {"added": rss["added"], "duplicates": rss["duplicates"], "skipped": rss["skipped"],
+            report["rss"] = {"added": rss["added"], "duplicates": rss["duplicates"], "skipped": rss["skipped"], "full_text": rss.get("full_text", 0),
                              "failed": [s["name"] for s in rss["sources"] if s["error"]]}
         except Exception:
             logger.exception("pipeline rss step failed")
+
+    report["stories_named"] = await asyncio.to_thread(_name_stories)
 
     pairs = await asyncio.to_thread(audience)
     report["pairs"] = len(pairs)
@@ -111,6 +140,12 @@ async def cycle() -> dict:
             break
         insight = await _analyze(company, role, news, use_llm=True)
         report["llm_built"] += bool(insight and insight["mode"] == "llm")
+
+    try:
+        from app import quality
+        report["quality_report"] = await asyncio.to_thread(quality.maybe_send_daily)
+    except Exception:  # отчет — вспомогательный
+        logger.exception("quality report failed")
 
     report["duration_s"] = round(time.perf_counter() - started, 1)
     _status.clear()

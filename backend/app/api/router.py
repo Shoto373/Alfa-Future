@@ -131,7 +131,8 @@ def company(company_id: str, user: dict = Depends(current_user)) -> dict:
 
 @router.get("/feed", responses=ERRORS)
 def news_feed(company_id: str, topic: str | None = Query(None, max_length=40),
-                    limit: int = Query(30, ge=1, le=100), user: dict = Depends(current_user)) -> dict:
+              story: str | None = Query(None, max_length=64),
+              limit: int = Query(30, ge=1, le=100), user: dict = Depends(current_user)) -> dict:
     role = member_of(user, company_id)["role"]  # роль берется из членства, не от клиента
     _company(company_id)
     # Вся лента компании без фильтра — для счетчиков тем: показываются только темы, где есть новости.
@@ -140,13 +141,18 @@ def news_feed(company_id: str, topic: str | None = Query(None, max_length=40),
     for r in everything:
         for t in r["news"]["classification"]["topics"]:
             counts.setdefault(t["topic"], {"topic": t["topic"], "name": t["name"], "count": 0})["count"] += 1
-    ranked = [r for r in everything if not topic or topic in {t["topic"] for t in r["news"]["classification"]["topics"]}][:limit]
+    # Динамические темы — сюжеты из нескольких сообщений, которые есть в ленте этой компании.
+    stories = [{"story_id": r["story_id"], "label": store.story_label(r["story_id"]), "size": r["story_size"] + 1}
+               for r in everything if r.get("story_id")][:8]
+    ranked = [r for r in everything if (not topic or topic in {t["topic"] for t in r["news"]["classification"]["topics"]})
+              and (not story or r.get("story_id") == story)][:limit]
     storage.log_event("feed_view", company_id=company_id, role=role)
     cached = storage.cached_insight_ids(company_id, role, [r["news"]["news_id"] for r in ranked])
     return {"company_id": company_id, "role": role,
-            "topic_counts": sorted(counts.values(), key=lambda c: (-c["count"], c["name"])), "items": [
+            "topic_counts": sorted(counts.values(), key=lambda c: (-c["count"], c["name"])), "stories": stories, "items": [
         # Склеенные похожие новости других источников добавляются к счетчику «+N источников».
-        {"news": {**_news_brief(r["news"]), "duplicates": len(r["news"]["duplicates"]) + r.get("story_size", 0)},
+        {"news": {**_news_brief(r["news"]), "duplicates": len(r["news"]["duplicates"]) + r.get("story_size", 0),
+                  "story_id": r.get("story_id")},
          "relevance": r["relevance"],
          "cached_insight_id": cached.get(r["news"]["news_id"])}
         for r in ranked]}
@@ -168,7 +174,7 @@ def add_news(payload: NewsCreateRequest) -> dict:
             raise ApiError("FETCH_FAILED")
     elif payload.text and len(payload.text.strip()) >= 40:
         title = (payload.title or payload.text.strip().split(".")[0])[:300]
-        item = store.make_item(title, payload.text, "Добавлено пользователем", None, None, "user")
+        item = store.make_item(title, payload.text, "Добавлено пользователем", None, None, "user", llm=True)
     else:
         raise ApiError("INVALID_REQUEST", "Укажите ссылку или текст новости не короче 40 символов")
     if len(item["text"].strip()) < 40 or not item["title"].strip():
@@ -261,6 +267,13 @@ def feedback(payload: FeedbackRequest, user: dict = Depends(current_user)) -> di
 @router.get("/metrics", responses=ERRORS, dependencies=[Depends(require_any_admin)])
 def metrics() -> dict:
     return storage.metrics()
+
+
+@router.get("/metrics/daily", responses=ERRORS, dependencies=[Depends(require_any_admin)])
+def daily_quality(hours: int = Query(24, ge=1, le=24 * 30)) -> dict:
+    """Мониторинг качества за период: доля текста модели, проверки, источники, оценки, задержки, конвейер."""
+    from app import quality
+    return quality.daily(hours)
 
 
 @router.get("/analytics", responses=ERRORS, dependencies=[Depends(current_user)])

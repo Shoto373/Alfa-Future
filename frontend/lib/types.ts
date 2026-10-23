@@ -183,6 +183,13 @@ export interface TopicCount {
   count: number;
 }
 
+// Динамическая тема: сюжет из нескольких сообщений разных СМИ (название дает модель).
+export interface StoryChip {
+  story_id: string;
+  label: string;
+  size: number;
+}
+
 export interface FeedItem {
   news: NewsBrief;
   relevance: Relevance;

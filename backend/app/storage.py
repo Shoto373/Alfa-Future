@@ -103,9 +103,39 @@ def cached_insight_ids(company_id: str, role: str, news_ids: list[str]) -> dict[
     return dict(rows)
 
 
+FEEDBACK_TTL = 60.0
+_feedback_memo: dict[tuple, tuple[float, dict]] = {}
+
+
+def topic_feedback(company_id: str, role: str) -> dict[str, int]:
+    """Сумма оценок пользователей (+1/−1) по темам новостей для компании и роли.
+
+    Оценка разбора относится к темам его новости: так лента учится, какие темы этой роли полезны.
+    """
+    key = (config.database_schema(), company_id, role)
+    hit = _feedback_memo.get(key)
+    if hit and time.monotonic() - hit[0] < FEEDBACK_TTL:
+        return hit[1]
+    from app.news import store
+
+    with database.session() as db:
+        rows = db.execute(select(Insight.news_id, Feedback.payload["rating"].as_integer())
+                          .join(Feedback, Feedback.insight_id == Insight.insight_id)
+                          .where(Insight.company_id == company_id, Insight.role == role)).all()
+    net: dict[str, int] = {}
+    for news_id, rating in rows:
+        news = store.get(news_id)
+        for t in (news or {}).get("classification", {}).get("topics", [])[:2]:
+            net[t["topic"]] = net.get(t["topic"], 0) + int(rating or 0)
+    _feedback_memo[key] = (time.monotonic(), net)
+    return net
+
+
 def _append(table: str, record: dict) -> None:
     record = {"ts": datetime.now(timezone.utc).isoformat(timespec="seconds")} | record
     with database.session() as db:
+        if table == "feedback":
+            _feedback_memo.clear()
         if table in ("feedback", "answers"):
             model = Feedback if table == "feedback" else Answer
             db.add(model(insight_id=record["insight_id"], payload=record))

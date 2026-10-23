@@ -5,7 +5,6 @@ import { Score } from "./ui";
 import styles from "@/components/NewsCard.module.scss";
 import common from "@/styles/common.module.scss";
 
-const KIND: Record<string, string> = { seed: "Демо-лента", rss: "RSS", user: "Добавлено вами", external: "Внешний источник" };
 const REASON_STYLES: Record<string, string | undefined> = {
   sector_model: styles.reasonSectorModel,
   payments: styles.reasonPayments,
@@ -21,7 +20,7 @@ export default function NewsCard({ item, compact = false }: { item: FeedItem; co
         <span>{news.source}</span>
         <span>·</span>
         <span>{date(news.published_at)}</span>
-        <span className={styles.kind}>{KIND[news.kind] ?? news.kind}</span>
+        {news.kind === "user" && <span className={styles.kind}>Добавлено вами</span>}
         {news.duplicates > 0 && <span className={styles.kind}>+{news.duplicates} источн.</span>}
       </div>
       <h3><Link href={`/pulse/n/${encodeURIComponent(news.news_id)}`}>{news.title}</Link></h3>

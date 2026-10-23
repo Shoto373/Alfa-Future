@@ -171,6 +171,10 @@ def exposures(company_id: str) -> tuple[dict, ...]:
         add("fx", 1.0, 0, "fts_countries", c["fts_countries"], f"Есть внешнеэкономическая деятельность ({countries}): курс влияет на расчеты")
         add("imports_exports", 1.0, 0, "fts_countries", c["fts_countries"], f"ВЭД с контрагентами: {countries}")
         add("sanctions_geopolitics", 0.7, -1, "fts_countries", c["fts_countries"], "ВЭД чувствительна к ограничениям на платежи и логистику")
+        add("logistics", 0.6, -1, "fts_countries", c["fts_countries"], "ВЭД: поставки зависят от пропускной способности границ, портов и транзита")
+    if c.get("revenue"):
+        add("taxes_regulation", 0.6, -1, "revenue", c["revenue"],
+            f"Выручка {_bn(c['revenue'])}: изменения налогов и регулирования напрямую меняют нагрузку на компанию")
     if (c.get("revenue") or 0) > 50e9:
         add("gdp_industry", 0.4, 1, "revenue", c["revenue"], f"Выручка {_bn(c['revenue'])}: масштаб делает компанию зависимой от общей динамики экономики")
 
