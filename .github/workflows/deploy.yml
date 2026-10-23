@@ -101,13 +101,21 @@ jobs:
       - name: Prepare SSH key
         env:
           SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          HOST: ${{ secrets.SERVER_HOST }}
+          # Публичный ключ сервера (не секрет). Раньше его получал ssh-keyscan: он открывает 5 соединений
+          # без входа, fail2ban на сервере (mode=aggressive, maxretry=3) считал их атакой и банил раннер.
+          SERVER_HOST_KEY: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJS1KY1b/XISq4DWha1vg2cxjDf8qJq0XJXqXDLetwV4
         run: |
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           # Fingerprint proves which key GitHub actually hands to the runner.
           ssh-keygen -lf ~/.ssh/deploy_key
-          ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          printf '%s %s\n' "$HOST" "$SERVER_HOST_KEY" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          # Недоступный сервер — быстрая понятная ошибка вместо многоминутного зависания шага.
+          printf 'Host *\n  ConnectTimeout 20\n  ServerAliveInterval 15\n  StrictHostKeyChecking yes\n' > ~/.ssh/config
+          chmod 600 ~/.ssh/config
 
       - name: Upload compose, nginx config + deploy script
         env:
