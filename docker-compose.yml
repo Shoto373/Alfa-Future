@@ -64,7 +64,8 @@ services:
       BANK_PDF_DIR: /data/bank_pdf
       FRONTEND_ORIGIN: ${PUBLIC_ORIGIN:-https://pointers-team.online}
       ANALYSIS_TIMEOUT_SECONDS: "150"
-      RSS_REFRESH_MINUTES: ${RSS_REFRESH_MINUTES:-60}
+      # Конвейер на проде включается в SPR2-06 (RSS_REFRESH_MINUTES=15 в .env сервера); до этого — выключен.
+      RSS_REFRESH_MINUTES: ${RSS_REFRESH_MINUTES:-0}
       REDIS_URL: redis://redis:6379/0
     env_file:
       - path: .env
