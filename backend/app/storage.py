@@ -224,6 +224,7 @@ def metrics() -> dict:
             "llm_connected": llm.available(),
             "reserved_cost": usage["reserved_cost"],
             "rejected_by_budget": usage["rejected_by_budget"],
+            "llm_by_model": llm_usage.by_model(),
             "fallback_rate": round(llm_fallback / llm_tried, 3) if llm_tried else None,
         },
         "recent_feedback": [f for f in feedback[-10:] if f.get("comment")],

@@ -32,6 +32,14 @@ const CHECK: Record<string, string> = {
   semantic_review: "Выводы AI проверены второй моделью по источникам",
 };
 
+// Почему показан разбор на правилах — по полю fallback_reason разбора.
+const FALLBACK_NOTE: Record<string, string> = {
+  budget: "Дневной лимит AI исчерпан — он обновится в 03:00 по Москве. Показан проверенный разбор на правилах: данные компании и аналитика банка учтены.",
+  unavailable: "AI-модель сейчас не отвечает. Показан проверенный разбор на правилах — можно нажать «Пересчитать» позже.",
+  checks: "Выводы AI-модели не прошли проверку фактов, поэтому показан проверенный разбор на правилах.",
+  unknown: "AI-версия сейчас недоступна. Показан проверенный разбор на правилах — можно нажать «Пересчитать» позже.",
+};
+
 function SourceRefs({ ids, index }: { ids: string[]; index: Map<string, number> }) {
   const openSource = useContext(OpenSource);
   const refs = ids.filter((id) => index.has(id));
@@ -139,7 +147,7 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
         )}
         {!upgrading && upgradeFailed && ins.mode === "rules" && (
           <p className={`${styles.upgradeNote} ${styles.upgradeNoteWarn}`} role="status">
-            AI-версия сейчас недоступна: модель не ответила или ее выводы не прошли проверку фактов. Показан проверенный разбор на правилах — можно нажать «Пересчитать» позже.
+            {FALLBACK_NOTE[ins.fallback_reason ?? ""] ?? FALLBACK_NOTE.unknown}
           </p>
         )}
       </div>

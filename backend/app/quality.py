@@ -7,18 +7,21 @@
 - bank_coverage  доля разборов с позицией банка;
 - useful_rate    доля положительных оценок пользователей;
 - latency        p50 / p90 построения разбора, с;
-- pipeline       что собрал и разобрал конвейер новостей.
+- pipeline       что собрал и разобрал конвейер новостей;
+- budget         расход LLM за прошлый день бюджета против лимита, отказы бюджета, причины откатов
+                 к правилам (fallback_reason) и расход по моделям.
 Отчет уходит раз в сутки (QUALITY_REPORT_HOUR_UTC), если заданы TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID.
 """
 
 import logging
 import statistics
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 import httpx
 from sqlalchemy import select
 
-from app import config, database
+from app import config, database, llm_usage
 from app.models import Event, Feedback, Insight
 
 logger = logging.getLogger("app.quality")
@@ -47,6 +50,9 @@ def daily(hours: int = 24) -> dict:
     latency = sorted(next((s["output"]["total_duration_ms"] / 1000 for s in i.get("trace", [])
                            if s.get("stage") == "finalize" and s.get("output")), 0) for i in llm_tried)
     up, down = ratings.count(1), ratings.count(-1)
+    # Бюджет — за прошлый день бюджета: отчет уходит утром, когда текущий день только начался.
+    yesterday = llm_usage.budget_day() - timedelta(days=1)
+    spent = llm_usage.usage(yesterday)
     return {
         "hours": hours,
         "insights": n,
@@ -63,6 +69,10 @@ def daily(hours: int = 24) -> dict:
         "insight_opens": events.count("insight_open"),
         "questions": events.count("question"),
         "pipeline": {k: pipeline_last.get(k) for k in ("started_at", "rss", "rules_built", "llm_built", "stories_named")},
+        "budget": {"day": spent["date"], "cost": spent["cost"], "cost_limit": spent["cost_limit"], "calls": spent["calls"],
+                   "rejected_by_budget": spent["rejected_by_budget"], "by_model": llm_usage.by_model(yesterday),
+                   "fallback_reasons": dict(Counter(i.get("fallback_reason") for i in llm_tried
+                                                    if i["mode"] == "rules" and i.get("fallback_reason")))},
     }
 
 
@@ -82,7 +92,19 @@ def report_text(d: dict) -> str:
         f"Лента: просмотров {d['feed_views']}, открытий разборов {d['insight_opens']}, вопросов {d['questions']}",
         f"Конвейер (последний цикл): новых новостей {rss.get('added', '—')}, отсеяно {rss.get('skipped', '—')}, "
         f"разборов на правилах {d['pipeline'].get('rules_built', '—')}, AI {d['pipeline'].get('llm_built', '—')}",
+        _budget_line(d["budget"]),
     ])
+
+
+FALLBACK_NAMES = {"budget": "лимит", "unavailable": "модель не ответила", "checks": "не прошли проверки"}
+
+
+def _budget_line(b: dict) -> str:
+    reasons = ", ".join(f"{FALLBACK_NAMES.get(k, k)} — {v}" for k, v in b["fallback_reasons"].items()) or "нет"
+    top = b["by_model"][0] if b["by_model"] else None
+    priciest = f" · дороже всех: {top['model']} {top['cost']} ₽" if top else ""
+    return (f"LLM за {b['day']}: {b['cost']} из {b['cost_limit']} ₽, вызовов {b['calls']}, "
+            f"отклонено бюджетом {b['rejected_by_budget']} · откаты к правилам: {reasons}{priciest}")
 
 
 def maybe_send_daily() -> bool:

@@ -317,6 +317,7 @@ async def run(company: dict, role: str, news: dict, request_id: str, use_llm: bo
     t0 = time.perf_counter()
     draft = composer.compose(ctx)
     mode = "rules"
+    fallback_reason = None  # почему модель не дала итог: budget | unavailable | checks — для плашки в карточке
     if use_llm:
         try:
             data, meta = await asyncio.to_thread(llm.chat_json, prompts.COMPOSE_SYSTEM, prompts.compose_user(ctx, _sources(ctx)), "compose", 8000)
@@ -324,6 +325,7 @@ async def run(company: dict, role: str, news: dict, request_id: str, use_llm: bo
             mode, model = "llm", meta["model"]
             trace.add("compose", "llm_compose", f"Черновик модели {meta['model']}, токенов {meta['tokens']}", "ok", meta["duration_ms"])
         except llm.LLMError as exc:
+            fallback_reason = "budget" if isinstance(exc, llm.BudgetError) else "unavailable"
             trace.add("compose", "llm_compose", f"LLM недоступна ({exc}); черновик на правилах", "warning")
     if mode == "rules":
         trace.add("compose", "rules_compose", "Черновик составлен правилами: эффект = чувствительность компании × направление события",
@@ -394,6 +396,8 @@ async def run(company: dict, role: str, news: dict, request_id: str, use_llm: bo
 
     if any(not r["passed"] for r in results):
         # Never return known-invalid output after exhausting bounded corrections.
+        if mode == "llm":
+            fallback_reason = "checks"
         draft = composer.compose(ctx)
         mode, model = "rules", None
         results = validators.check(draft, ctx, {s["source_id"] for s in _sources(ctx)}, _grounding_text(ctx))
@@ -460,6 +464,7 @@ async def run(company: dict, role: str, news: dict, request_id: str, use_llm: bo
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "mode": mode,
         "model": model,
+        "fallback_reason": fallback_reason if mode == "rules" else None,
         "title": draft["title"],
         "headline": draft["headline"],
         "effect": composer.overall_effect(draft),

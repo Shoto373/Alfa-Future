@@ -29,6 +29,10 @@ class LLMError(Exception):
     pass
 
 
+class BudgetError(LLMError):
+    """Вызов не выполнен: резерв не помещается в дневной лимит (app/llm_usage.py)."""
+
+
 def _norm(name: str) -> str:
     return re.sub(r"[^a-z0-9.]", "", name.lower())
 
@@ -82,7 +86,7 @@ def _extract_json(text: str) -> dict:
 def _failed(reservation: llm_usage.Reservation, committed: bool) -> None:
     """Вызов не удался: до списания — снять резерв, после — только отметить ошибку."""
     if committed:
-        llm_usage.record_error()
+        llm_usage.record_error(reservation)
     else:
         llm_usage.release(reservation)
 
@@ -100,7 +104,7 @@ def chat_json(system: str, user: str, model_kind: str = "compose", max_tokens: i
     try:
         reservation = llm_usage.reserve(model, len(system) + len(user), max_tokens)
     except llm_usage.BudgetExceeded as exc:  # агент откатится к правилам, причина — в трассе
-        raise LLMError(str(exc)) from exc
+        raise BudgetError(str(exc)) from exc
 
     payload = {
         "model": model,

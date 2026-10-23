@@ -123,6 +123,17 @@ class LLMUsage(Base):
     rejected: Mapped[int] = mapped_column(Integer, server_default="0")
 
 
+class LLMUsageModel(Base):
+    """Дневной учет по модели: фактическая цена за 1000 токенов для сверки с оценкой config.LLM_PRICES."""
+    __tablename__ = "llm_usage_models"
+    day: Mapped[date] = mapped_column(ForeignKey("llm_usage.day"), primary_key=True)
+    model: Mapped[str] = mapped_column(Text, primary_key=True)
+    tokens: Mapped[int] = mapped_column(BigInteger, server_default="0")
+    cost: Mapped[Decimal] = mapped_column(Numeric, server_default="0")
+    calls: Mapped[int] = mapped_column(Integer, server_default="0")
+    errors: Mapped[int] = mapped_column(Integer, server_default="0")
+
+
 class LLMReservation(Base):
     """Резерв одного идущего вызова LLM: снимается при списании факта, ошибке или через 10 минут."""
     __tablename__ = "llm_reservations"

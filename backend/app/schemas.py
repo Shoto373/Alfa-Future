@@ -142,6 +142,8 @@ class Insight(Strict):
     created_at: str
     mode: Literal["llm", "rules"]
     model: str | None
+    # Почему разбор на правилах, хотя модель пробовали: лимит бюджета, модель не ответила, выводы не прошли проверки.
+    fallback_reason: Literal["budget", "unavailable", "checks"] | None = None
     title: str
     headline: str
     effect: Effect | None = None  # None — карточки, созданные до появления поля
