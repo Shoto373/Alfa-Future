@@ -95,7 +95,7 @@ def report_text(d: dict) -> str:
     ])
 
 
-FALLBACK_NAMES = {"budget": "лимит", "unavailable": "модель не ответила", "checks": "не прошли проверки"}
+FALLBACK_NAMES = {"budget": "лимит", "company_budget": "доля компании", "unavailable": "модель не ответила", "checks": "не прошли проверки"}
 
 
 def _budget_line(b: dict) -> str:

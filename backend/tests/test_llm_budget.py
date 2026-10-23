@@ -354,3 +354,42 @@ def test_me_marks_bank_operator(client, monkeypatch):
     assert client.get("/api/v1/auth/me").json()["is_operator"] is False, "администратор клиента — не сотрудник банка"
     monkeypatch.setenv("OPERATOR_EMAILS", "OWNER@example.com")
     assert client.get("/api/v1/auth/me").json()["is_operator"] is True
+
+
+def test_company_share_refusal_has_its_own_reason(client, company, gateway, monkeypatch):
+    import asyncio
+
+    from app.agent import orchestrator
+    from app.news import store
+
+    monkeypatch.setenv("LLM_COMPANY_SHARE", "0")  # доля компании исчерпана, общий лимит свободен
+    ins = asyncio.run(orchestrator.run(company, "cfo", store.get("seed-rate-hold"), "req_share"))
+    assert ins["mode"] == "rules" and ins["fallback_reason"] == "company_budget", "плашка: лимит вашей компании"
+
+
+def test_waiting_request_gets_insight_only_after_it_is_saved(client, company, monkeypatch):
+    import asyncio
+
+    from app import storage
+    from app.agent import orchestrator
+    from app.news import store
+
+    real = orchestrator.run
+
+    async def slow(*a, **k):
+        await asyncio.sleep(0.2)
+        return await real(*a, **k)
+
+    monkeypatch.setattr(orchestrator, "run", slow)
+    news = store.get("seed-rate-hold")
+
+    async def save(ins):
+        await asyncio.sleep(0.2)  # сохранение не мгновенное
+        await asyncio.to_thread(storage.save_insight, ins)
+
+    async def both():
+        return await asyncio.gather(orchestrator.run_once(company, "cfo", news, "req_a", on_built=save),
+                                    orchestrator.run_once(company, "cfo", news, "req_b"))
+
+    (first, _), (second, lead_b) = asyncio.run(both())
+    assert lead_b is False and storage.get_insight(second["insight_id"]) is not None, "ждущий получил уже сохраненный разбор"

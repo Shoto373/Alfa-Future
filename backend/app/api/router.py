@@ -229,10 +229,20 @@ async def create_insight(payload: InsightRequest, request: Request, user: dict =
         if cached["mode"] == "rules" and not cached.get("fallback_reason") and not payload.fast and not llm.available():
             cached = {**cached, "fallback_reason": llm.unavailable_reason()}
         return cached
+    async def check_and_save(insight: dict) -> None:
+        # Свой разбор проверяется и сохраняется до того, как его получат ждущие этот же разбор запросы.
+        if (insight["company_id"], insight["news_id"], insight["role"], insight["request_id"]) != (
+                c["company_id"], n["news_id"], role, request_id):
+            raise ApiError("INVALID_ANALYSIS_RESULT")
+        await asyncio.to_thread(storage.save_insight, insight)
+
     try:
         # Тот же разбор уже строится (другой сотрудник, конвейер) — ждем его, а не платим за модель второй раз.
-        job = orchestrator.run_once(c, role, n, request_id, use_llm=False if payload.fast else None)
+        job = orchestrator.run_once(c, role, n, request_id, use_llm=False if payload.fast else None,
+                                    on_built=check_and_save)
         insight, leader = await asyncio.wait_for(job, timeout=config.analysis_timeout())
+    except ApiError:
+        raise
     except asyncio.TimeoutError:
         raise ApiError("ANALYSIS_TIMEOUT")
     except AnalysisUnavailable:
@@ -242,18 +252,10 @@ async def create_insight(payload: InsightRequest, request: Request, user: dict =
     except Exception:
         logger.exception("analysis failed request_id=%s", request_id)
         raise ApiError("INTERNAL_ERROR")
-    if (insight["company_id"], insight["news_id"], insight["role"]) != (c["company_id"], n["news_id"], role) \
-            or (leader and insight["request_id"] != request_id):
+    if (insight["company_id"], insight["news_id"], insight["role"]) != (c["company_id"], n["news_id"], role):
         raise ApiError("INVALID_ANALYSIS_RESULT")
-    if not leader:  # разбор построил и сохраняет первый запрос
-        await asyncio.to_thread(storage.log_event, "insight_open", insight_id=insight["insight_id"], cached=True)
-        return insight
-
-    def save():
-        storage.save_insight(insight)
-        storage.log_event("insight_open", insight_id=insight["insight_id"], cached=False)
-
-    await asyncio.to_thread(save)
+    # Свой разбор уже сохранен в check_and_save; чужой (leader=False) сохранил первый запрос.
+    await asyncio.to_thread(storage.log_event, "insight_open", insight_id=insight["insight_id"], cached=not leader)
     return insight
 
 

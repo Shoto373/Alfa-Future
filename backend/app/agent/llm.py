@@ -30,7 +30,11 @@ class LLMError(Exception):
 
 
 class BudgetError(LLMError):
-    """Вызов не выполнен: резерв не помещается в дневной лимит (app/llm_usage.py)."""
+    """Вызов не выполнен: резерв не помещается в дневной лимит или долю компании (app/llm_usage.py)."""
+
+    def __init__(self, message: str, scope: str = "total"):
+        super().__init__(message)
+        self.scope = scope
 
 
 def _norm(name: str) -> str:
@@ -120,7 +124,7 @@ def chat_json(system: str, user: str, model_kind: str = "compose", max_tokens: i
     try:
         reservation = llm_usage.reserve(model, len(system) + len(user), max_tokens)
     except llm_usage.BudgetExceeded as exc:  # агент откатится к правилам, причина — в трассе
-        raise BudgetError(str(exc)) from exc
+        raise BudgetError(str(exc), exc.scope) from exc
 
     payload = {
         "model": model,

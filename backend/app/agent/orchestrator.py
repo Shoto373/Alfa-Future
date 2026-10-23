@@ -240,13 +240,15 @@ def _merge_llm(draft: dict, data: dict) -> dict:
 _inflight: dict[tuple, asyncio.Future] = {}
 
 
-async def run_once(company: dict, role: str, news: dict, request_id: str, use_llm: bool | None = None) -> tuple[dict, bool]:
+async def run_once(company: dict, role: str, news: dict, request_id: str, use_llm: bool | None = None,
+                   on_built=None) -> tuple[dict, bool]:
     """Один и тот же разбор (компания, роль, новость, режим) не строится дважды одновременно.
 
     Второй запрос, пришедший, пока первый еще строится (два сотрудника открыли одну новость, конвейер
     и пользователь), ждет первый и получает его результат — модель вызывается и оплачивается один раз.
     Возвращает (разбор, leader): leader=False — результат чужого запроса, сохранять его повторно не нужно.
-    Действует внутри процесса; разборы разных воркеров разводит кэш.
+    on_built(insight) — проверка и сохранение первым запросом; ждущие получают разбор только после нее,
+    поэтому сразу могут задать по нему вопрос. Действует внутри процесса; разборы разных воркеров разводит кэш.
     """
     loop = asyncio.get_running_loop()
     key = (company["company_id"], role, news["news_id"], use_llm is False)
@@ -262,6 +264,8 @@ async def run_once(company: dict, role: str, news: dict, request_id: str, use_ll
     _inflight[key] = future
     try:
         insight = await run(company, role, news, request_id, use_llm=use_llm)
+        if on_built is not None:
+            await on_built(insight)
         future.set_result(insight)
         return insight, True
     except asyncio.CancelledError:
@@ -374,7 +378,10 @@ async def _run(company: dict, role: str, news: dict, request_id: str, use_llm: b
             mode, model = "llm", meta["model"]
             trace.add("compose", "llm_compose", f"Черновик модели {meta['model']}, токенов {meta['tokens']}", "ok", meta["duration_ms"])
         except llm.LLMError as exc:
-            fallback_reason = "budget" if isinstance(exc, llm.BudgetError) else "unavailable"
+            if isinstance(exc, llm.BudgetError):
+                fallback_reason = "company_budget" if exc.scope == "company" else "budget"
+            else:
+                fallback_reason = "unavailable"
             trace.add("compose", "llm_compose", f"LLM недоступна ({exc}); черновик на правилах", "warning")
     if mode == "rules":
         trace.add("compose", "rules_compose", "Черновик составлен правилами: эффект = чувствительность компании × направление события",

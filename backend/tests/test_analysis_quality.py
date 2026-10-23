@@ -190,3 +190,22 @@ def test_ruble_wording_does_not_leak_into_rate_direction():
     assert cls.topic_directions["key_rate"] == "hold"
     assert classify("Ослабление рубля продолжилось", "Ослабление рубля продолжилось на фоне спроса на валюту.") \
         .topic_directions["fx"] == "up"
+
+
+@pytest.mark.parametrize("title,text,added", [
+    # Модель смысла путает с ключевой ставкой сам жанр «ведомство приняло решение» (реальные новости ленты).
+    ("Полянский назвал ОБСЕ окопом, через который Россию слышат в Европе",
+     "Постпред РФ подчеркнул, что организация остается доступным каналом для донесения российской позиции.", False),
+    ("Минпросвещения предложило ввести единое удостоверение учителя",
+     "Минпросвещения России подготовило проект постановления правительства.", False),
+    # Перефраз без слов словаря, но с деловым контекстом — тема по смыслу остается.
+    ("Мегарегулятор оставил стоимость заимствований без изменений",
+     "Регулятор не стал менять цену денег в экономике.", True),
+])
+def test_meaning_only_topic_needs_business_context(monkeypatch, title, text, added):
+    from app.news import semantic
+
+    monkeypatch.setattr(semantic, "analyze", lambda *a, **k: {"sims": {"key_rate": 0.62}, "non_business": 0.3,
+                                                              "added": ["key_rate"]})
+    topics = [t["topic"] for t in classify(title, text).topics]
+    assert ("key_rate" in topics) is added

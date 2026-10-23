@@ -39,7 +39,13 @@ _pause_memo: tuple[float, bool, tuple | None] = (0.0, False, None)
 
 
 class BudgetExceeded(Exception):
-    """Резерв не помещается в дневной лимит или долю компании: вызов не выполняется, агент откатывается к правилам."""
+    """Резерв не помещается в дневной лимит или долю компании: вызов не выполняется, агент откатывается к правилам.
+
+    scope: total — исчерпан общий лимит дня, company — доля компании (у других компаний AI работает)."""
+
+    def __init__(self, message: str, scope: str = "total"):
+        super().__init__(message)
+        self.scope = scope
 
 
 @dataclass(frozen=True)
@@ -145,6 +151,16 @@ def reserve(model: str, prompt_chars: int, max_tokens: int) -> Reservation:
         with database.session() as db:
             sweep(db)
             _ensure_day(db, day)
+            # Сначала общий лимит: если исчерпан и он, причина для пользователя — лимит дня, а не доля компании.
+            # Порядок блокировок (строка дня, затем компании) тот же, что при списании и снятии резерва.
+            fits = db.execute(update(LLMUsage)
+                .where(LLMUsage.day == day,
+                       LLMUsage.tokens + LLMUsage.reserved_tokens + tokens <= s["daily_token_limit"],
+                       LLMUsage.cost + LLMUsage.reserved_cost + cost <= s["daily_cost_limit"])
+                .values(reserved_tokens=LLMUsage.reserved_tokens + tokens, reserved_cost=LLMUsage.reserved_cost + cost)
+                .returning(LLMUsage.day)).first()
+            if not fits:
+                raise _Rejected("total")
             if company_id:
                 _ensure_company(db, day, company_id)
                 fits = db.execute(update(LLMUsageCompany)
@@ -155,15 +171,7 @@ def reserve(model: str, prompt_chars: int, max_tokens: int) -> Reservation:
                             reserved_cost=LLMUsageCompany.reserved_cost + cost)
                     .returning(LLMUsageCompany.day)).first()
                 if not fits:
-                    raise _Rejected("company")
-            fits = db.execute(update(LLMUsage)
-                .where(LLMUsage.day == day,
-                       LLMUsage.tokens + LLMUsage.reserved_tokens + tokens <= s["daily_token_limit"],
-                       LLMUsage.cost + LLMUsage.reserved_cost + cost <= s["daily_cost_limit"])
-                .values(reserved_tokens=LLMUsage.reserved_tokens + tokens, reserved_cost=LLMUsage.reserved_cost + cost)
-                .returning(LLMUsage.day)).first()
-            if not fits:
-                raise _Rejected("total")  # откат транзакции снимает и резерв в доле компании
+                    raise _Rejected("company")  # откат транзакции снимает и резерв в общем лимите
             res = Reservation(f"rsv-{uuid.uuid4().hex}", day, tokens, cost, model, company_id)
             db.add(LLMReservation(id=res.id, day=day, company_id=company_id, tokens=tokens, cost=cost))
     except _Rejected as rejected:
@@ -171,7 +179,7 @@ def reserve(model: str, prompt_chars: int, max_tokens: int) -> Reservation:
         if rejected.scope == "total":
             _alert(day, 1.0, "дневной лимит исчерпан — вызовы модели отклоняются, разборы строятся правилами")
             raise BudgetExceeded(f"Бюджет LLM: вызов (~{cost:.2f} ₽) не помещается в дневной лимит с учетом идущих запросов")
-        raise BudgetExceeded(f"Бюджет LLM: исчерпана дневная доля компании ({share:.0%} лимита)")
+        raise BudgetExceeded(f"Бюджет LLM: исчерпана дневная доля компании ({share:.0%} лимита)", "company")
     return res
 
 

@@ -147,7 +147,7 @@ class Insight(Strict):
     mode: Literal["llm", "rules"]
     model: str | None
     # Почему разбор на правилах: AI выключен банком, не подключен, лимит бюджета, модель не ответила, не прошли проверки.
-    fallback_reason: Literal["paused", "disabled", "budget", "unavailable", "checks"] | None = None
+    fallback_reason: Literal["paused", "disabled", "budget", "company_budget", "unavailable", "checks"] | None = None
     title: str
     headline: str
     effect: Effect | None = None  # None — карточки, созданные до появления поля
