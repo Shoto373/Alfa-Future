@@ -11,7 +11,7 @@ from sqlalchemy import select
 from app.models import AppState, Insight, Feedback, Answer, Event
 
 # Меняется, когда правила меняют содержание карточек: старые перестают быть актуальным кэшем.
-# quality-3: знак эффекта (направление курса, санкций, форм глаголов) и поле effect.
+# quality-3: знак эффекта (направление курса, санкций, форм глаголов, «укрепление рубля» не про ставку) и поле effect.
 CACHE_VERSION = "p0-quality-3"
 
 

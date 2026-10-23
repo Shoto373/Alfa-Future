@@ -14,7 +14,7 @@ GOLDEN = Path(__file__).with_name("golden")
 
 def test_golden_set_is_complete():
     cases = eval_quality.load_golden(GOLDEN)
-    assert len(cases) == 30 and len({c["id"] for c in cases}) == 30
+    assert len(cases) >= 30 and len({c["id"] for c in cases}) == len(cases)
     topics = {t for c in cases for t in c["expect"]["topics"]}
     assert {"key_rate", "fx", "sanctions_geopolitics", "fuel_oil", "metals_steel", "logistics"} <= topics
     assert any(c["expect"]["effect"] == "none" for c in cases), "есть новости не про бизнес"

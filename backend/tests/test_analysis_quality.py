@@ -181,3 +181,12 @@ def test_insight_and_feed_carry_effect(client, company):
     storage.save_insight(ins)
     refs = storage.cached_insight_refs(company["company_id"], "cfo", [news["news_id"]])
     assert refs[news["news_id"]] == (ins["insight_id"], ins["effect"])
+
+
+def test_ruble_wording_does_not_leak_into_rate_direction():
+    # «…о ключевой ставке, укреплении рубля…»: укрепление рубля — направление курса, а не ставки.
+    cls = classify("Экономист — о ключевой ставке, укреплении рубля и прогнозах ЦБ",
+                   "Банк России второй раз подряд сохранил ключевую ставку на уровне 14% годовых.")
+    assert cls.topic_directions["key_rate"] == "hold"
+    assert classify("Ослабление рубля продолжилось", "Ослабление рубля продолжилось на фоне спроса на валюту.") \
+        .topic_directions["fx"] == "up"
