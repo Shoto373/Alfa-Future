@@ -41,7 +41,7 @@ export default function Shell({ children }: { children: ReactNode }) {
     return <div className="boot"><span className="spinner" aria-label="Загрузка" /></div>;
   }
 
-  const active = (href: string) => (href === "/" ? path === "/" : path === href || (href === "/pulse" && path.startsWith("/pulse/n")));
+  const active = (href: string) => path === href || (href === "/pulse" && path.startsWith("/pulse/n/"));
 
   return (
     <div className="app">

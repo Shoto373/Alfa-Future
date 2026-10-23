@@ -220,7 +220,7 @@ export default function ProfilePage() {
           <h1>Профиль</h1>
           <p className="muted">Доступ к данным определяется вашим членством в компаниях.</p>
         </div>
-        <button type="button" className="btn btn-secondary" onClick={async () => { await logout(); router.replace("/login"); }}>Выйти</button>
+        {/* <button type="button" className="btn btn-secondary" onClick={async () => { await logout(); router.replace("/login"); }}>Выйти</button> */}
       </div>
 
       <div className="card profile-head">

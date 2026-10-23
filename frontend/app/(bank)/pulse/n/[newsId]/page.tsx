@@ -35,7 +35,7 @@ export default function InsightPage() {
     setLoading(true);
     setError(null);
     if (!force) setInsight(null);
-    api.insight(session!.companyId, decodeURIComponent(newsId), force, c.signal)
+    api.insight(session!.companyId, newsId, force, c.signal)
       .then((ins) => { if (mine === seq.current) setInsight(ins); })
       .catch((e) => {
         if (mine !== seq.current || e instanceof AbortedError) return;

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import AddNews from "@/components/AddNews";
 import NewsCard from "@/components/NewsCard";
 import { Card, ErrorBox, Icon, Loading } from "@/components/ui";
@@ -12,20 +13,27 @@ import type { TopicCount } from "@/lib/types";
 const TOPICS_SHOWN = 10;
 
 export default function PulsePage() {
+  return <Suspense fallback={<Loading text="Загружаем ленту…" />}><PulseFeed /></Suspense>;
+}
+
+function PulseFeed() {
   const { session } = useSession();
-  const [topic, setTopic] = useState<string | undefined>();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const topic = searchParams.get("topic") || undefined;
+  const setTopic = (value?: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value) params.set("topic", value);
+    else params.delete("topic");
+    const query = params.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
   const page = useFeedWithTopics(session!.companyId, topic);
   const feed = { ...page, data: page.data?.items ?? null };
   const [refreshing, setRefreshing] = useState(false);
   const [allTopics, setAllTopics] = useState(false);
   const [refreshNote, setRefreshNote] = useState<string | null>(null);
-
-  useEffect(() => setTopic(undefined), [session!.companyId]);
-  // Переход с главной по теме: /pulse?topic=key_rate.
-  useEffect(() => {
-    const t = new URLSearchParams(window.location.search).get("topic");
-    if (t) setTopic(t);
-  }, []);
 
   // Только темы, по которым у компании есть новости; первые 10 видны сразу, остальные — по кнопке.
   // Счетчики приходят с сервером и не меняются при выборе темы, поэтому список не «прыгает».

@@ -109,7 +109,7 @@ export default function HomePage() {
           <ul>
             {topics.map((t) => (
               <li key={t.topic}>
-                <Link href={`/pulse?topic=${t.topic}`}>
+                <Link href={{ pathname: "/pulse", query: { topic: t.topic } }}>
                   <span>{t.name}</span>
                   <span className={`count ${t.important ? "count-red" : ""}`} title={t.important ? "Важных событий" : "Новостей"}>
                     {t.important || t.total}

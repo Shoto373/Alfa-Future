@@ -82,7 +82,7 @@ export const api = {
     request<{ profile: CompanyProfile; exposures: Exposure[] }>(`/api/v1/companies/${encodeURIComponent(id)}`, {}, { signal }),
   feed: (companyId: string, topic?: string, signal?: AbortSignal) =>
     request<{ items: FeedItem[]; topic_counts: TopicCount[] }>(
-      `/api/v1/feed?company_id=${encodeURIComponent(companyId)}${topic ? `&topic=${topic}` : ""}`, {}, { signal }),
+      `/api/v1/feed?company_id=${encodeURIComponent(companyId)}${topic ? `&topic=${encodeURIComponent(topic)}` : ""}`, {}, { signal }),
   insight: (companyId: string, newsId: string, force = false, signal?: AbortSignal) =>
     request<Insight>("/api/v1/insights", json("POST", { company_id: companyId, news_id: newsId, force_refresh: force }),
       { signal, timeoutMs: 180_000 }),
