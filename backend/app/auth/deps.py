@@ -44,7 +44,9 @@ def require_admin(company_id: str, user: dict = Depends(current_user)) -> dict:
     return m
 
 
-def require_any_admin(user: dict = Depends(current_user)) -> dict:
-    if not any(m["is_admin"] for m in user["memberships"]):
+def require_operator(user: dict = Depends(current_user)) -> dict:
+    """Сотрудник банка из OPERATOR_EMAILS. Сводные данные по всем клиентам (метрики, расходы, аудит)
+    не открываются администратору компании-клиента: он видит только свою компанию."""
+    if user["email"].lower() not in config.operator_emails():
         raise ApiError("FORBIDDEN")
     return user

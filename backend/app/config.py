@@ -63,6 +63,14 @@ def analysis_timeout() -> float:
     return float(_env("ANALYSIS_TIMEOUT_SECONDS", "150"))
 
 
+def operator_emails() -> set[str]:
+    """Сотрудники банка (email через запятую): метрики, расходы LLM, журнал инструментов, ручной сбор новостей.
+
+    Администратор компании — представитель клиента, а не банка: эти данные сводные по всем клиентам.
+    Пусто — служебные адреса закрыты для всех."""
+    return {e.strip().lower() for e in os.environ.get("OPERATOR_EMAILS", "").split(",") if e.strip()}
+
+
 def frontend_origin() -> str:
     return _env("FRONTEND_ORIGIN", "http://localhost:3000")
 

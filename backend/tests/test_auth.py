@@ -173,7 +173,7 @@ def test_cannot_change_own_role_and_last_admin(client, company, new_client):
     assert_error(bob.delete(f"{API}/companies/{cid}"), 403, "FORBIDDEN")
     # Сам он выйти может: основатель остаётся администратором.
     assert bob.delete(f"{API}/companies/{cid}/members/{bm['member_id']}").status_code == 204
-    assert client.get(f"{API}/metrics").status_code == 200
+    assert any(m["is_admin"] for m in client.get(f"{API}/auth/me").json()["memberships"])
 
 
 def test_pending_invited_admin_does_not_count_as_admin(client, company):
@@ -183,7 +183,7 @@ def test_pending_invited_admin_does_not_count_as_admin(client, company):
     assert_error(client.delete(f"{API}/companies/{cid}/members/{own['member_id']}"), 403, "FORBIDDEN")
 
 
-def test_non_member_gets_403(client, company, new_client):
+def test_non_member_gets_403(client, company, new_client, monkeypatch):
     cid = company["company_id"]
     ins = client.post(f"{API}/insights", json={"company_id": cid, "news_id": "seed-rate-hold"}).json()
     eve = new_client()
@@ -196,10 +196,18 @@ def test_non_member_gets_403(client, company, new_client):
     assert_error(eve.get(f"{API}/companies/{cid}"), 403, "FORBIDDEN")
     assert_error(eve.get(f"{API}/companies/{cid}/members"), 403, "FORBIDDEN")
     assert eve.get(f"{API}/companies").json() == {"total": 0, "items": []}
-    # Не администратор: метрики, аудит и обновление новостей закрыты.
-    for path, method in [("/metrics", "get"), ("/audit", "get"), ("/news/refresh", "post")]:
+    # Сводные данные по всем клиентам (метрики, расходы LLM, аудит, сбор новостей) — только сотрудникам банка.
+    service = [("/metrics", "get"), ("/metrics/daily", "get"), ("/audit", "get"), ("/news/refresh", "post")]
+    for path, method in service:
         assert_error(getattr(eve, method)(API + path), 403, "FORBIDDEN")
-    assert client.get(f"{API}/metrics").status_code == 200
+        # Администратор компании — представитель клиента, а не банка: чужие отзывы и расходы ему закрыты.
+        assert_error(getattr(client, method)(API + path), 403, "FORBIDDEN")
+    monkeypatch.setenv("OPERATOR_EMAILS", "Eve@Example.com")
+    assert eve.get(f"{API}/metrics").status_code == 200 and eve.get(f"{API}/audit").status_code == 200
+    assert eve.get(f"{API}/metrics/daily").status_code == 200
+    assert_error(client.get(f"{API}/metrics"), 403, "FORBIDDEN")
+    # /meta открыт без входа, поэтому расходов банка на LLM в нем нет.
+    assert "usage" not in eve.get(f"{API}/meta").json()["llm"]
 
 
 def test_role_comes_from_membership(client, company, new_client):

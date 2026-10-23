@@ -58,7 +58,7 @@ def test_feed_is_personalized(client):
     assert scores == sorted(scores, reverse=True)
 
 
-def test_insight_flow_with_cache_question_feedback_metrics(client, company):
+def test_insight_flow_with_cache_question_feedback_metrics(client, company, monkeypatch):
     req = {"company_id": company["company_id"], "news_id": "seed-rate-hold"}
     first = client.post("/api/v1/insights", json=req)
     assert first.status_code == 200, first.text
@@ -73,6 +73,7 @@ def test_insight_flow_with_cache_question_feedback_metrics(client, company):
     ans = client.post(f"/api/v1/insights/{ins['insight_id']}/questions", json={"question": "Какие источники?"}).json()
     assert ans["sources"]
     assert client.post("/api/v1/feedback", json={"insight_id": ins["insight_id"], "rating": 1, "section": "risks"}).json() == {"status": "ok"}
+    monkeypatch.setenv("OPERATOR_EMAILS", "owner@example.com")  # метрики и аудит — сотрудникам банка
     m = client.get("/api/v1/metrics").json()
     assert m["content"]["insights"] >= 1 and m["personalization"]["feedback"]["up"] == 1
     audit = client.get("/api/v1/audit").json()["items"]

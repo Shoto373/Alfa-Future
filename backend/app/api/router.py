@@ -10,7 +10,7 @@ from app import cache, config, embeddings, pipeline, storage, vectors
 from app.agent import audit, llm, orchestrator, qa
 from app.api.errors import ApiError
 from app.auth import store as auth_store
-from app.auth.deps import check_origin, current_user, member_of, require_any_admin
+from app.auth.deps import check_origin, current_user, member_of, require_operator
 from app.companies import profiles
 from app.companies.sectors import SECTOR_NAMES
 from app.errors import AnalysisUnavailable, InvalidAnalysisResult
@@ -87,7 +87,8 @@ def meta() -> dict:
         "news": len(store.all_items()),
         "search": {"embeddings": embeddings.signature() != "emb:off", "vectors": vectors.stats(), "redis": cache.ping()},
         "pipeline": pipeline.status(),
-        "llm": {"connected": llm.available(), "allowed_models": list(config.ALLOWED_MODELS), "usage": llm.usage()},
+        # Расходы банка на LLM — не публичные данные: только сотрудникам банка в /metrics.
+        "llm": {"connected": llm.available(), "allowed_models": list(config.ALLOWED_MODELS)},
         "roles": [{"role": k, "name": v["name"]} for k, v in ROLES.items()],
         "topics": [{"topic": k, "name": v["name"]} for k, v in TOPICS.items()],
         "sectors": [{"sector": k, "name": v} for k, v in SECTOR_NAMES.items()],
@@ -186,7 +187,7 @@ def add_news(payload: NewsCreateRequest) -> dict:
             "classification": saved["classification"]}
 
 
-@router.post("/news/refresh", responses=ERRORS, dependencies=[Depends(require_any_admin)])
+@router.post("/news/refresh", responses=ERRORS, dependencies=[Depends(require_operator)])
 def refresh_news() -> dict:
     return parser.refresh()
 
@@ -270,12 +271,12 @@ def feedback(payload: FeedbackRequest, user: dict = Depends(current_user)) -> di
     return {"status": "ok"}
 
 
-@router.get("/metrics", responses=ERRORS, dependencies=[Depends(require_any_admin)])
+@router.get("/metrics", responses=ERRORS, dependencies=[Depends(require_operator)])
 def metrics() -> dict:
     return storage.metrics()
 
 
-@router.get("/metrics/daily", responses=ERRORS, dependencies=[Depends(require_any_admin)])
+@router.get("/metrics/daily", responses=ERRORS, dependencies=[Depends(require_operator)])
 def daily_quality(hours: int = Query(24, ge=1, le=24 * 30)) -> dict:
     """Мониторинг качества за период: доля текста модели, проверки, источники, оценки, задержки, конвейер."""
     from app import quality
@@ -305,6 +306,6 @@ def analytics_pdf(doc_id: str):
                         content_disposition_type="inline")
 
 
-@router.get("/audit", responses=ERRORS, dependencies=[Depends(require_any_admin)])
+@router.get("/audit", responses=ERRORS, dependencies=[Depends(require_operator)])
 def audit_log(limit: int = Query(50, ge=1, le=500)) -> dict:
     return {"items": audit.tail(limit)}

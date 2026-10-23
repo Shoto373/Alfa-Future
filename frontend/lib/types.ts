@@ -206,7 +206,7 @@ export interface Meta {
   data: { profiles: number; total_companies: number; selection_rule: string; source_dir: string };
   knowledge: { documents: number; theses: number };
   news: number;
-  llm: { connected: boolean; allowed_models: string[]; usage: { tokens: number; limit: number; calls: number } };
+  llm: { connected: boolean; allowed_models: string[] };
   roles: { role: Role; name: string }[];
   topics: { topic: string; name: string }[];
   sectors: { sector: string; name: string }[];
