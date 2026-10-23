@@ -26,6 +26,9 @@ class InsightRequest(Strict):
     company_id: str = Field(..., min_length=1, max_length=64)
     news_id: str = Field(..., min_length=1, max_length=64)
     force_refresh: bool = False
+    # Быстрый ответ: готовая карточка или разбор на правилах без LLM (~0,2 с).
+    # LLM-версию клиент запрашивает следом обычным запросом: карточка на правилах ею заменяется.
+    fast: bool = False
 
 
 class QuestionRequest(Strict):

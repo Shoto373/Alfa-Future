@@ -1,6 +1,8 @@
 import asyncio
 import json
 
+import httpx
+
 import pytest
 
 from app.agent import orchestrator
@@ -179,3 +181,59 @@ def test_cors_origin_configuration(monkeypatch, configured, expected):
 @pytest.mark.parametrize("path", ["/api/v1/insights/..%2F..%2Fetc", "/api/v1/insights/ins-zzz"])
 def test_insight_lookup_is_safe(client, path):
     assert client.get(path).status_code in (404,)
+
+
+def test_fast_rules_card_first_then_llm_upgrade(client, company, monkeypatch):
+    """Быстрый запрос отдает разбор на правилах без LLM; следующий обычный заменяет его версией модели."""
+    from app.agent import llm
+
+    monkeypatch.setenv("LLM_BASE_URL", "http://llm.test/v1")
+    monkeypatch.setenv("LLM_API_KEY", "k")
+    calls = []
+
+    def fake_post(url, json, timeout, headers):
+        calls.append(url)
+        content = ('{"headline": "Для компании ставка 14% сохраняет дорогой долг", "risks": [{"text": "Долг остается дорогим", '
+                   '"origin": "ai", "source_ids": ["news:seed-rate-hold"], "features": ["products.loans"]}]}')
+        return httpx.Response(200, json={"choices": [{"message": {"content": content}}], "usage": {"total_tokens": 100}},
+                              request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(llm.httpx, "post", fake_post)
+    monkeypatch.setattr(llm, "_down_until", 0.0)  # предохранитель мог остаться от предыдущего теста
+    req = {"company_id": company["company_id"], "news_id": "seed-rate-hold"}
+    fast = client.post("/api/v1/insights", json=req | {"fast": True}).json()
+    assert fast["mode"] == "rules" and calls == []
+    assert client.post("/api/v1/insights", json=req | {"fast": True}).json()["insight_id"] == fast["insight_id"]
+
+    full = client.post("/api/v1/insights", json=req).json()
+    assert full["mode"] == "llm", [(s["name"], s["status"], s["detail"][:120]) for s in full["trace"] if s["stage"] != "tool"]
+    assert calls and full["insight_id"] != fast["insight_id"]
+    # Дальше и быстрый, и обычный запросы отдают готовую LLM-версию.
+    assert client.post("/api/v1/insights", json=req | {"fast": True}).json()["insight_id"] == full["insight_id"]
+    assert client.post("/api/v1/insights", json=req).json()["insight_id"] == full["insight_id"]
+
+
+def test_rules_card_after_failed_llm_draft_is_not_recomputed_on_every_open(client, company, monkeypatch):
+    from app.agent import llm, orchestrator as orch
+
+    monkeypatch.setenv("LLM_BASE_URL", "http://llm.test/v1")
+    monkeypatch.setenv("LLM_API_KEY", "k")
+    req = {"company_id": company["company_id"], "news_id": "seed-rate-hold"}
+    runs = []
+    real = orch.run
+
+    async def counted(*a, **k):
+        runs.append(k.get("use_llm"))
+        ins = await real(*a, use_llm=False)
+        # Как будто модель ответила, но черновик не прошел проверки и остался разбор на правилах.
+        ins["trace"].append({"step": 99, "stage": "compose", "name": "llm_compose", "detail": "черновик модели",
+                             "status": "ok", "duration_ms": 1.0})
+        return ins
+
+    monkeypatch.setattr(orchestrator, "run", counted)
+    first = client.post("/api/v1/insights", json=req).json()
+    assert first["mode"] == "rules" and len(runs) == 1
+    assert client.post("/api/v1/insights", json=req).json()["insight_id"] == first["insight_id"]
+    assert len(runs) == 1, "повторное открытие не тратит LLM заново"
+    client.post("/api/v1/insights", json=req | {"force_refresh": True})
+    assert len(runs) == 2

@@ -19,6 +19,8 @@ export default function InsightPage() {
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState(0);
+  const [upgrading, setUpgrading] = useState(false);
+  const [upgradeFailed, setUpgradeFailed] = useState(false);
   const seq = useRef(0);
 
   // Открыли разбор — уведомление по этой новости прочитано.
@@ -32,16 +34,38 @@ export default function InsightPage() {
     const c = new AbortController();
     controller.current = c;
     const mine = ++seq.current;
+    const companyId = session!.companyId;
+    const id = decodeURIComponent(newsId);
     setLoading(true);
     setError(null);
+    setUpgrading(false);
+    setUpgradeFailed(false);
     if (!force) setInsight(null);
-    api.insight(session!.companyId, decodeURIComponent(newsId), force, c.signal)
-      .then((ins) => { if (mine === seq.current) setInsight(ins); })
+    // 1) Сразу — готовая карточка или разбор на правилах (доли секунды).
+    api.insight(companyId, id, { force, fast: true }, c.signal)
+      .then((ins) => {
+        if (mine !== seq.current) return;
+        setInsight(ins);
+        setLoading(false);
+        if (ins.mode !== "rules") return;
+        // 2) Следом — версия модели: она заменит карточку на правилах, когда будет готова.
+        setUpgrading(true);
+        return api.insight(companyId, id, {}, c.signal)
+          .then((full) => {
+            if (mine !== seq.current) return;
+            setInsight(full);
+            if (full.mode === "rules") setUpgradeFailed(true);  // модель не ответила или ее выводы не прошли проверку
+          })
+          .catch((e) => {
+            if (mine === seq.current && !(e instanceof AbortedError)) setUpgradeFailed(true);
+          })
+          .finally(() => { if (mine === seq.current) setUpgrading(false); });
+      })
       .catch((e) => {
         if (mine !== seq.current || e instanceof AbortedError) return;
         setError(e instanceof ApiError ? e : new ApiError("Непредвиденная ошибка", "CLIENT", true));
-      })
-      .finally(() => { if (mine === seq.current) setLoading(false); });
+        setLoading(false);
+      });
   }, [session, newsId]);
 
   // Смена компании или роли — новый разбор; ответ на старый запрос игнорируется.
@@ -68,7 +92,8 @@ export default function InsightPage() {
         </div>
       )}
       {error && <ErrorBox message={error.message} onRetry={() => load()} />}
-      {insight && <InsightView insight={insight} onRefresh={() => load(true)} refreshing={loading} />}
+      {insight && <InsightView insight={insight} onRefresh={() => load(true)} refreshing={loading}
+        upgrading={upgrading} upgradeFailed={upgradeFailed} />}
     </div>
   );
 }

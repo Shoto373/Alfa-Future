@@ -4,6 +4,7 @@
 Все изменения идут под одной блокировкой, запись атомарная (tmp + replace).
 """
 
+import copy
 import json
 import os
 import threading
@@ -21,10 +22,23 @@ MAX_COMPANIES_PER_USER = 5
 MAX_MEMBERS_PER_COMPANY = 100
 
 
+_parsed: dict[str, tuple[tuple[int, int, int], object]] = {}  # путь -> (inode, mtime_ns, size), разобранный JSON
+
+
 def _read(name: str, key: str):
+    """Файл читается с диска только после изменения (запись атомарная: новый mtime и inode).
+
+    Возвращается копия: вызывающий код меняет результат перед _write.
+    """
     path = config.runtime_dir() / name
     try:
-        return json.loads(path.read_text(encoding="utf-8"))[key]
+        st = path.stat()
+        stamp = (st.st_ino, st.st_mtime_ns, st.st_size)
+        hit = _parsed.get(str(path))
+        if hit is None or hit[0] != stamp:
+            hit = (stamp, json.loads(path.read_text(encoding="utf-8"))[key])
+            _parsed[str(path)] = hit
+        return copy.deepcopy(hit[1])
     except (OSError, ValueError, KeyError):
         return [] if key == "members" else {}
 

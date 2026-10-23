@@ -83,9 +83,11 @@ export const api = {
   feed: (companyId: string, topic?: string, signal?: AbortSignal) =>
     request<{ items: FeedItem[]; topic_counts: TopicCount[] }>(
       `/api/v1/feed?company_id=${encodeURIComponent(companyId)}${topic ? `&topic=${topic}` : ""}`, {}, { signal }),
-  insight: (companyId: string, newsId: string, force = false, signal?: AbortSignal) =>
-    request<Insight>("/api/v1/insights", json("POST", { company_id: companyId, news_id: newsId, force_refresh: force }),
-      { signal, timeoutMs: 180_000 }),
+  // fast: готовая карточка или разбор на правилах без LLM за доли секунды; без fast — версия модели.
+  insight: (companyId: string, newsId: string, opts: { force?: boolean; fast?: boolean } = {}, signal?: AbortSignal) =>
+    request<Insight>("/api/v1/insights", json("POST", {
+      company_id: companyId, news_id: newsId, force_refresh: !!opts.force, fast: !!opts.fast,
+    }), { signal, timeoutMs: opts.fast ? 30_000 : 180_000 }),
   ask: (insightId: string, question: string) =>
     request<Answer>(`/api/v1/insights/${insightId}/questions`, json("POST", { question }), { timeoutMs: 90_000 }),
   feedback: (insightId: string, rating: 1 | -1, section: string, comment?: string) =>

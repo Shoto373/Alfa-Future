@@ -1,24 +1,41 @@
 """Persistent insights, answers, feedback and events in PostgreSQL."""
 
 import hashlib
+import time
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
-from app import database
+from app import config, database
 from app.agent import llm
 from sqlalchemy import select
-from app.models import Insight, Feedback, Answer, Event
+from app.models import AppState, Insight, Feedback, Answer, Event
 
 CACHE_VERSION = "p0-quality-2"
 
 
+VERSION_TTL = 5.0  # секунд; подписи источников меняются только при импорте
+_version_memo: tuple[float, tuple, str] | None = None
+
+
 def cache_version() -> str:
     # Source imports update these signatures; old insights remain available by id.
+    global _version_memo
+    scope = (config.database_url(), config.database_schema(), database.state_epoch())
+    now = time.monotonic()
+    if _version_memo and _version_memo[1] == scope and now - _version_memo[0] < VERSION_TTL:
+        return _version_memo[2]
     with database.session() as db:
-        profiles = database.state("profiles", db) or {}
-        knowledge = database.state("knowledge", db) or ""
-        news_version = database.state("news_seed", db) or ""
-    return hashlib.sha256(f"{CACHE_VERSION}:{profiles.get('signature')}:{knowledge}:{news_version}".encode()).hexdigest()
+        rows = dict(db.execute(select(AppState.key, AppState.payload)
+                               .where(AppState.key.in_(("profiles", "knowledge", "news_seed")))).all())
+    profiles, knowledge, news_version = rows.get("profiles") or {}, rows.get("knowledge") or "", rows.get("news_seed") or ""
+    version = hashlib.sha256(f"{CACHE_VERSION}:{profiles.get('signature')}:{knowledge}:{news_version}".encode()).hexdigest()
+    _version_memo = (now, scope, version)
+    return version
+
+
+def reset_cache() -> None:
+    global _version_memo
+    _version_memo = None
 
 
 def save_insight(insight: dict) -> None:
@@ -37,12 +54,31 @@ def get_insight(insight_id: str) -> dict | None:
         return row.payload if row else None
 
 
+def _newest_first() -> tuple:
+    # created_at хранится с точностью до секунды: при равном времени версия модели важнее быстрой на правилах.
+    return (Insight.created_at.desc(), (Insight.payload["mode"].astext == "llm").desc(), Insight.insight_id.desc())
+
+
 def cached_insight(company_id: str, role: str, news_id: str) -> dict | None:
     version = cache_version()
     with database.session() as db:
         return db.scalar(select(Insight.payload).where(Insight.company_id == company_id, Insight.role == role,
             Insight.news_id == news_id, Insight.cache_version == version)
-            .order_by(Insight.created_at.desc(), Insight.insight_id.desc()).limit(1))
+            .order_by(*_newest_first()).limit(1))
+
+
+def cached_insight_ids(company_id: str, role: str, news_ids: list[str]) -> dict[str, str]:
+    """news_id -> id последней актуальной карточки; один запрос на всю ленту (индекс insights_lookup_idx)."""
+    if not news_ids:
+        return {}
+    version = cache_version()
+    with database.session() as db:
+        rows = db.execute(select(Insight.news_id, Insight.insight_id)
+            .where(Insight.company_id == company_id, Insight.role == role, Insight.cache_version == version,
+                   Insight.news_id.in_(news_ids))
+            .order_by(Insight.news_id, *_newest_first())
+            .distinct(Insight.news_id)).all()
+    return dict(rows)
 
 
 def _append(table: str, record: dict) -> None:

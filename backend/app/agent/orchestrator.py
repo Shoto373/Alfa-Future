@@ -185,10 +185,11 @@ def _merge_llm(draft: dict, data: dict) -> dict:
     return draft
 
 
-async def run(company: dict, role: str, news: dict, request_id: str) -> dict:
+async def run(company: dict, role: str, news: dict, request_id: str, use_llm: bool | None = None) -> dict:
+    """use_llm=False — только правила (быстрый черновой разбор), None — LLM, если подключена."""
     trace = Trace()
     runner = ToolRunner(request_id)
-    use_llm = llm.available()
+    use_llm = llm.available() if use_llm is None else (use_llm and llm.available())
     model = None
     started = time.perf_counter()
 
@@ -241,15 +242,18 @@ async def run(company: dict, role: str, news: dict, request_id: str) -> dict:
         trace.add("tool", step["tool"], f"{step['why']}: {summary}", "ok", ms,
                   {"args": {k: v for k, v in step["args"].items() if k != "company_id"}})
 
-    for step in plan:
-        run_step(step)
+    def run_steps(steps: list[dict]) -> None:
+        for step in steps:
+            run_step(step)
+
+    # Инструменты читают БД и векторное хранилище — в потоке, чтобы не блокировать другие запросы.
+    await asyncio.to_thread(run_steps, plan)
     if planner:
         try:
             extra, meta = await planner
             trace.add("plan", "llm_queries", f"Модель {meta['model']} предложила запросов: {len(extra)}" +
                       ("".join(f"; «{q['args']['query']}» — {q['why']}" for q in extra)), "ok", meta["duration_ms"])
-            for step in extra:
-                run_step(step)
+            await asyncio.to_thread(run_steps, extra)
         except llm.LLMError as exc:
             trace.add("plan", "llm_queries", f"Уточняющие запросы модели не получены ({exc}); достаточно обязательных шагов", "warning")
 
@@ -287,8 +291,9 @@ async def run(company: dict, role: str, news: dict, request_id: str) -> dict:
         fixes = {r["fix"] for r in failed}
         if "broaden_search" in fixes:
             try:
-                wider, ms = runner.call("search_bank_analytics", query=news["text"][:600],
-                                       topics=[t["topic"] for t in news["classification"]["topics"]], sectors=[], include_stale=False)
+                wider, ms = await asyncio.to_thread(
+                    runner.call, "search_bank_analytics", query=news["text"][:600],
+                    topics=[t["topic"] for t in news["classification"]["topics"]], sectors=[], include_stale=False)
                 ctx["theses"] = wider
                 ctx["bank_search_complete"] = True
                 rebuilt = composer.compose(ctx)

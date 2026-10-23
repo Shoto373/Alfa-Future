@@ -24,10 +24,11 @@ docker compose pull backend frontend
 docker compose up -d --no-build --remove-orphans
 
 # Wait until backend and frontend report healthy before cleaning up old images.
+# The backend warms up the model, vectors, news and feeds before it accepts requests (up to ~5 min).
 healthy() {
   [ "$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$1" 2>/dev/null)" = "healthy" ]
 }
-for i in $(seq 1 45); do
+for i in $(seq 1 160); do
   healthy alfa-backend && healthy alfa-frontend && break
   sleep 2
 done
