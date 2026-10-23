@@ -134,4 +134,20 @@ def embeddings_settings() -> dict:
         "enabled": _env("EMBEDDINGS_ENABLED", "1").lower() not in ("0", "false", "no", "off"),
         "model": _env("EMBEDDINGS_MODEL", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"),
         "cache_dir": os.environ.get("EMBEDDINGS_CACHE_DIR") or None,
+        "batch_size": int(_env("EMBEDDINGS_BATCH_SIZE", "32")),
+        # Векторы хранятся в PostgreSQL (pgvector); 0 — только в памяти процесса.
+        "persist": _env("EMBEDDINGS_PERSIST", "1").lower() not in ("0", "false", "no", "off"),
     }
+
+
+def redis_url() -> str | None:
+    """Общий кэш ленты и служебных значений; без адреса — кэш в памяти процесса."""
+    return os.environ.get("REDIS_URL") or None
+
+
+def feed_cache_seconds() -> int:
+    return int(_env("FEED_CACHE_SECONDS", "300"))
+
+
+def warm_feeds_on_start() -> bool:
+    return _env("WARM_FEEDS_ON_START", "1").lower() not in ("0", "false", "no", "off")

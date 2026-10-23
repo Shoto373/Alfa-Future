@@ -89,6 +89,11 @@ def reset_cache() -> None:
     exposures.cache_clear()
 
 
+def signature() -> str | None:
+    """Подпись исходных CSV: меняется при пересборке профилей (ключ кэшей ленты)."""
+    return _load().get("signature")
+
+
 def meta() -> dict:
     d = _load()
     return {k: d.get(k) for k in ("generated_at", "source_dir", "total_companies", "selection_rule")} | {

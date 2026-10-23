@@ -16,15 +16,30 @@ from functools import lru_cache
 from pathlib import Path
 
 from app.news.classifier import tokenize
-from app import config, database, embeddings
+import numpy as np
+
+from app import config, database, embeddings, vectors
 from sqlalchemy import select, func
 from app.models import BankDocument, BankThesis, BankProduct
 
 KB_FILE = Path(__file__).with_name("bank_analytics.json")
 
 
+_signature_memo: tuple[tuple[int, int], str] | None = None
+
+
+def _signature() -> str:
+    """Подпись файла базы знаний; пересчитывается только при изменении файла."""
+    global _signature_memo
+    st = KB_FILE.stat()
+    key = (st.st_mtime_ns, st.st_size)
+    if _signature_memo is None or _signature_memo[0] != key:
+        _signature_memo = (key, hashlib.sha256(KB_FILE.read_bytes()).hexdigest())
+    return _signature_memo[1]
+
+
 def _kb() -> dict:
-    return _index(config.database_url(), config.database_schema(), hashlib.sha256(KB_FILE.read_bytes()).hexdigest())
+    return _index(config.database_url(), config.database_schema(), _signature())
 
 
 @lru_cache(maxsize=2)
@@ -51,7 +66,7 @@ def _index(url: str, schema: str, signature: str) -> dict:
         doc = docs[t["doc_id"]]
         tokens = [w[:5] for w in tokenize(t["text"])]  # грубый стемминг: первые 5 букв
         theses.append({**t, "doc_title": doc["title"], "doc_date": doc["date"], "stale": bool(doc.get("stale") or t.get("stale")),
-                       "_tokens": tokens})
+                       "_tokens": tokens, "_tf": Counter(tokens), "_token_set": set(tokens)})
     n = len(theses)
     df = Counter(w for t in theses for w in set(t["_tokens"]))
     idf = {w: math.log(1 + (n - c + 0.5) / (c + 0.5)) for w, c in df.items()}
@@ -80,7 +95,7 @@ def _public(t: dict) -> dict:
 
 
 def _bm25(query: list[str], t: dict, kb: dict, k1: float = 1.4, b: float = 0.7) -> float:
-    tf = Counter(t["_tokens"])
+    tf = t["_tf"]
     length = len(t["_tokens"])
     score = 0.0
     for w in set(query):
@@ -106,21 +121,43 @@ DENSE_PASS_GAP = 0.08
 
 
 @lru_cache(maxsize=4)
-def _thesis_vectors(signature: str, model: str) -> dict | None:
+def _thesis_vectors(signature: str, model: str) -> tuple[list[str], np.ndarray] | None:
+    """Матрица векторов тезисов. Векторы хранятся в коллекции thesis векторного хранилища."""
     theses = _kb()["theses"]
-    vectors = embeddings.embed([t["text"] for t in theses])
-    return None if vectors is None else {t["id"]: v for t, v in zip(theses, vectors)}
+    ids = [t["id"] for t in theses]
+    stored = vectors.sync(vectors.THESIS, [(t["id"], t["text"], {
+        "doc_id": t["doc_id"], "topics": t["topics"], "sectors": t["sectors"], "stale": t["stale"]}) for t in theses],
+        prune_missing=True)
+    if stored is None:  # хранилище недоступно — векторы только в памяти
+        found = embeddings.embed([t["text"] for t in theses])
+        if found is None:
+            return None
+        stored = dict(zip(ids, embeddings.as_matrix(found)))
+    return ids, np.stack([stored[i] for i in ids]) if ids else np.zeros((0, 0), dtype=np.float32)
 
 
-def _dense(query: str) -> tuple[dict, list[float]] | None:
+def _dense(query: str) -> dict[str, float] | None:
+    """Смысловое сходство запроса с каждым тезисом; None — модель недоступна."""
     if not query.strip():
         return None
     model = embeddings.signature()
     if model == "emb:off":
         return None
-    vectors = _thesis_vectors(hashlib.sha256(KB_FILE.read_bytes()).hexdigest(), model)
-    qv = embeddings.embed([query[:600]]) if vectors else None
-    return (vectors, qv[0]) if vectors and qv else None
+    index = _thesis_vectors(_signature(), model)
+    qv = embeddings.embed([query[:600]]) if index else None
+    if qv is None:
+        return None
+    ids, matrix = index
+    return dict(zip(ids, (matrix @ embeddings.as_matrix(qv)[0]).tolist())) if len(ids) else {}
+
+
+def warm() -> int:
+    """Старт сервиса: импорт базы знаний и векторы тезисов."""
+    _kb()
+    model = embeddings.signature()
+    if model != "emb:off":
+        _thesis_vectors(_signature(), model)
+    return len(_kb()["theses"])
 
 
 def search(query: str = "", topics: list[str] | None = None, sectors: list[str] | None = None,
@@ -128,12 +165,11 @@ def search(query: str = "", topics: list[str] | None = None, sectors: list[str] 
     kb = _kb()
     q = [w[:5] for w in tokenize(query)]
     topics, sectors = set(topics or []), set(sectors or [])
-    dense = _dense(query)
-    sims = {}
-    if dense:
-        sims = {t["id"]: embeddings.cosine(dense[1], dense[0][t["id"]]) for t in kb["theses"]
-                if not topics or topics & set(t["topics"])}
+    dense = _dense(query) or {}
+    sims = {t["id"]: dense[t["id"]] for t in kb["theses"]
+            if t["id"] in dense and (not topics or topics & set(t["topics"]))}
     pass_at = max(DENSE_PASS_MIN, max(sims.values(), default=0.0) - DENSE_PASS_GAP)
+    meaningful = {w for w in q if len(w) >= 5 and w not in {"компа", "банка", "альфа", "новос", "данны"}}
     results = []
     for t in kb["theses"]:
         if t["stale"] and not include_stale:
@@ -146,10 +182,9 @@ def search(query: str = "", topics: list[str] | None = None, sectors: list[str] 
             continue
         sim = sims.get(t["id"], 0.0)
         by_meaning = sim >= pass_at
-        meaningful = {w for w in q if len(w) >= 5 and w not in {"компа", "банка", "альфа", "новос", "данны"}}
-        if topics and len(q) > 5 and len(meaningful & set(t["_tokens"])) < 2 and not by_meaning:
+        if topics and len(q) > 5 and len(meaningful & t["_token_set"]) < 2 and not by_meaning:
             continue
-        if not topics and (lexical < 2 or len(meaningful & set(t["_tokens"])) < 2) and not by_meaning:
+        if not topics and (lexical < 2 or len(meaningful & t["_token_set"]) < 2) and not by_meaning:
             continue
         score = lexical + DENSE_WEIGHT * max(0.0, sim - DENSE_FLOOR) + 2.5 * topic_hit + 1.5 * sector_hit
         if score <= 0:

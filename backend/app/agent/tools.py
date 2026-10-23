@@ -8,7 +8,7 @@
 from dataclasses import dataclass
 from typing import Callable
 
-from app import embeddings
+from app import embeddings, vectors
 from app.agent import audit
 from app.companies import profiles
 from app.companies.sectors import SECTOR_NAMES
@@ -19,6 +19,7 @@ from app.news import store
 # при коррекции. Бюджет защищает от зацикливания плана, а не экономит деньги.
 MAX_CALLS_PER_RUN = 20
 STORY_SIMILARITY = 0.55  # сходство заголовков, с которого новости считаются одним сюжетом
+STORY_CANDIDATES = 24  # ближайших заголовков из векторного хранилища
 
 
 class ToolError(Exception):
@@ -58,17 +59,37 @@ def _story(news_id: str) -> list[dict]:
     if current is None:
         raise ToolError("Новость не найдена")
     main = {t["topic"] for t in current["classification"]["topics"][:2]}
-    earlier = [n for n in store.all_items() if n["news_id"] != news_id and n["published_at"] < current["published_at"]
-               and main & {t["topic"] for t in n["classification"]["topics"]}]
-    if not earlier:
+    if not main:
         return []
-    vectors = embeddings.embed([current["title"]] + [n["title"] for n in earlier])
-    if vectors:
-        scored = [(embeddings.cosine(vectors[0], v), n) for v, n in zip(vectors[1:], earlier)]
-        earlier = [n for sim, n in sorted(scored, key=lambda x: -x[0]) if sim >= STORY_SIMILARITY][:6]
+    earlier = _story_by_vectors(current, main)
+    if earlier is None:
+        earlier = [n for n in store.all_items() if n["news_id"] != news_id and n["published_at"] < current["published_at"]
+                   and main & {t["topic"] for t in n["classification"]["topics"]}]
+        if not earlier:
+            return []
+        vectors_ = embeddings.embed([current["title"]] + [n["title"] for n in earlier])
+        if vectors_ is not None:
+            matrix = embeddings.as_matrix(vectors_)
+            sims = matrix[1:] @ matrix[0]
+            order = sorted(range(len(earlier)), key=lambda i: -sims[i])
+            earlier = [earlier[i] for i in order if sims[i] >= STORY_SIMILARITY][:6]
     earlier.sort(key=lambda n: n["published_at"], reverse=True)
     return [{"news_id": n["news_id"], "title": n["title"], "lead": n["lead"][:300], "published_at": n["published_at"][:10],
              "source": n["source"], "magnitude": n["classification"].get("magnitude")} for n in earlier[:4]]
+
+
+def _story_by_vectors(current: dict, main: set[str]) -> list[dict] | None:
+    """Поиск в векторном хранилище (pgvector, HNSW) с фильтром по дате и темам; None — хранилище недоступно."""
+    query = embeddings.embed([current["title"]])
+    if query is None:
+        return None
+    found = vectors.nearest(vectors.NEWS, embeddings.as_matrix(query)[0], k=STORY_CANDIDATES,
+                            exclude=[current["news_id"]], published_before=current["published_at"],
+                            topics_any=sorted(main))
+    if found is None:
+        return None
+    items = [store.get(item_id) for item_id, sim, _ in found if sim >= STORY_SIMILARITY]
+    return [n for n in items if n is not None][:6]
 
 
 def _counterparties(company_id: str) -> dict:

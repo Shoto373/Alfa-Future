@@ -21,6 +21,7 @@
 }
 
 .insight {
+  padding-bottom: 72px;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -331,4 +332,70 @@
 .insightHead {
   --score-color: #fff;
   --score-track: rgba(255, 255, 255, .15);
+}
+
+.sources li.focused {
+  background: var(--blue-soft);
+  border-radius: 12px;
+}
+
+.collapseToggle {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.collapseToggle:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+
+.collapseToggle svg {
+  transition: transform .2s;
+  color: var(--muted);
+}
+
+.collapseToggle[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.upgradeNote {
+  margin: 12px 0 0;
+  padding: 10px 12px 10px 38px;
+  position: relative;
+  border-radius: var(--radius-sm);
+  background: var(--blue-soft);
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.upgradeNote::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--red);
+  border-top-color: transparent;
+  animation: spin .8s linear infinite;
+}
+
+.upgradeNoteWarn {
+  background: var(--amber-soft);
+}
+
+.upgradeNoteWarn::before {
+  animation: none;
+  border-color: var(--amber);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

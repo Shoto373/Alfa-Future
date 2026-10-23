@@ -16,6 +16,8 @@ import math
 import re
 from datetime import datetime, timezone
 
+import numpy as np
+
 from app import embeddings
 from app.companies import profiles
 from app.companies.sectors import SECTOR_NAMES
@@ -149,16 +151,20 @@ def score(news: dict, company_id: str, role: str) -> dict:
 def _collapse_stories(ranked: list[dict]) -> list[dict]:
     """Один сюжет из разных источников показывается один раз: похожие заголовки склеиваются."""
     vectors = embeddings.embed([r["news"]["title"] for r in ranked]) if len(ranked) > 1 else None
-    if not vectors:
+    if vectors is None:
         return ranked
-    kept: list[tuple[dict, list[float]]] = []
-    for item, vec in zip(ranked, vectors):
-        twin = next((k for k, v in kept if embeddings.cosine(vec, v) >= STORY_SIMILARITY), None)
-        if twin is None:
-            kept.append((item, vec))
-        else:
+    matrix = embeddings.as_matrix(vectors)
+    close = (matrix @ matrix.T) >= STORY_SIMILARITY  # все попарные сходства одним умножением
+    kept = np.zeros(len(ranked), dtype=bool)
+    for i in range(len(ranked)):
+        # Новость склеивается с первой (самой релевантной) уже оставленной новостью того же сюжета.
+        twins = np.flatnonzero(kept[:i] & close[i, :i])
+        if twins.size:
+            twin = ranked[twins[0]]
             twin["story_size"] = twin.get("story_size", 0) + 1
-    return [k for k, _ in kept]
+        else:
+            kept[i] = True
+    return [r for r, k in zip(ranked, kept) if k]
 
 
 def feed(items: list[dict], company_id: str, role: str, topic: str | None = None, limit: int = 30) -> list[dict]:
@@ -176,3 +182,29 @@ def feed(items: list[dict], company_id: str, role: str, topic: str | None = None
         ranked.append({"news": news, "relevance": relevance})
     ranked.sort(key=lambda r: r["relevance"]["score"], reverse=True)
     return _collapse_stories(ranked[: limit * 2])[:limit]
+
+
+def company_feed(company_id: str, role: str, limit: int = 500) -> list[dict]:
+    """Лента компании по всем новостям с кэшем (память процесса + Redis).
+
+    Ключ включает ревизию новостей и подпись профилей: новая новость или пересборка
+    профилей дают новый ключ. TTL ограничивает дрейф свежести внутри одной ревизии.
+    В кэше лежат только id и оценки — сами новости берутся из хранилища в памяти.
+    """
+    from app import cache, config
+    from app.news import store
+
+    if NOW_OVERRIDE is not None:  # тесты с фиксированным временем считают ленту напрямую
+        return feed(store.all_items(), company_id, role, None, limit)
+    key = f"feed:v1:{company_id}:{role}:{limit}:{store.revision()}:{profiles.signature()}:{embeddings.signature()}"
+    hit = cache.get(key)
+    if hit is not None:
+        rows = [(store.get(r["news_id"]), r) for r in hit]
+        if all(n is not None for n, _ in rows):
+            return [{"news": n, "relevance": r["relevance"], **({"story_size": r["story_size"]} if "story_size" in r else {})}
+                    for n, r in rows]
+    result = feed(store.all_items(), company_id, role, None, limit)
+    cache.set(key, [{"news_id": r["news"]["news_id"], "relevance": r["relevance"],
+                     **({"story_size": r["story_size"]} if "story_size" in r else {})} for r in result],
+              config.feed_cache_seconds())
+    return result

@@ -73,6 +73,7 @@ const ORIGIN_STYLES: Record<string, string | undefined> = {
   client_data: styles.originClientData,
   bank: styles.originBank,
   ai: styles.originAi,
+  rules: styles.originRules,
 };
 
 /** Плитка-логотип организации, как в переключателе компаний Альфа-Бизнеса. */

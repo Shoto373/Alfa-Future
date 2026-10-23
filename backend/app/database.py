@@ -18,6 +18,7 @@ from app.models import AppState
 
 _ready: set[tuple[str, str]] = set()
 _lock = threading.Lock()
+_state_epoch = 0  # растет при каждой записи app_state в этом процессе (сброс кэшей подписей)
 
 
 def schema() -> str:
@@ -30,9 +31,11 @@ def schema() -> str:
 @lru_cache(maxsize=16)
 def _engine(url: str, namespace: str):
     parsed = make_url(url).set(drivername="postgresql+psycopg")
-    return create_engine(parsed, pool_pre_ping=True, pool_size=5, max_overflow=5,
+    # public is searched second: the pgvector type lives there, shared by every application schema.
+    path = namespace if namespace == "public" else f"{namespace},public"
+    return create_engine(parsed, pool_pre_ping=True, pool_size=10, max_overflow=10, pool_recycle=1800,
                          connect_args={"connect_timeout": 5,
-                                       "options": f"-c search_path={namespace} -c statement_timeout=30000"})
+                                       "options": f"-c search_path={path} -c statement_timeout=30000"})
 
 
 def engine():
@@ -77,7 +80,13 @@ def state(key: str, db: Session | None = None):
     return row.payload if row else None
 
 
+def state_epoch() -> int:
+    return _state_epoch
+
+
 def set_state(key: str, value, db: Session) -> None:
+    global _state_epoch
+    _state_epoch += 1
     stmt = insert(AppState).values(key=key, payload=value)
     db.execute(stmt.on_conflict_do_update(index_elements=[AppState.key],
                set_={"payload": stmt.excluded.payload, "updated_at": func.now()}))

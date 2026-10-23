@@ -52,10 +52,13 @@ test("разбор, трасса, уточнение, оценка и перво
   await expect(page.getByRole("heading", { name: "Ход анализа агента" })).toBeVisible();
   // Плашка самопроверки убрана из шапки — результат проверок виден в ходе анализа.
   await expect(page.getByTestId("quality-checks").getByRole("listitem").first()).toBeVisible();
+  await page.getByRole("button", { name: "Уточнить у аналитика", exact: true }).click();
   await page.getByRole("button", { name: "Покажи в разрезе контрагентов" }).click();
   await expect(page.getByTestId("chat-turn").last()).toContainText("Структура платежей", { timeout: 60_000 });
+  await page.getByRole("button", { name: "Свернуть", exact: true }).click();
   await page.getByRole("button", { name: "Полезно", exact: true }).first().click();
   await expect(page.getByText("Спасибо за оценку").first()).toBeVisible();
+  await page.getByRole("button", { name: /6\. На чем основан вывод/ }).click();
   const pdf = page.locator('a[href*="/analytics/"][href*="/pdf#page="]').first();
   const href = await pdf.getAttribute("href");
   expect(href).toMatch(/#page=\d+/);

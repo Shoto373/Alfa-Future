@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { date } from "@/lib/format";
 import type { Claim, Insight, Source } from "@/lib/types";
@@ -33,22 +33,32 @@ const CHECK: Record<string, string> = {
 };
 
 function SourceRefs({ ids, index }: { ids: string[]; index: Map<string, number> }) {
+  const openSource = useContext(OpenSource);
   const refs = ids.filter((id) => index.has(id));
   if (!refs.length) return null;
   return (
     <span className={styles.refs}>
-      {refs.map((id) => <a key={id} href={`#src-${index.get(id)}`} title="Перейти к источнику">[{index.get(id)}]</a>)}
+      {refs.map((id) => (
+        <a key={id} href={`#src-${index.get(id)}`} title="Перейти к источнику"
+          onClick={(e) => { e.preventDefault(); openSource(index.get(id)); }}>[{index.get(id)}]</a>
+      ))}
     </span>
   );
 }
 
+// Карточка на правилах: рассуждения агента построены правилами, а не моделью, — и подписаны так же.
+const RulesMode = createContext(false);
+// Сноска [n] раскрывает свернутый блок источников и прокручивает к источнику n.
+const OpenSource = createContext<(n?: number) => void>(() => {});
+
 function ClaimList({ items, index, empty = "Нет данных" }: { items: Claim[]; index: Map<string, number>; empty?: string }) {
+  const rules = useContext(RulesMode);
   if (!items.length) return <p className={styles.muted}>{empty}</p>;
   return (
     <ul className={common.claims}>
       {items.map((c, i) => (
         <li key={i}>
-          <OriginTag origin={c.origin} />
+          <OriginTag origin={rules && c.origin === "ai" ? "rules" : c.origin} />
           <span>{c.text}</span>
           <SourceRefs ids={c.source_ids} index={index} />
         </li>
@@ -78,12 +88,33 @@ function sourceLink(s: Source): string | null {
   return null;
 }
 
-export default function InsightView({ insight: ins, onRefresh, refreshing }: { insight: Insight; onRefresh: () => void; refreshing: boolean }) {
+export default function InsightView({ insight: ins, onRefresh, refreshing, upgrading = false, upgradeFailed = false }: {
+  insight: Insight; onRefresh: () => void; refreshing: boolean; upgrading?: boolean; upgradeFailed?: boolean;
+}) {
   const index = new Map(ins.sources.map((s, i) => [s.source_id, i + 1]));
   const [showTrace, setShowTrace] = useState(false);
+  const [showSources, setShowSources] = useState(false);
+  const [focused, setFocused] = useState<number | null>(null);
+
+  const openSource = useCallback((n?: number) => {
+    setShowSources(true);
+    if (!n) return;
+    setFocused(n);
+    history.replaceState(null, "", `#src-${n}`);
+    // Блок раскрывается в этом же кадре — прокрутка после отрисовки.
+    requestAnimationFrame(() => document.getElementById(`src-${n}`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
+  }, []);
+
+  // Переход по ссылке вида …#src-3 открывает источники сразу.
+  useEffect(() => {
+    const m = /^#src-(\d+)$/.exec(window.location.hash);
+    if (m) openSource(Number(m[1]));
+  }, [openSource, ins.insight_id]);
   const fb = (section: string) => <Feedback insightId={ins.insight_id} section={section} />;
 
   return (
+    <RulesMode.Provider value={ins.mode === "rules"}>
+    <OpenSource.Provider value={openSource}>
     <div className={styles.insight}>
       <div className={styles.insightHead} data-testid="insight-header">
         <div className={styles.insightBadges}>
@@ -92,7 +123,7 @@ export default function InsightView({ insight: ins, onRefresh, refreshing }: { i
         <p className={styles.newsTitle}>{ins.title}</p>
         <h1>{ins.headline}</h1>
         <div className={styles.insightActions}>
-          <button className={`${common.btn} ${styles.btnSecondary} ${common.btnSm}`} onClick={onRefresh} disabled={refreshing}>
+          <button className={`${common.btn} ${styles.btnSecondary} ${common.btnSm}`} onClick={onRefresh} disabled={refreshing || upgrading}>
             <Icon name="refresh" size={16} /> {refreshing ? "Пересчитываем…" : "Пересчитать"}
           </button>
           <button className={`${common.btn} ${styles.btnSecondary} ${common.btnSm}`} onClick={() => setShowTrace((v) => !v)}>
@@ -100,6 +131,16 @@ export default function InsightView({ insight: ins, onRefresh, refreshing }: { i
           </button>
           <span className={`${styles.muted} ${common.small}`}>{date(ins.created_at)}</span>
         </div>
+        {upgrading && (
+          <p className={styles.upgradeNote} role="status">
+            Это быстрый разбор на правилах: данные компании и аналитика банка уже учтены. AI-модель дополняет выводы — карточка обновится сама.
+          </p>
+        )}
+        {!upgrading && upgradeFailed && ins.mode === "rules" && (
+          <p className={`${styles.upgradeNote} ${styles.upgradeNoteWarn}`} role="status">
+            AI-версия сейчас недоступна: модель не ответила или ее выводы не прошли проверку фактов. Показан проверенный разбор на правилах — можно нажать «Пересчитать» позже.
+          </p>
+        )}
       </div>
 
       {showTrace && (
@@ -175,12 +216,18 @@ export default function InsightView({ insight: ins, onRefresh, refreshing }: { i
           {ins.bank_view.conflicts.map((c) => <p key={c} className={styles.conflict}>{c}</p>)}
         </Card>
 
-        <Card title="6. На чем основан вывод" className={styles.span2}>
-          <ol className={styles.sources}>
+        <Card className={styles.span2} title={
+          <button type="button" className={styles.collapseToggle} aria-expanded={showSources} aria-controls="insight-sources"
+            onClick={() => setShowSources((v) => !v)}>
+            6. На чем основан вывод <span className={styles.muted}>· {ins.sources.length}</span>
+            <Icon name="chevron" size={18} />
+          </button>
+        }>
+          {showSources && <ol className={styles.sources} id="insight-sources">
             {ins.sources.map((s, i) => {
               const link = sourceLink(s);
               return (
-                <li key={s.source_id} id={`src-${i + 1}`}>
+                <li key={s.source_id} id={`src-${i + 1}`} className={focused === i + 1 ? styles.focused : undefined}>
                   <span className={`${styles.srcKind} ${SOURCE_STYLES[s.kind] ?? ""}`}>{{ news: "Новость", bank_analytics: "Аналитика банка", client_data: "Данные компании", bank_product: "Продукт банка" }[s.kind]}</span>
                   <div>
                     <strong>{s.title}</strong>{s.page ? `, стр. ${s.page}` : ""}{s.date ? ` · ${date(s.date)}` : ""}
@@ -190,7 +237,7 @@ export default function InsightView({ insight: ins, onRefresh, refreshing }: { i
                 </li>
               );
             })}
-          </ol>
+          </ol>}
           <h4>Почему новость попала в вашу ленту</h4>
           <ul className={common.plain}>{ins.relevance.reasons.map((r, i) => <li key={i}>{r.text}</li>)}</ul>
         </Card>
@@ -198,5 +245,7 @@ export default function InsightView({ insight: ins, onRefresh, refreshing }: { i
 
       <Chat insightId={ins.insight_id} suggestions={["Какие источники использованы?", "Покажи в разрезе контрагентов", "Что думает банк о ставке?", "Какое место компании в отрасли?"]} />
     </div>
+    </OpenSource.Provider>
+    </RulesMode.Provider>
   );
 }
