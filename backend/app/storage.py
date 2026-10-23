@@ -67,6 +67,28 @@ def cached_insight(company_id: str, role: str, news_id: str) -> dict | None:
             .order_by(*_newest_first()).limit(1))
 
 
+def cached_insights(company_id: str, role: str, news_ids: list[str]) -> dict[str, dict]:
+    """news_id -> последняя актуальная карточка (целиком); один запрос на список новостей."""
+    if not news_ids:
+        return {}
+    version = cache_version()
+    with database.session() as db:
+        rows = db.execute(select(Insight.news_id, Insight.payload)
+            .where(Insight.company_id == company_id, Insight.role == role, Insight.cache_version == version,
+                   Insight.news_id.in_(news_ids))
+            .order_by(Insight.news_id, *_newest_first())
+            .distinct(Insight.news_id)).all()
+    return dict(rows)
+
+
+def llm_attempted(insight: dict) -> bool:
+    """Модель уже отвечала для этой карточки, но ее черновик не прошел проверки — повтор даст то же самое.
+
+    Такую карточку пересчитывает только «Пересчитать» (force_refresh), а не каждое открытие или конвейер.
+    """
+    return any(s.get("name") == "llm_compose" and s.get("status") == "ok" for s in insight.get("trace", []))
+
+
 def cached_insight_ids(company_id: str, role: str, news_ids: list[str]) -> dict[str, str]:
     """news_id -> id последней актуальной карточки; один запрос на всю ленту (индекс insights_lookup_idx)."""
     if not news_ids:

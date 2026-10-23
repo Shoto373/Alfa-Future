@@ -31,6 +31,7 @@ def isolated_runtime(tmp_path_factory, monkeypatch):
     monkeypatch.delenv("LLM_BASE_URL", raising=False)
     monkeypatch.delenv("LLM_API_KEY", raising=False)
     monkeypatch.setenv("RSS_SOURCES", "")
+    monkeypatch.setenv("RSS_REFRESH_MINUTES", "0")  # фоновый конвейер в тестах не запускается
     # Тесты не скачивают модель: смысловой слой проверяется подменой embeddings.embed.
     monkeypatch.setenv("EMBEDDINGS_ENABLED", "0")
     monkeypatch.setenv("FRONTEND_ORIGIN", "http://localhost:3000")

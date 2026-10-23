@@ -26,18 +26,13 @@ def _step(report: dict, name: str, fn):
 
 
 def _feeds() -> int:
-    from app import config, ranking
-    from app.auth import store as auth_store
+    from app import config, pipeline, ranking
 
     if not config.warm_feeds_on_start():
         return 0
-    pairs = set()
-    for company_id in auth_store.claimed_ids():
-        for m in auth_store.list_members(company_id):
-            pairs.add((company_id, m["role"]))
-    for company_id, role in sorted(pairs):
-        if profiles.get(company_id) is not None:
-            ranking.company_feed(company_id, role, 500)
+    pairs = pipeline.audience()
+    for company_id, role in pairs:
+        ranking.company_feed(company_id, role, 500)
     return len(pairs)
 
 

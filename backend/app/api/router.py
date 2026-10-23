@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse
 
-from app import cache, config, embeddings, storage, vectors
+from app import cache, config, embeddings, pipeline, storage, vectors
 from app.agent import audit, llm, orchestrator, qa
 from app.api.errors import ApiError
 from app.auth import store as auth_store
@@ -67,14 +67,6 @@ def _news(news_id: str) -> dict:
     return n
 
 
-def _llm_answered(insight: dict) -> bool:
-    """Модель уже отвечала для этой карточки, но ее черновик не прошел проверки — повтор даст то же самое.
-
-    Такую карточку пересчитывает только «Пересчитать» (force_refresh), а не каждое открытие.
-    """
-    return any(s.get("name") == "llm_compose" and s.get("status") == "ok" for s in insight.get("trace", []))
-
-
 def _news_brief(n: dict) -> dict:
     cls = n["classification"]
     return {"news_id": n["news_id"], "title": n["title"], "lead": n["lead"], "source": n["source"], "url": n["url"],
@@ -94,6 +86,7 @@ def meta() -> dict:
         "knowledge": {"documents": len(kb.documents()), "theses": sum(1 for _ in kb.search(topics=list(TOPICS), limit=1000, include_stale=True))},
         "news": len(store.all_items()),
         "search": {"embeddings": embeddings.signature() != "emb:off", "vectors": vectors.stats(), "redis": cache.ping()},
+        "pipeline": pipeline.status(),
         "llm": {"connected": llm.available(), "allowed_models": list(config.ALLOWED_MODELS), "usage": llm.usage()},
         "roles": [{"role": k, "name": v["name"]} for k, v in ROLES.items()],
         "topics": [{"topic": k, "name": v["name"]} for k, v in TOPICS.items()],
@@ -201,7 +194,7 @@ async def create_insight(payload: InsightRequest, request: Request, user: dict =
             return c, n, None
         cached = storage.cached_insight(c["company_id"], role, n["news_id"])
         # Карточка на правилах пересчитывается моделью, если LLM подключена; быстрый запрос берет любую готовую.
-        if cached and (payload.fast or not (cached["mode"] == "rules" and llm.available() and not _llm_answered(cached))):
+        if cached and (payload.fast or not (cached["mode"] == "rules" and llm.available() and not storage.llm_attempted(cached))):
             storage.log_event("insight_open", insight_id=cached["insight_id"], cached=True)
             return c, n, cached
         return c, n, None

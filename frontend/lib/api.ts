@@ -94,9 +94,6 @@ export const api = {
     request<{ status: string }>("/api/v1/feedback", json("POST", { insight_id: insightId, rating, section, comment: comment || null })),
   addNews: (payload: { title?: string; text?: string; url?: string }) =>
     request<{ created: boolean; duplicate_of: string | null; news: NewsBrief }>("/api/v1/news", json("POST", payload), { timeoutMs: 30_000 }),
-  refreshNews: () =>
-    request<{ added: number; duplicates: number; sources: { name: string; fetched: number; error: string | null }[] }>(
-      "/api/v1/news/refresh", { method: "POST" }, { timeoutMs: 90_000 }),
   analytics: () => request<{ documents: BankDocument[] }>("/api/v1/analytics"),
   metrics: () => request<Record<string, any>>("/api/v1/metrics"),
   audit: () => request<{ items: Record<string, any>[] }>("/api/v1/audit?limit=60"),

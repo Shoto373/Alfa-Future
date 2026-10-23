@@ -95,7 +95,27 @@ def rss_max_items() -> int:
 
 
 def rss_refresh_minutes() -> int:
-    return int(_env("RSS_REFRESH_MINUTES", "0"))
+    """Период автоматического конвейера (сбор RSS и разборы); 0 — выключен."""
+    return int(_env("RSS_REFRESH_MINUTES", "15"))
+
+
+def pipeline_rules_top() -> int:
+    """Сколько самых релевантных новостей ленты конвейер разбирает правилами на пару «компания — роль»."""
+    return int(_env("PIPELINE_RULES_TOP", "10"))
+
+
+def pipeline_llm_per_cycle() -> int:
+    """Сколько карточек конвейер пересчитывает моделью за цикл (0 — только правила)."""
+    return int(_env("PIPELINE_LLM_PER_CYCLE", "5"))
+
+
+def pipeline_llm_share() -> float:
+    """Доля дневного лимита LLM, которую может потратить конвейер; остальное — запросам пользователей."""
+    return float(_env("PIPELINE_LLM_SHARE", "0.5"))
+
+
+def pipeline_start_delay() -> float:
+    return float(_env("PIPELINE_START_DELAY_SECONDS", "15"))
 
 
 def llm_settings() -> dict:
