@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { CompanyTile, ErrorBox, Icon, Loading } from "@/components/ui";
 import { AbortedError, api } from "@/lib/api";
 import { errorText } from "@/lib/errors";
@@ -14,6 +14,7 @@ import forms from "@/styles/forms.module.scss";
 
 const ROLES = Object.keys(ROLE_NAMES) as Role[];
 const SELF_HINT = "Свою роль может изменить только другой администратор";
+type RoleChange = { member: Member; role: Role };
 
 /** Ненавязчивое меню компании: участник видит только «Выйти», основатель — только «Расформировать». */
 function CompanyMenu({ m, selfId, onChanged }: { m: Membership; selfId: string; onChanged: () => void }) {
@@ -83,6 +84,152 @@ function CompanyMenu({ m, selfId, onChanged }: { m: Membership; selfId: string; 
   );
 }
 
+function MemberMenu({ member, busy, onToggleAdmin, onRemove }: {
+  member: Member;
+  busy: boolean;
+  onToggleAdmin: () => void;
+  onRemove: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const menuId = useId();
+  const name = member.name ?? member.email;
+
+  useEffect(() => {
+    if (!open) return;
+    menu.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    const close = (event: PointerEvent) => {
+      if (box.current && !box.current.contains(event.target as Node)) setOpen(false);
+    };
+    const escape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        trigger.current?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+
+  const navigate = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Tab") {
+      setOpen(false);
+      trigger.current?.focus();
+      return;
+    }
+    const buttons = Array.from(menu.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    const next = event.key === "ArrowDown" ? (index + 1) % buttons.length
+      : event.key === "ArrowUp" ? (index - 1 + buttons.length) % buttons.length
+      : event.key === "Home" ? 0
+      : event.key === "End" ? buttons.length - 1 : null;
+    if (next !== null) {
+      event.preventDefault();
+      buttons[next]?.focus();
+    }
+  };
+
+  const run = (action: () => void) => {
+    setOpen(false);
+    trigger.current?.focus();
+    action();
+  };
+
+  return (
+    <div className={styles.memberActions} ref={box}>
+      <button ref={trigger} type="button" className={styles.iconBtn} disabled={busy}
+        aria-label={`Действия с участником: ${name}`} aria-haspopup="menu" aria-expanded={open}
+        aria-controls={open ? menuId : undefined} onClick={() => setOpen((value) => !value)}>
+        <Icon name="more" size={20} />
+      </button>
+      {open && (
+        <div ref={menu} id={menuId} className={`${styles.companyMenuPop} ${styles.memberMenuPop}`}
+          role="menu" aria-label={`Действия с участником: ${name}`} onKeyDown={navigate}>
+          <button type="button" role="menuitem" className={styles.menuItem} onClick={() => run(onToggleAdmin)}>
+            {member.is_admin ? "Снять админа" : "Сделать админом"}
+          </button>
+          <button type="button" role="menuitem" className={`${styles.menuItem} ${styles.dangerItem}`} onClick={() => run(onRemove)}>
+            Удалить
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RoleChangeDialog({ change, focusTarget, onConfirm, onCancel }: {
+  change: RoleChange;
+  focusTarget: HTMLSelectElement | null;
+  onConfirm: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const element = dialog.current!;
+    const previousOverflow = document.body.style.overflow;
+    element.showModal();
+    document.body.style.overflow = "hidden";
+    return () => {
+      element.close();
+      document.body.style.overflow = previousOverflow;
+      focusTarget?.focus({ preventScroll: true });
+    };
+  }, [focusTarget]);
+
+  const confirm = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onConfirm();
+    } catch (failure) {
+      setError(errorText(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <dialog ref={dialog} className={styles.roleDialog} aria-labelledby={titleId} aria-describedby={descriptionId}
+      aria-modal="true" aria-busy={busy}
+      onCancel={(event) => { event.preventDefault(); if (!busy) onCancel(); }}
+      onClick={(event) => {
+        if (event.target !== event.currentTarget || busy) return;
+        const bounds = event.currentTarget.getBoundingClientRect();
+        if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onCancel();
+      }}>
+      <div className={styles.roleDialogContent}>
+        <h2 id={titleId}>Изменить роль участника?</h2>
+        <p id={descriptionId} className={styles.roleDialogDescription}>
+          Вы уверены, что хотите изменить роль пользователя <strong>{change.member.name ?? change.member.email}</strong> на «{ROLE_NAMES[change.role]}»?
+        </p>
+        <dl className={styles.roleChangeSummary}>
+          <div><dt>Текущая роль</dt><dd>{ROLE_NAMES[change.member.role]}</dd></div>
+          <div><dt>Новая роль</dt><dd>{ROLE_NAMES[change.role]}</dd></div>
+        </dl>
+        {error && <p className={ui.errorText} role="alert">{error}</p>}
+        <div className={styles.roleDialogActions}>
+          <button type="button" className={`${common.btn} ${common.btnSecondary}`} autoFocus disabled={busy} onClick={onCancel}>Отмена</button>
+          <button type="button" className={`${common.btn} ${common.btnPrimary}`} disabled={busy} onClick={confirm}>
+            {busy ? "Сохраняем…" : "Изменить роль"}
+          </button>
+        </div>
+      </div>
+    </dialog>
+  );
+}
+
 function Members({ m, selfId, onChanged }: { m: Membership; selfId: string; onChanged: () => void }) {
   const [members, setMembers] = useState<Member[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +240,8 @@ function Members({ m, selfId, onChanged }: { m: Membership; selfId: string; onCh
   const [role, setRole] = useState<Role>("cfo");
   const [admin, setAdmin] = useState(false);
   const [inviting, setInviting] = useState(false);
+  const [roleChange, setRoleChange] = useState<RoleChange | null>(null);
+  const roleTrigger = useRef<HTMLSelectElement>(null);
 
   useEffect(() => {
     const c = new AbortController();
@@ -103,6 +252,16 @@ function Members({ m, selfId, onChanged }: { m: Membership; selfId: string; onCh
   }, [m.company_id, attempt]);
 
   const reload = () => setAttempt((a) => a + 1);
+
+  const confirmRoleChange = async () => {
+    if (!roleChange) return;
+    const { member, role: nextRole } = roleChange;
+    await api.updateMember(m.company_id, member.member_id, { role: nextRole });
+    setMembers((current) => current?.map((item) => item.member_id === member.member_id ? { ...item, role: nextRole } : item) ?? null);
+    setRoleChange(null);
+    reload();
+    onChanged();
+  };
 
   const act = async (id: string, fn: () => Promise<unknown>) => {
     setBusy(id);
@@ -155,37 +314,39 @@ function Members({ m, selfId, onChanged }: { m: Membership; selfId: string; onCh
                   {mem.name && <small className={common.muted}>{mem.email}</small>}
                 </div>
                 <div className={styles.memberMeta}>
-                  {m.is_admin ? (
+                  {m.is_admin && !self ? (
                     <>
                       <label className={common.srOnly} htmlFor={`r-${mem.member_id}`}>Роль: {mem.name ?? mem.email}</label>
-                      <select className={forms.select} id={`r-${mem.member_id}`} value={mem.role} disabled={self || off} title={self ? SELF_HINT : undefined}
-                        onChange={(e) => act(mem.member_id, () => api.updateMember(m.company_id, mem.member_id, { role: e.target.value as Role }))}>
+                      <select className={`${styles.roleControl} ${styles.roleSelect}`} id={`r-${mem.member_id}`} value={mem.role} disabled={off}
+                        onChange={(event) => {
+                          const nextRole = event.target.value as Role;
+                          if (nextRole !== mem.role) {
+                            roleTrigger.current = event.currentTarget;
+                            setRoleChange({ member: mem, role: nextRole });
+                          }
+                        }}>
                         {ROLES.map((r) => <option key={r} value={r}>{ROLE_NAMES[r]}</option>)}
                       </select>
                     </>
                   ) : (
-                    <span>{ROLE_NAMES[mem.role]}</span>
+                    <span className={styles.roleControl} title={self ? SELF_HINT : undefined}>{ROLE_NAMES[mem.role]}</span>
                   )}
                   <span className={`${common.tag} ${mem.status === "active" ? common.tagOn : common.tagWarn}`}>{mem.status === "active" ? "Активен" : "Приглашён"}</span>
                   {mem.is_admin && <span className={`${common.tag} ${common.tagAdmin}`}>Администратор</span>}
                 </div>
-                {m.is_admin && (
-                  <div className={styles.memberActions}>
-                    <button type="button" className={`${common.btn} ${common.btnSecondary} ${common.btnSm}`} disabled={self || off} title={self ? SELF_HINT : undefined}
-                      onClick={() => act(mem.member_id, () => api.updateMember(m.company_id, mem.member_id, { is_admin: !mem.is_admin }))}>
-                      {mem.is_admin ? "Снять админа" : "Сделать админом"}
-                    </button>
-                    <button type="button" className={`${common.btn} ${common.btnSecondary} ${common.btnSm}`} disabled={self || off} title={self ? SELF_HINT : undefined}
-                      onClick={() => act(mem.member_id, () => api.removeMember(m.company_id, mem.member_id))}>
-                      Удалить
-                    </button>
-                  </div>
+                {m.is_admin && !self && (
+                  <MemberMenu member={mem} busy={off}
+                    onToggleAdmin={() => act(mem.member_id, () => api.updateMember(m.company_id, mem.member_id, { is_admin: !mem.is_admin }))}
+                    onRemove={() => act(mem.member_id, () => api.removeMember(m.company_id, mem.member_id))} />
                 )}
               </li>
             );
           })}
         </ul>
       )}
+
+      {roleChange && <RoleChangeDialog change={roleChange} focusTarget={roleTrigger.current}
+        onConfirm={confirmRoleChange} onCancel={() => setRoleChange(null)} />}
 
       {m.is_admin && (
         <form className={styles.inviteForm} onSubmit={invite} noValidate>
@@ -197,7 +358,7 @@ function Members({ m, selfId, onChanged }: { m: Membership; selfId: string; onCh
             </div>
             <div className={forms.field}>
               <label htmlFor={`inv-role-${m.company_id}`}>Роль</label>
-              <select className={forms.select} id={`inv-role-${m.company_id}`} value={role} onChange={(e) => setRole(e.target.value as Role)}>
+              <select className={`${styles.roleControl} ${styles.roleSelect} ${styles.inviteRole}`} id={`inv-role-${m.company_id}`} value={role} onChange={(e) => setRole(e.target.value as Role)}>
                 {ROLES.map((r) => <option key={r} value={r}>{ROLE_NAMES[r]}</option>)}
               </select>
             </div>
@@ -245,11 +406,7 @@ export default function ProfilePage() {
         <section key={m.company_id} className={common.card} aria-label={m.company_name}>
           <div className={common.cardHead}>
             <h2><CompanyTile id={m.company_id} name={m.company_name} size={32} /> {m.company_name}</h2>
-            <div className={common.tags}>
-              <span className={common.tag}>{ROLE_NAMES[m.role]}</span>
-              {m.is_admin && <span className={`${common.tag} ${common.tagAdmin}`}>Администратор</span>}
-              <CompanyMenu m={m} selfId={user.user_id} onChanged={onChanged} />
-            </div>
+            <CompanyMenu m={m} selfId={user.user_id} onChanged={onChanged} />
           </div>
           <h3>Участники</h3>
           <Members m={m} selfId={user.user_id} onChanged={onChanged} />

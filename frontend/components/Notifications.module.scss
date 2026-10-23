@@ -5,10 +5,16 @@
 }
 
 .notifPop {
+  --viewport-offset: 80px;
+
   position: absolute;
   top: 54px;
   right: 0;
-  width: min(440px, 92vw);
+  display: flex;
+  flex-direction: column;
+  width: min(400px, 92vw);
+  max-height: calc(100vh - var(--viewport-offset) - env(safe-area-inset-bottom, 0px));
+  max-height: calc(100dvh - var(--viewport-offset) - env(safe-area-inset-bottom, 0px));
   background: var(--card);
   border-radius: 20px;
   box-shadow: var(--shadow-pop);
@@ -48,8 +54,6 @@
 }
 
 .notifPop {
-  width: min(400px, 92vw);
-
   li a {
     display: flex;
     gap: 10px;
@@ -65,8 +69,18 @@
   }
 }
 
+@include breakpoints.down(breakpoints.$tablet) {
+  .notifPop {
+    position: fixed;
+    top: 72px;
+    right: 8px;
+  }
+}
+
 @include breakpoints.down(breakpoints.$mobile) {
   .notifPop {
+    --viewport-offset: 72px;
+
     position: fixed;
     top: 64px;
     left: 8px;
@@ -77,9 +91,42 @@
 
 .notifHead {
   display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: baseline;
   gap: 12px;
+
+  p {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+.notifBody {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+
+  &:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+  }
+}
+
+.notifTitle {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.notifFooter {
+  composes: btn btnSecondary btnSm from "../styles/common.module.scss";
+
+  flex-shrink: 0;
+  align-self: flex-start;
 }
 
 .notifReadall {

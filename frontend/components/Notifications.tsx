@@ -70,25 +70,27 @@ export default function Notifications() {
               <button type="button" className={styles.notifReadall} onClick={() => mark(unread.map((i) => i.news.news_id))}>Прочитать все</button>
             )}
           </div>
-          {items === null && <p className={`${common.muted} ${common.small}`}>Загружаем…</p>}
-          {items !== null && all.length === 0 && <p className={`${common.muted} ${common.small}`}>Сейчас нет событий с высокой релевантностью.</p>}
-          {items !== null && all.length > 0 && unread.length === 0 && <p className={`${common.muted} ${common.small}`}>Новых событий нет. Ниже история.</p>}
-          <ul>
-            {shown.map((i) => {
-              const isRead = read.has(i.news.news_id);
-              return (
-                <li key={i.news.news_id} className={isRead ? styles.isRead : ""}>
-                  <Link href={`/pulse/n/${encodeURIComponent(i.news.news_id)}`}
-                    onClick={() => { mark([i.news.news_id]); setOpen(false); }}>
-                    <Score value={i.relevance.score} />
-                    <span>{i.news.title}</span>
-                    {!isRead && <span className={styles.notifNew} aria-label="Не прочитано" />}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-          <Link href="/pulse" className={`${common.btn} ${common.btnSecondary} ${common.btnSm}`} onClick={() => setOpen(false)}>Вся лента</Link>
+          <div className={styles.notifBody} role="region" aria-label="Список уведомлений" tabIndex={0}>
+            {items === null && <p className={`${common.muted} ${common.small}`}>Загружаем…</p>}
+            {items !== null && all.length === 0 && <p className={`${common.muted} ${common.small}`}>Сейчас нет событий с высокой релевантностью.</p>}
+            {items !== null && all.length > 0 && unread.length === 0 && <p className={`${common.muted} ${common.small}`}>Новых событий нет. Ниже история.</p>}
+            <ul>
+              {shown.map((i) => {
+                const isRead = read.has(i.news.news_id);
+                return (
+                  <li key={i.news.news_id} className={isRead ? styles.isRead : ""}>
+                    <Link href={`/pulse/n/${encodeURIComponent(i.news.news_id)}`}
+                      onClick={() => { mark([i.news.news_id]); setOpen(false); }}>
+                      <Score value={i.relevance.score} />
+                      <span className={styles.notifTitle}>{i.news.title}</span>
+                      {!isRead && <span className={styles.notifNew} aria-label="Не прочитано" />}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+          <Link href="/pulse" className={styles.notifFooter} onClick={() => setOpen(false)}>Вся лента</Link>
         </div>
       )}
     </div>
