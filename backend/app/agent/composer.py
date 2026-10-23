@@ -29,6 +29,7 @@ DIRECTION_VALUE = {
     "deposits": {"up": 1, "hold": 0.5, "down": -1},
     "taxes_regulation": {"up": 1, "hold": 0, "down": -1},   # up = нагрузка и требования растут
     "logistics": {"up": 1, "hold": 0, "down": -1},          # up = перевозки дорожают или усложняются
+    "sanctions_geopolitics": {"up": 1, "hold": 0, "down": -1},  # up = ограничения вводятся или расширяются
 }
 
 TOPIC_EFFECT = {
@@ -162,6 +163,8 @@ def effect_terms(topic: str, direction: str | None, features: set[str] | None = 
             "bonds": ("снижается доходность новых размещений ликвидности", "стоимость новых рыночных заимствований может снизиться"),
             "deposits": TOPIC_EFFECT["deposits"],
             "construction_realestate": TOPIC_EFFECT["construction_realestate"],
+            "sanctions_geopolitics": ("с ослаблением ограничений на рынок могут вернуться конкуренты",
+                                      "ослабление ограничений упрощает платежи и логистику"),
         }.get(topic, TOPIC_EFFECT[topic])
     return TOPIC_EFFECT[topic]
 

@@ -10,7 +10,8 @@ from bisect import bisect_left
 from dataclasses import dataclass, field
 
 from app.news import magnitude, semantic
-from app.news.taxonomy import ACTORS, COUNTRY_STEMS, DIRECTION_STEMS, SECTOR_STEMS, TOPICS
+from app.news.taxonomy import (ACTORS, COUNTRY_STEMS, DIRECTION_STEMS, FOREIGN_CURRENCY, FOREIGN_DIRECTION,
+                               RUBLE_DIRECTION, SANCTIONS_DIRECTION, SECTOR_STEMS, TOPICS)
 
 # «Санкции» засчитываются только рядом с деловым контекстом — и по словарю, и по смыслу.
 SANCTIONS_BUSINESS_STEMS = ["санкц", "swift", "эмбарго", "экспорт", "импорт", "платеж", "банков", "компани", "торгов",
@@ -75,6 +76,17 @@ def _score(tokens: list[str], stems: list[str]) -> tuple[int, list[str]]:
             total += c * len(stem.split())  # многословные совпадения весомее
             matched.append(stem)
     return total, matched
+
+
+def _fx_direction(sentences: list[list[str]]) -> dict[str, int]:
+    """Направление курса (up — ослабление рубля) по глаголам при рубле и при иностранной валюте."""
+    out = {"up": 0, "down": 0}
+    for tk in sentences:
+        for currency, verbs in ((["рубл"], RUBLE_DIRECTION), (FOREIGN_CURRENCY, FOREIGN_DIRECTION)):
+            if _score(tk, currency)[0]:
+                for d, st in verbs.items():
+                    out[d] += _score(tk, st)[0]
+    return out
 
 
 @dataclass
@@ -184,8 +196,20 @@ def classify(title: str, text: str, hint: dict | None = None) -> Classification:
             soft = sum(_score(tk, ["смягчени", "смягч"])[0] for tk in local)
             counts["up"] = max(counts["up"] - tight, 0) + soft
             counts["down"] = counts["down"] - soft + 2 * tight
+        own = bool(local)
+        if t["topic"] == "fx":
+            # Валюта названа прямо («рубль», «доллар») — направление читается по любому такому предложению,
+            # даже если тема найдена по смыслу, а не по словарю.
+            fx = _fx_direction(sentence_tokens)
+            if fx["up"] or fx["down"]:
+                counts, own = {**fx, "hold": counts["hold"]}, True
+        if t["topic"] == "sanctions_geopolitics":
+            for d, st in SANCTIONS_DIRECTION.items():
+                counts[d] += sum(_score(tk, st)[0] for tk in local)
         best = max(counts, key=counts.get)
-        topic_directions[t["topic"]] = best if counts[best] > 0 else direction
+        # Тема только «по смыслу» (нет своих предложений): направление другой темы ей не переносится —
+        # «ставка повышена» не значит «экономика растет».
+        topic_directions[t["topic"]] = best if counts[best] > 0 else direction if own else None
 
     actors = [a for a in ACTORS if re.search(rf"(?<![А-Яа-яA-Za-z]){re.escape(a)}", full)]
     dates = list(dict.fromkeys(m.group(0).strip() for m in _DATE.finditer(full)))[:6]
