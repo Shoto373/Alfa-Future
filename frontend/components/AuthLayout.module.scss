@@ -1,0 +1,105 @@
+@use "../styles/breakpoints";
+
+.login {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg);
+}
+
+.loginHero {
+  border-radius: 28px;
+  padding: 32px;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  background: radial-gradient(70% 70% at 70% 105%, rgba(239, 49, 36, .75), transparent 70%), var(--dark);
+
+  > :first-child {
+    padding: 0;
+  }
+}
+
+.loginHeroText {
+  margin-top: auto;
+}
+
+.loginHero h1 {
+  font-size: 48px;
+  letter-spacing: -.03em;
+  margin-bottom: 14px;
+}
+
+.loginHero p {
+  color: rgba(255, 255, 255, .72);
+  font-size: 17px;
+  max-width: 480px;
+  margin: 0;
+}
+
+.loginHeroFoot {
+  font-size: 13px !important;
+  color: rgba(255, 255, 255, .45) !important;
+}
+
+.loginPanel {
+  background: var(--card);
+  border-radius: 28px;
+  padding: 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  justify-content: center;
+
+  h2 {
+    font-size: 28px;
+  }
+
+  > p {
+    margin: 0;
+  }
+}
+
+@include breakpoints.down(breakpoints.$mobile) {
+  .login {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .loginHero {
+    min-height: 240px;
+
+    h1 {
+      font-size: 34px;
+    }
+  }
+
+  .loginPanel {
+    padding: 22px;
+  }
+}
+
+.loginPanel form {
+  --password-button-margin-top: 6px;
+  max-width: 440px;
+}
+
+.loginPanel form > button {
+  align-self: flex-start;
+  margin-top: 6px;
+}
+
+.loginPanel a {
+  color: var(--blue);
+}
+
+.loginPanel input:not([type="checkbox"]) {
+  background: var(--bg);
+  border-color: transparent;
+}
+
+.loginPanel input:focus {
+  background: var(--card);
+}

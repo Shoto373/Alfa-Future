@@ -7,6 +7,9 @@ import { useSession } from "@/lib/session";
 import CompanySwitcher from "./CompanySwitcher";
 import Notifications from "./Notifications";
 import { AlfaMark, Icon } from "./ui";
+import styles from "@/components/Shell.module.scss";
+import ui from "@/components/ui.module.scss";
+import common from "@/styles/common.module.scss";
 
 type NavItem = { href: string; label: string; icon: string; badge?: string; accent?: boolean; disabled?: boolean };
 
@@ -38,59 +41,59 @@ export default function Shell({ children }: { children: ReactNode }) {
   useEffect(() => setMenuOpen(false), [path]);
 
   if (!ready || !session || needCompany) {
-    return <div className="boot"><span className="spinner" aria-label="Загрузка" /></div>;
+    return <div className={styles.boot}><span className={ui.spinner} aria-label="Загрузка" /></div>;
   }
 
   const active = (href: string) => path === href || (href === "/pulse" && path.startsWith("/pulse/n/"));
 
   return (
-    <div className="app">
-      <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
-        <Link href="/" className="brand" aria-label="Альфа-Бизнес, главная">
+    <div className={styles.app}>
+      <aside className={`${styles.sidebar} ${menuOpen ? styles.open : ""}`}>
+        <Link href="/" className={common.brand} aria-label="Альфа-Бизнес, главная">
           <AlfaMark size={34} />
-          <span className="brand-text">Альфа-Бизнес</span>
+          <span className={common.brandText}>Альфа-Бизнес</span>
         </Link>
-        <nav className="nav">
+        <nav className={styles.nav}>
           {NAV.map((item, i) => {
-            if (item === "divider") return <hr key={`d${i}`} className="nav-divider" />;
+            if (item === "divider") return <hr key={`d${i}`} className={styles.navDivider} />;
             const inner = (
               <>
-                <Icon name={item.icon} size={20} /> <span className="nav-label">{item.label}</span>
-                {item.badge && <span className="nav-badge">{item.badge}</span>}
+                <Icon name={item.icon} size={20} /> <span className={styles.navLabel}>{item.label}</span>
+                {item.badge && <span className={styles.navBadge}>{item.badge}</span>}
               </>
             );
             return item.disabled ? (
-              <span key={item.href} className="nav-item disabled" title="Раздел интернет-банка, не входит в прототип">{inner}</span>
+              <span key={item.href} className={`${styles.navItem} ${styles.disabled}`} title="Раздел интернет-банка, не входит в прототип">{inner}</span>
             ) : (
-              <Link key={item.href} href={item.href} className={`nav-item ${active(item.href) ? "active" : ""} ${item.accent ? "accent" : ""}`}>{inner}</Link>
+              <Link key={item.href} href={item.href} className={`${styles.navItem} ${active(item.href) ? styles.active : ""} ${item.accent ? styles.accent : ""}`}>{inner}</Link>
             );
           })}
         </nav>
-        <div className="sidebar-foot">
-          <Link href="/help" className={`foot-link ${path === "/help" ? "active" : ""}`}>Вопросы и ответы</Link>
-          <Link href="/legal" className={`foot-link ${path === "/legal" ? "active" : ""}`}>Правовая информация</Link>
+        <div className={styles.sidebarFoot}>
+          <Link href="/help" className={`${styles.footLink} ${path === "/help" ? styles.active : ""}`}>Вопросы и ответы</Link>
+          <Link href="/legal" className={`${styles.footLink} ${path === "/legal" ? styles.active : ""}`}>Правовая информация</Link>
         </div>
       </aside>
-      {menuOpen && <div className="scrim" onClick={() => setMenuOpen(false)} aria-hidden="true" />}
+      {menuOpen && <div className={styles.scrim} onClick={() => setMenuOpen(false)} aria-hidden="true" />}
 
-      <div className="main">
-        <header className="topbar">
-          <button className="icon-btn menu-btn" onClick={() => setMenuOpen((v) => !v)} aria-label="Меню">
+      <div className={styles.main}>
+        <header className={styles.topbar}>
+          <button className={`${common.iconBtn} ${styles.menuBtn}`} onClick={() => setMenuOpen((v) => !v)} aria-label="Меню">
             <Icon name="menu" />
           </button>
-          <div className="topbar-right">
+          <div className={styles.topbarRight}>
             {session.memberships.length > 0 && <Notifications />}
             <CompanySwitcher />
-            <Link href="/profile" className="user-pill" aria-label={`Профиль: ${session.userName}`}>
-              <span className="avatar">{session.userName.slice(0, 1)}</span>
-              <span className="user-name">{session.userName}</span>
+            <Link href="/profile" className={styles.userPill} aria-label={`Профиль: ${session.userName}`}>
+              <span className={styles.avatar}>{session.userName.slice(0, 1)}</span>
+              <span className={styles.userName}>{session.userName}</span>
             </Link>
-            <button className="icon-btn" onClick={async () => { await logout(); router.replace("/login"); }} aria-label="Выйти" title="Выйти">
+            <button className={common.iconBtn} onClick={async () => { await logout(); router.replace("/login"); }} aria-label="Выйти" title="Выйти">
               <Icon name="logout" size={20} />
             </button>
           </div>
         </header>
-        <main className="content">{children}</main>
+        <main className={styles.content}>{children}</main>
       </div>
     </div>
   );

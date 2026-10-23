@@ -7,6 +7,9 @@ import AuthLayout from "@/components/AuthLayout";
 import PasswordField from "@/components/PasswordField";
 import { errorText } from "@/lib/errors";
 import { useSession } from "@/lib/session";
+import common from "@/styles/common.module.scss";
+import forms from "@/styles/forms.module.scss";
+import ui from "@/components/ui.module.scss";
 
 export default function LoginPage() {
   const { login } = useSession();
@@ -36,17 +39,17 @@ export default function LoginPage() {
   return (
     <AuthLayout>
       <h2>Вход</h2>
-      <p className="muted">Войдите в свой аккаунт, чтобы увидеть ленту Альфа.Пульса для ваших компаний.</p>
-      <form className="form" onSubmit={submit} noValidate>
-        {error && <div className="error-box" role="alert"><span>{error}</span></div>}
-        <div className="field">
+      <p className={common.muted}>Войдите в свой аккаунт, чтобы увидеть ленту Альфа.Пульса для ваших компаний.</p>
+      <form className={forms.form} onSubmit={submit} noValidate>
+        {error && <div className={ui.errorBox} role="alert"><span>{error}</span></div>}
+        <div className={forms.field}>
           <label htmlFor="email">Email</label>
-          <input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} aria-invalid={Boolean(error)} />
+          <input className={forms.input} id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} aria-invalid={Boolean(error)} />
         </div>
         <PasswordField id="password" label="Пароль" value={password} onChange={setPassword} autoComplete="current-password" />
-        <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? "Входим…" : "Войти"}</button>
+        <button type="submit" className={`${common.btn} ${common.btnPrimary}`} disabled={busy}>{busy ? "Входим…" : "Войти"}</button>
       </form>
-      <p className="muted small">Нет аккаунта? <Link href="/register">Регистрация</Link></p>
+      <p className={`${common.muted} ${common.small}`}>Нет аккаунта? <Link href="/register">Регистрация</Link></p>
     </AuthLayout>
   );
 }

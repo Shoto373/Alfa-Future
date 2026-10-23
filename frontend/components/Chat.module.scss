@@ -1,0 +1,59 @@
+.chips {
+  composes: chips from "../styles/common.module.scss";
+}
+
+.chip {
+  composes: chip from "../styles/common.module.scss";
+}
+
+.chat .chips {
+  margin-bottom: 14px;
+}
+
+.chat .chip {
+  background: var(--bg);
+}
+
+.chatLog {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.chatQ {
+  align-self: flex-end;
+  background: var(--dark);
+  color: #fff;
+  padding: 9px 16px;
+  border-radius: 18px 18px 4px 18px;
+  margin: 0 0 6px auto;
+  max-width: 80%;
+  width: fit-content;
+}
+
+.chatA {
+  background: var(--bg);
+  border-radius: 18px 18px 18px 4px;
+  padding: 14px 16px;
+
+  p {
+    margin: 0 0 8px;
+  }
+
+  &.refused {
+    background: var(--amber-soft);
+  }
+}
+
+.chatForm {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+
+  input {
+    margin: 0;
+    background: var(--bg);
+    border-color: transparent;
+  }
+}

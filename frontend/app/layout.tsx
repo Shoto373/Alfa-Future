@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { SessionProvider } from "@/lib/session";
-import "./globals.css";
+import "./globals.scss";
 
 export const metadata: Metadata = {
   title: "Альфа.Пульс — новостная аналитика для бизнеса",

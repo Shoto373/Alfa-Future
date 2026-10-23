@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Card, Icon } from "@/components/ui";
+import common from "@/styles/common.module.scss";
+import documents from "@/styles/documents.module.scss";
+import styles from "@/app/(bank)/help/page.module.scss";
 
 export const metadata: Metadata = { title: "Вопросы и ответы — Альфа.Пульс" };
 
@@ -45,14 +48,14 @@ const FAQ: { q: string; a: string }[] = [
 
 export default function HelpPage() {
   return (
-    <div className="page doc-page">
-      <div className="page-head">
+    <div className={`${common.page} ${documents.docPage}`}>
+      <div className={common.pageHead}>
         <div>
-          <span className="eyebrow"><Icon name="spark" /> Альфа.Пульс</span>
+          <span className={common.eyebrow}><Icon name="spark" /> Альфа.Пульс</span>
           <h1>Вопросы и ответы</h1>
         </div>
       </div>
-      <Card className="faq">
+      <Card className={`${styles.faq} ${documents.card}`}>
         {FAQ.map((item) => (
           <details key={item.q}>
             <summary>{item.q}</summary>
@@ -60,7 +63,7 @@ export default function HelpPage() {
           </details>
         ))}
       </Card>
-      <p className="muted small">Юридические условия — в разделе <Link href="/legal">Правовая информация</Link>.</p>
+      <p className={`${common.muted} ${common.small}`}>Юридические условия — в разделе <Link href="/legal">Правовая информация</Link>.</p>
     </div>
   );
 }

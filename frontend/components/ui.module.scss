@@ -1,0 +1,165 @@
+.icon {
+  flex-shrink: 0;
+}
+
+.alfaMark {
+  flex-shrink: 0;
+  display: block;
+}
+
+.companyTile {
+  width: var(--tile-size, 40px);
+  height: var(--tile-size, 40px);
+  font-size: calc(var(--tile-size, 40px) * .45);
+  display: inline-grid;
+  place-items: center;
+  border-radius: 10px;
+  font-weight: 800;
+  color: #0b1f35;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+$tile-colors: (
+  "Lime": #c8f560,
+  "Sky": #7ad8ff,
+  "Amber": #ffcf5c,
+  "Violet": #b9a6ff,
+  "Mint": #7ff0c4,
+  "Pink": #ff9fb6,
+);
+
+@each $name, $color in $tile-colors {
+  .tile#{$name} {
+    background: $color;
+  }
+}
+
+.score {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: var(--score-color, var(--ink));
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.scoreBar {
+  width: 44px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--score-track, var(--line));
+  overflow: hidden;
+}
+
+.scoreBar span {
+  width: var(--score-width);
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+}
+
+.scoreHigh .scoreBar span {
+  background: var(--red);
+}
+
+.scoreMid .scoreBar span {
+  background: #ffb800;
+}
+
+.scoreLow .scoreBar span {
+  background: var(--muted);
+}
+
+.origin {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+
+.originFact {
+  background: var(--origin-fact-background, var(--bg));
+  color: var(--origin-fact-color, var(--ink-2));
+}
+
+.originClientData {
+  background: var(--blue-soft);
+  color: #1f4fae;
+}
+
+.originBank {
+  background: var(--red);
+  color: #fff;
+}
+
+.originAi {
+  background: var(--violet-soft);
+  color: var(--violet);
+}
+
+.errorBox {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  background: var(--error-background, var(--red-soft));
+  color: var(--error-color, var(--red-dark));
+  padding: 12px 16px;
+  border-radius: 14px;
+  flex-wrap: wrap;
+}
+
+.errorText {
+  color: var(--red-dark);
+  font-size: 13px;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-2);
+  padding: 16px 0;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  border-top-color: var(--red);
+  animation: spin .8s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skeleton span {
+  width: var(--line-width);
+  height: 14px;
+  border-radius: 7px;
+  background: var(--skeleton-background, linear-gradient(90deg, var(--bg), #e6e8eb, var(--bg)));
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}

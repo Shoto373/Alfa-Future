@@ -7,6 +7,8 @@ import { api } from "@/lib/api";
 import { useCompany } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import type { Meta } from "@/lib/types";
+import common from "@/styles/common.module.scss";
+import styles from "@/app/(bank)/company/page.module.scss";
 
 export default function CompanyPage() {
   const { session } = useSession();
@@ -17,11 +19,11 @@ export default function CompanyPage() {
   const sectors = Object.fromEntries((meta?.sectors ?? []).map((s) => [s.sector, s.name]));
 
   return (
-    <div className="page company-page">
-      <div className="page-head">
+    <div className={`${common.page} ${styles.companyPage}`}>
+      <div className={common.pageHead}>
         <div>
           <h1>{session!.companyName}</h1>
-          <p className="muted">Профиль по данным кейса: на этих признаках строится лента и разборы Альфа.Пульса.</p>
+          <p className={common.muted}>Профиль по данным кейса: на этих признаках строится лента и разборы Альфа.Пульса.</p>
         </div>
       </div>
       {company.loading && <Card title="Профиль компании"><Skeleton lines={8} /></Card>}

@@ -1,0 +1,11 @@
+@use "../../../styles/breakpoints";
+
+.companyPage > section {
+  max-width: 920px;
+}
+
+@include breakpoints.down(breakpoints.$mobile) {
+  .companyPage > section {
+    max-width: 920px;
+  }
+}

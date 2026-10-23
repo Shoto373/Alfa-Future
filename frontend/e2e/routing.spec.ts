@@ -24,7 +24,7 @@ test("фильтр темы синхронизирован с URL, переза�
   const rate = chips.getByRole("button", { name: "Ключевая ставка" });
   const special = chips.getByRole("button", { name: "Ставка и курс" });
   const all = chips.getByRole("button", { name: "Все темы", exact: true });
-  await expect(rate).toHaveClass("chip on");
+  await expect(rate).toHaveAttribute("aria-pressed", "true");
 
   const filtered = page.waitForRequest((request) => {
     const url = new URL(request.url());
@@ -32,19 +32,19 @@ test("фильтр темы синхронизирован с URL, переза�
   });
   await special.click();
   await filtered;
-  await expect(special).toHaveClass("chip on");
+  await expect(special).toHaveAttribute("aria-pressed", "true");
   expect(new URL(page.url()).searchParams.get("topic")).toBe(specialTopic);
   expect(new URL(page.url()).searchParams.get("keep")).toBe("1");
 
   await page.reload();
-  await expect(special).toHaveClass("chip on");
+  await expect(special).toHaveAttribute("aria-pressed", "true");
   await all.click();
   await expect(page).toHaveURL(/\/pulse\?keep=1$/);
-  await expect(all).toHaveClass("chip on");
+  await expect(all).toHaveAttribute("aria-pressed", "true");
   await page.goBack();
-  await expect(special).toHaveClass("chip on");
+  await expect(special).toHaveAttribute("aria-pressed", "true");
   await page.goBack();
-  await expect(rate).toHaveClass("chip on");
+  await expect(rate).toHaveAttribute("aria-pressed", "true");
   await page.goForward();
-  await expect(special).toHaveClass("chip on");
+  await expect(special).toHaveAttribute("aria-pressed", "true");
 });

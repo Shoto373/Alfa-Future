@@ -1,0 +1,316 @@
+@use "../../../../styles/breakpoints";
+
+.docs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.docRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 18px 22px;
+  background: var(--card);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+
+  &:hover {
+    border-color: var(--red);
+    box-shadow: 0 8px 24px rgba(11, 31, 53, .08);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--red);
+    outline-offset: 2px;
+  }
+
+  > svg {
+    flex: none;
+    margin-left: auto;
+    color: var(--muted);
+    transition: transform .2s;
+  }
+
+  &:hover > svg {
+    color: var(--red);
+  }
+}
+
+.docRowMain {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.docRowTitle {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.docRowSub {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.docDate {
+  flex: none;
+  min-width: 128px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--red-soft);
+  color: var(--red-dark);
+  white-space: nowrap;
+}
+
+.docStatForecast {
+  color: var(--red-dark);
+  font-weight: 600;
+}
+
+.docMeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.docAuthor {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.docTitle {
+  font-size: 22px;
+  line-height: 1.28;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.docItem {
+  background: var(--card);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  transition: border-color .15s, box-shadow .15s;
+
+  &:hover {
+    border-color: var(--red);
+    box-shadow: 0 8px 24px rgba(11, 31, 53, .08);
+  }
+
+  .docRow {
+    border: 0;
+    box-shadow: none;
+    background: none;
+  }
+
+  .docRow:hover {
+    border: 0;
+    box-shadow: none;
+  }
+
+  &.isOpen {
+    border-color: var(--red);
+  }
+
+  &.isOpen .docRow > svg {
+    transform: rotate(180deg);
+    color: var(--red);
+  }
+}
+
+.docPanel {
+  margin: 0 22px;
+  padding: 22px 0 8px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: fade .15s ease-out;
+
+  .theses {
+    margin-top: 0;
+  }
+
+  .thesis {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: 16px;
+    padding: 14px 0;
+  }
+
+  .thesis:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  .thesis p {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .thesis .thesisPage {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: start;
+  }
+}
+
+.drawerBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(11, 31, 53, .35);
+  display: flex;
+  justify-content: flex-end;
+  animation: fade .15s ease-out;
+}
+
+.drawer {
+  position: relative;
+  width: min(640px, 100%);
+  height: 100%;
+  overflow-y: auto;
+  background: var(--card);
+  padding: 32px 32px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: var(--shadow-pop);
+  border-radius: var(--radius) 0 0 var(--radius);
+  animation: slide .2s ease-out;
+}
+
+.drawerClose {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--ink);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    background: #e6e8eb;
+  }
+}
+
+.drawer .docMeta {
+  padding-right: 44px;
+}
+
+.theses {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 0;
+}
+
+.thesis {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+
+  p {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+}
+
+.thesisFlag {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: var(--red-soft);
+  color: var(--red-dark);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+
+.thesisPage {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.drawerPdf {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes slide {
+  from {
+    transform: translateX(32px);
+    opacity: 0;
+  }
+}
+
+@include breakpoints.down(breakpoints.$mobile) {
+  .docRow {
+    padding: 14px 16px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .docRowMain {
+    flex-basis: 100%;
+    order: 3;
+  }
+
+  .docRow .docDate {
+    min-width: 0;
+  }
+
+  .docPanel .thesis {
+    display: flex;
+  }
+
+  .drawer {
+    padding: 24px 20px 32px;
+    border-radius: 0;
+  }
+
+  .docs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

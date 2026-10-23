@@ -1,0 +1,164 @@
+@use "../../../styles/breakpoints";
+
+.iconBtn {
+  composes: iconBtn from "../../../styles/common.module.scss";
+}
+
+.profileHead {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+
+  p {
+    margin: 4px 0 0;
+  }
+}
+
+.profileAvatar {
+  width: 56px;
+  height: 56px;
+  font-size: 22px;
+}
+
+.members {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.memberList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.memberRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.6fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.memberWho {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.memberMeta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.memberActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.inviteForm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  align-items: flex-start;
+}
+
+.inviteFields {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+
+@include breakpoints.down(breakpoints.$mobile) {
+  .memberRow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    margin-bottom: 10px;
+    border-bottom: 0;
+  }
+
+  .inviteFields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .profileHead {
+    flex-direction: row;
+  }
+}
+
+.companyMenu {
+  position: relative;
+
+  .iconBtn {
+    color: var(--muted);
+  }
+
+  .iconBtn:hover {
+    color: var(--ink);
+  }
+}
+
+.companyMenuPop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  min-width: 220px;
+  max-width: 280px;
+  background: var(--card);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-pop);
+  padding: 6px;
+}
+
+.menuItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: var(--ink-2);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--bg);
+    color: var(--red-dark);
+  }
+}
+
+.menuConfirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px;
+
+  p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--ink-2);
+  }
+
+  > div {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+}
