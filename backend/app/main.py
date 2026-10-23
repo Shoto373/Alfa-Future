@@ -22,9 +22,12 @@ async def lifespan(app: FastAPI):
     if config.rss_refresh_minutes() > 0:
         # Конвейер в фоне: сбор новостей из RSS и их разбор для привязанных компаний.
         task = asyncio.create_task(pipeline.loop(config.rss_refresh_minutes()))
+    app.state.pipeline = task
     yield
     if task:
         task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
 
 
 app = FastAPI(
