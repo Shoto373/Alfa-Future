@@ -36,11 +36,19 @@ def test_register_login_logout_me(raw_client):
     assert raw_client.get(f"{API}/auth/me").status_code == 200
 
 
-def test_session_token_and_password_not_stored_in_clear(raw_client, isolated_runtime):
+def test_session_token_and_password_not_stored_in_clear(raw_client):
+    from sqlalchemy import select
+
+    from app import database
+    from app.models import AuthSession, AuthUser
+
     register(raw_client)
     token = raw_client.cookies.get("session")
-    files = "".join((isolated_runtime / n).read_text(encoding="utf-8") for n in ("users.json", "sessions.json"))
-    assert token not in files and "correct-horse" not in files
+    with database.session() as db:
+        stored = [str(v) for row in db.execute(select(AuthUser.pw_salt, AuthUser.pw_hash, AuthUser.pw_params)).all()
+                  for v in row] + list(db.scalars(select(AuthSession.token_hash)))
+    blob = " ".join(stored)
+    assert token not in blob and "correct-horse" not in blob
 
 
 def test_validation_and_duplicate_email(raw_client):
@@ -251,3 +259,139 @@ def test_disband_company(client, company, new_client):
     assert_error(bob.get(f"{API}/feed", params={"company_id": cid}), 403, "FORBIDDEN")
     assert client.get(f"{API}/auth/me").json()["memberships"] == []
     assert claim(bob, cid, "ceo").status_code == 201
+
+
+# --- SPR2-02: пользователи и сессии в PostgreSQL ---
+
+def test_two_workers_do_not_lose_registrations_or_invites(raw_client, company, new_client):
+    """Как при двух воркерах uvicorn: параллельные записи в одну базу не теряются, инварианты держатся."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app.auth import store
+
+    cid = company["company_id"]
+    owner = store.create_user("Основатель", "founder@example.com", "correct-horse")
+    store.claim(owner["user_id"], cid, "cfo")
+    with ThreadPoolExecutor(10) as pool:
+        users = list(pool.map(lambda i: store.create_user(f"U{i}", f"u{i}@example.com", "correct-horse"), range(20)))
+        list(pool.map(lambda i: store.add_member(cid, f"invite{i}@example.com", "ceo", False), range(20)))
+    assert len({u["user_id"] for u in users}) == 20
+    members = store.list_members(cid)
+    assert len(members) == 21 and sum(m["status"] == "invited" for m in members) == 20
+
+    # Пять пользователей одновременно регистрируют одну свободную компанию — основатель ровно один.
+    free = other_company(company)["company_id"]
+
+    def try_claim(u):
+        try:
+            store.claim(u["user_id"], free, "ceo")
+            return "ok"
+        except Exception as exc:
+            return type(exc).__name__
+
+    with ThreadPoolExecutor(5) as pool:
+        results = list(pool.map(try_claim, users[:5]))
+    assert results.count("ok") == 1
+    assert sum(m["is_founder"] for m in store.list_members(free)) == 1
+
+
+def test_session_expires_without_activity_and_slides_with_it(raw_client, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    from app import database
+    from app.auth import security
+    from app.models import AuthSession
+
+    register(raw_client)
+    token_hash = security.hash_token(raw_client.cookies.get("session"))
+
+    def shift(**values):
+        with database.session() as db:
+            for key, value in values.items():
+                setattr(db.get(AuthSession, token_hash), key, value)
+
+    now = datetime.now(timezone.utc)
+    # Активность продлевает: last_seen давно, срок близок — после запроса срок снова ~SESSION_TTL_HOURS.
+    shift(last_seen=now - timedelta(hours=1), expires_at=now + timedelta(minutes=1))
+    assert raw_client.get(f"{API}/auth/me").status_code == 200
+    with database.session() as db:
+        assert db.get(AuthSession, token_hash).expires_at > now + timedelta(hours=11)
+    # Без активности сессия истекает.
+    shift(expires_at=now - timedelta(seconds=1))
+    assert_error(raw_client.get(f"{API}/auth/me"), 401, "UNAUTHORIZED")
+
+
+def test_old_password_hash_is_upgraded_on_login(raw_client, monkeypatch):
+    from app.auth import security, store
+
+    register(raw_client, "legacy@example.com")
+    raw_client.post(f"{API}/auth/logout")
+    monkeypatch.setattr(security, "SCRYPT_PARAMS", {"n": 2 ** 13, "r": 8, "p": 1, "dklen": 32})  # «новые» параметры
+    assert raw_client.post(f"{API}/auth/login", json={"email": "legacy@example.com", "password": "correct-horse"}).status_code == 200
+    user = store.find_user_by_email("legacy@example.com")
+    assert user["pw_params"]["n"] == 2 ** 13, "пароль перехэширован текущими параметрами"
+    raw_client.post(f"{API}/auth/logout")
+    assert raw_client.post(f"{API}/auth/login", json={"email": "legacy@example.com", "password": "correct-horse"}).status_code == 200
+
+
+def test_lockout_is_shared_and_counts_per_email(raw_client, new_client):
+    register(raw_client, "shared@example.com")
+    raw_client.post(f"{API}/auth/logout")
+    other = new_client()  # другой клиент (как другой воркер или IP): счетчик общий — по email
+    for c in (raw_client, other) * 2 + (raw_client,):
+        assert_error(c.post(f"{API}/auth/login", json={"email": "shared@example.com", "password": "bad-password"}),
+                     401, "INVALID_CREDENTIALS")
+    assert_error(other.post(f"{API}/auth/login", json={"email": "shared@example.com", "password": "correct-horse"}),
+                 429, "TOO_MANY_ATTEMPTS")
+
+
+def test_legacy_json_accounts_move_to_postgres_once(tmp_path, company, new_client):
+    """Перенос учетных записей прод-JSON: пароли, членство и живые сессии работают; повтор не дублирует;
+    исходные файлы на месте; после переноса JSON больше не читается (удаленный участник не возвращается)."""
+    import time
+
+    from app import legacy_import
+    from app.auth import security, store
+
+    salt, digest, _ = security.hash_password("old-password")
+    token = security.new_token()
+    cid = company["company_id"]
+    files = {
+        "users.json": {"users": {
+            "usr-old1": {"user_id": "usr-old1", "name": "Старый", "email": "Old@Example.com", "pw_salt": salt,
+                         "pw_hash": digest, "created_at": "2026-10-20T10:00:00+00:00"},
+            "usr-old2": {"user_id": "usr-old2", "name": "Дубль", "email": "old@example.com", "pw_salt": salt,
+                         "pw_hash": digest, "created_at": "2026-10-21T10:00:00+00:00"}}},
+        "memberships.json": {"members": [
+            {"member_id": "mem-old1", "company_id": cid, "user_id": "usr-old1", "email": "old@example.com",
+             "role": "cfo", "is_admin": True, "founder": True, "created_at": "2026-10-20T10:01:00+00:00"},
+            {"member_id": "mem-old2", "company_id": cid, "user_id": None, "email": "invited@example.com",
+             "role": "ceo", "is_admin": False, "created_at": "2026-10-20T10:02:00+00:00"}]},
+        "sessions.json": {"sessions": {security.hash_token(token): {"user_id": "usr-old1", "expires_at": time.time() + 3600},
+                                       "dead": {"user_id": "usr-old1", "expires_at": time.time() - 10}}},
+    }
+    for name, body in files.items():
+        (tmp_path / name).write_text(json.dumps(body, ensure_ascii=False), encoding="utf-8")
+
+    from sqlalchemy import delete
+
+    from app import database
+    from app.models import AppState
+
+    with database.session() as db:  # тестовый сервис при старте уже отметил перенос пустой папки — как первый запуск на сервере
+        db.execute(delete(AppState).where(AppState.key == legacy_import.AUTH_MARKER))
+    first = legacy_import.import_auth_once(tmp_path)
+    assert first == {"users": 1, "memberships": 2, "sessions": 1}, "дубль по регистру слит, мертвая сессия пропущена"
+    assert legacy_import.import_auth_once(tmp_path) is None, "повторный запуск ничего не делает"
+    assert all((tmp_path / n).exists() for n in files), "исходные файлы не удаляются"
+
+    c = new_client()
+    c.cookies.set("session", token)
+    me = c.get(f"{API}/auth/me").json()
+    assert me["email"] == "old@example.com" and me["memberships"][0]["is_founder"], "живая сессия перенесена"
+    c2 = new_client()
+    assert c2.post(f"{API}/auth/login", json={"email": "OLD@example.com", "password": "old-password"}).status_code == 200
+    # Приглашение привязывается при регистрации, удаленный участник из JSON не возвращается.
+    store.remove_member(cid, "mem-old2")
+    legacy_import.import_auth_once(tmp_path)
+    assert all(m["member_id"] != "mem-old2" for m in store.list_members(cid))

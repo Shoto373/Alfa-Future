@@ -4,7 +4,7 @@ import logging
 
 from fastapi import FastAPI
 
-from app import config, database, pipeline, warmup
+from app import config, database, legacy_import, pipeline, warmup
 from app.api.router import router
 from app.api.setup import configure_api
 from app.auth.router import router as auth_router
@@ -16,6 +16,10 @@ logger = logging.getLogger("app")
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     await asyncio.to_thread(database.migrate)
+    # Учетные записи из прежнего JSON-хранилища (RUNTIME_DIR) — в PostgreSQL, один раз; файлы остаются.
+    imported = await asyncio.to_thread(legacy_import.import_auth_once)
+    if imported and any(imported.values()):
+        logger.info("auth imported from runtime JSON: %s", imported)
     # Прогрев: профили, модель, векторы, база знаний, новости и ленты — до приема запросов.
     app.state.warmup = await asyncio.to_thread(warmup.run)
     task = None

@@ -8,7 +8,8 @@ from decimal import Decimal
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Identity, Index, Integer, Numeric, Text, func
+from sqlalchemy import (BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Identity, Index, Integer, Numeric, Text,
+                        UniqueConstraint, func)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -108,6 +109,54 @@ class Answer(Base, Payload, Timestamped):
     id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
     insight_id: Mapped[str] = mapped_column(ForeignKey("insights.insight_id"))
     __table_args__ = (Index("answers_insight_idx", "insight_id"),)
+
+
+class AuthUser(Base):
+    """Пользователь. Email хранится в нижнем регистре и уникален; пароль — scrypt с солью и параметрами в записи."""
+    __tablename__ = "users"
+    user_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    name: Mapped[str] = mapped_column(Text)
+    email: Mapped[str] = mapped_column(Text, unique=True)
+    pw_salt: Mapped[str] = mapped_column(Text)
+    pw_hash: Mapped[str] = mapped_column(Text)
+    pw_params: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AuthMembership(Base):
+    """Членство в компании. user_id пуст у приглашения — привязывается при регистрации с тем же email."""
+    __tablename__ = "memberships"
+    member_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    company_id: Mapped[str] = mapped_column(Text)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.user_id", ondelete="CASCADE"))
+    email: Mapped[str] = mapped_column(Text)
+    role: Mapped[str] = mapped_column(Text)
+    is_admin: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    founder: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    invited_by: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (UniqueConstraint("company_id", "email", name="memberships_company_email_uq"),
+                      Index("memberships_user_idx", "user_id"))
+
+
+class AuthSession(Base):
+    """Сессия: только SHA-256 токена; истекает через SESSION_TTL_HOURS со скользящим продлением."""
+    __tablename__ = "sessions"
+    token_hash: Mapped[str] = mapped_column(Text, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (Index("sessions_user_idx", "user_id"), Index("sessions_expires_idx", "expires_at"))
+
+
+class LoginFailure(Base):
+    """Неудачный вход: 5 за 15 минут на email — блокировка (общая для всех воркеров)."""
+    __tablename__ = "login_failures"
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    email: Mapped[str] = mapped_column(Text)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (Index("login_failures_email_at_idx", "email", "at"),)
 
 
 class LLMUsage(Base):

@@ -78,12 +78,10 @@ def raw_client(shared_profiles, monkeypatch):
     """Клиент без входа в систему."""
     from fastapi.testclient import TestClient
 
-    from app.auth import security
     from app.main import app
 
     monkeypatch.setenv("PROFILES_PATH", str(shared_profiles))
     profiles.reset_cache()
-    security.limiter.clear()
     with TestClient(app) as c:
         yield c
 
