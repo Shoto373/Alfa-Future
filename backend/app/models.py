@@ -151,10 +151,12 @@ class AuthSession(Base):
 
 
 class LoginFailure(Base):
-    """Неудачный вход: 5 за 15 минут на email — блокировка (общая для всех воркеров)."""
+    """Попытка входа (запись до проверки пароля, при успехе удаляется): блокировка по паре email + адрес
+    и общий потолок на email — общие для всех воркеров."""
     __tablename__ = "login_failures"
     id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
     email: Mapped[str] = mapped_column(Text)
+    ip: Mapped[str] = mapped_column(Text, server_default="")
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     __table_args__ = (Index("login_failures_email_at_idx", "email", "at"),)
 

@@ -1,5 +1,7 @@
 """Зависимости FastAPI: текущий пользователь, членство и права администратора компании."""
 
+import ipaddress
+
 from fastapi import Cookie, Depends, Request
 
 from app import config
@@ -8,6 +10,18 @@ from app.auth import store
 
 COOKIE = "session"
 _SAFE = {"GET", "HEAD", "OPTIONS"}
+
+
+def client_ip(request: Request) -> str:
+    """Адрес клиента. За nginx соединение приходит с внутреннего адреса, настоящий — в X-Real-IP;
+    заголовку верим только от внутреннего адреса, иначе его подделал бы любой."""
+    host = request.client.host if request.client else ""
+    try:
+        internal = ipaddress.ip_address(host).is_private or ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        internal = False
+    forwarded = request.headers.get("x-real-ip", "").strip()
+    return forwarded if internal and forwarded else host
 
 
 def check_origin(request: Request) -> None:

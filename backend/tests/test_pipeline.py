@@ -128,7 +128,7 @@ def test_failed_analysis_does_not_stop_cycle(client, company, monkeypatch):
     monkeypatch.setenv("PIPELINE_RULES_TOP", "3")
     real, seen = orchestrator.run, []
 
-    async def flaky(company, role, news, request_id, use_llm=True):
+    async def flaky(company, role, news, request_id, use_llm=True, charge_company=True):
         seen.append(news["news_id"])
         if len(seen) == 1:
             raise RuntimeError("broken card")

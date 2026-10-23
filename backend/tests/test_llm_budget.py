@@ -58,13 +58,38 @@ def test_parallel_calls_cannot_exceed_daily_limit(client, gateway, monkeypatch):
 
 def test_failed_call_releases_reservation(client, gateway, monkeypatch):
     def down(url, json, timeout, headers):
-        raise httpx.ReadTimeout("slow", request=httpx.Request("POST", url))
+        raise httpx.ConnectError("refused", request=httpx.Request("POST", url))
 
     monkeypatch.setattr(llm.httpx, "post", down)
     with pytest.raises(llm.LLMError):
         llm.chat_json(SYSTEM, USER, "compose", MAX_TOKENS)
     u = llm_usage.usage()
     assert u["reserved_cost"] == 0 and u["errors"] == 1 and u["calls"] == 1 and u["cost"] == 0
+
+
+def test_response_timeout_is_charged_by_estimate(client, gateway, monkeypatch):
+    """Запрос ушел, ответа не дождались: шлюз мог его оплатить — списывается оценка, а не ноль."""
+    tokens, cost = gateway
+
+    def slow(url, json, timeout, headers):
+        raise httpx.ReadTimeout("slow", request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(llm.httpx, "post", slow)
+    with pytest.raises(llm.LLMError):
+        llm.chat_json(SYSTEM, USER, "compose", MAX_TOKENS)
+    u = llm_usage.usage()
+    assert u["reserved_cost"] == 0 and u["errors"] == 1
+    assert u["cost"] >= cost and u["tokens"] >= tokens, "оценка резерва — с запасом"
+
+
+def test_stale_reservation_is_swept_even_when_the_call_is_refused(client, monkeypatch):
+    monkeypatch.setenv("LLM_DAILY_COST_LIMIT", "1")
+    stuck = llm_usage.reserve(MODEL, 30, 10)
+    with database.session() as db:
+        db.get(LLMReservation, stuck.id).created_at = datetime.now(timezone.utc) - timedelta(minutes=11)
+    with pytest.raises(llm_usage.BudgetExceeded):
+        llm_usage.reserve(MODEL, 30, 100000)  # отказ не откатывает снятие зависшего резерва
+    assert llm_usage.reserved_active() == 0 and llm_usage.usage()["reserved_cost"] == 0
 
 
 def test_stale_reservation_is_swept(client):
@@ -314,6 +339,21 @@ def test_budget_alerts_fire_once_per_threshold(client, monkeypatch):
     with pytest.raises(llm_usage.BudgetExceeded):
         llm_usage.reserve(MODEL, 30, 2000)
     assert len(sent) == 3 and "100%" in sent[2], "о исчерпании — одно сообщение, не на каждый отказ"
+
+
+def test_busy_reservations_do_not_raise_false_100_alert(client, monkeypatch):
+    """Лимит занят идущими вызовами, а не тратами: вызов отклоняется, но «лимит исчерпан» не приходит."""
+    from app import notify
+
+    sent = []
+    monkeypatch.setattr(notify, "send_async", sent.append)
+    tokens, cost = llm_usage.estimate(MODEL, 30, 2000)
+    monkeypatch.setenv("LLM_DAILY_COST_LIMIT", str(round(cost * 1.5, 6)))
+    held = llm_usage.reserve(MODEL, 30, 2000)  # идет один вызов
+    with pytest.raises(llm_usage.BudgetExceeded):
+        llm_usage.reserve(MODEL, 30, 2000)       # второй не помещается рядом с ним
+    assert not any("100%" in s for s in sent)
+    llm_usage.release(held)
 
 
 def test_economy_model_near_the_limit(client, gateway, monkeypatch):

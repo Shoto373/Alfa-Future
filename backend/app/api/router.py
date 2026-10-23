@@ -66,9 +66,10 @@ def _limit_llm(user: dict, action: str) -> None:
     per_hour = config.llm_user_limits()[action]
     if not per_hour or not llm.available():
         return
-    if storage.count_events("llm_request", 3600, user_id=user["user_id"], action=action) >= per_hour:
-        raise ApiError("RATE_LIMITED")
+    # Сначала запись, потом подсчет: параллельные запросы видят друг друга и не проскакивают лимит вместе.
     storage.log_event("llm_request", user_id=user["user_id"], action=action)
+    if storage.count_events("llm_request", 3600, user_id=user["user_id"], action=action) > per_hour:
+        raise ApiError("RATE_LIMITED")
 
 
 def _news(news_id: str) -> dict:

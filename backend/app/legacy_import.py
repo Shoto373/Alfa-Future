@@ -69,13 +69,16 @@ def import_runtime(root: Path) -> dict:
                 database.set_state(marker, True, db)
                 counts[table] += 1
         # Учетные записи — один раз: повторный импорт вернул бы удаленных участников из старого JSON.
-        if not database.state(AUTH_MARKER, db):
+        # Та же блокировка, что при старте сервиса: ручной импорт и старт не перенесут их дважды.
+        db.execute(select(func.pg_advisory_xact_lock(AUTH_LOCK)))
+        if not database.state(AUTH_MARKER, db) and (root / "users.json").exists():
             counts |= import_auth(root, db)
             database.set_state(AUTH_MARKER, {"at": datetime.now(timezone.utc).isoformat(timespec="seconds")}, db)
     return counts
 
 
 AUTH_MARKER = "legacy:auth_imported"
+AUTH_LOCK = 72810406
 
 
 def _read_key(path: Path, key: str):
@@ -121,13 +124,16 @@ def import_auth(root: Path, db) -> dict:
 
 def import_auth_once(root: Path | None = None) -> dict | None:
     """При старте: перенести учетные записи из RUNTIME_DIR один раз. Потом файлы не читаются — иначе
-    удаленный участник вернулся бы из старого JSON. Исходные файлы не удаляются."""
+    удаленный участник вернулся бы из старого JSON. Исходные файлы не удаляются.
+
+    Нет users.json — отметка не ставится: файлы, подложенные позже (том подключили после старта),
+    перенесутся при следующем запуске."""
     root = root or config.runtime_dir()
     with database.session() as db:
-        db.execute(select(func.pg_advisory_xact_lock(72810406)))
-        if database.state(AUTH_MARKER, db):
+        db.execute(select(func.pg_advisory_xact_lock(AUTH_LOCK)))
+        if database.state(AUTH_MARKER, db) or not (root / "users.json").exists():
             return None
-        counts = import_auth(root, db) if root.exists() else {"users": 0, "memberships": 0, "sessions": 0}
+        counts = import_auth(root, db)
         database.set_state(AUTH_MARKER, {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), **counts}, db)
     return counts
 

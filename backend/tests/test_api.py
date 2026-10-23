@@ -103,7 +103,7 @@ def test_insight_errors(client, company, monkeypatch):
     monkeypatch.setattr(orchestrator, "run", slow)
     assert_error(client.post("/api/v1/insights", json=base | {"force_refresh": True}), 504, "ANALYSIS_TIMEOUT")
 
-    async def wrong(company, role, news, request_id, use_llm=None):
+    async def wrong(company, role, news, request_id, use_llm=None, charge_company=True):
         return {"company_id": "other", "news_id": news["news_id"], "role": role, "request_id": request_id}
 
     monkeypatch.setattr(orchestrator, "run", wrong)

@@ -147,9 +147,9 @@ def reserve(model: str, prompt_chars: int, max_tokens: int) -> Reservation:
     tokens, cost = estimate(model, prompt_chars, max_tokens)
     day, company_id = budget_day(), _company.get()
     share = config.llm_company_share()
+    sweep()  # своей транзакцией: отказ ниже откатил бы и снятие зависших резервов
     try:
         with database.session() as db:
-            sweep(db)
             _ensure_day(db, day)
             # Сначала общий лимит: если исчерпан и он, причина для пользователя — лимит дня, а не доля компании.
             # Порядок блокировок (строка дня, затем компании) тот же, что при списании и снятии резерва.
@@ -177,7 +177,11 @@ def reserve(model: str, prompt_chars: int, max_tokens: int) -> Reservation:
     except _Rejected as rejected:
         _count_rejection(day, company_id)
         if rejected.scope == "total":
-            _alert(day, 1.0, "дневной лимит исчерпан — вызовы модели отклоняются, разборы строятся правилами")
+            spent = usage(day)
+            # «Исчерпан» — только если не помещается даже без идущих запросов: занятость резервами — не повод
+            # тратить единственное за день оповещение 100%.
+            if spent["cost"] + cost > spent["cost_limit"] or spent["tokens"] + tokens > spent["limit"]:
+                _alert(day, 1.0, "дневной лимит исчерпан — вызовы модели отклоняются, разборы строятся правилами")
             raise BudgetExceeded(f"Бюджет LLM: вызов (~{cost:.2f} ₽) не помещается в дневной лимит с учетом идущих запросов")
         raise BudgetExceeded(f"Бюджет LLM: исчерпана дневная доля компании ({share:.0%} лимита)", "company")
     return res

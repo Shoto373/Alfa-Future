@@ -241,7 +241,7 @@ _inflight: dict[tuple, asyncio.Future] = {}
 
 
 async def run_once(company: dict, role: str, news: dict, request_id: str, use_llm: bool | None = None,
-                   on_built=None) -> tuple[dict, bool]:
+                   on_built=None, charge_company: bool = True) -> tuple[dict, bool]:
     """Один и тот же разбор (компания, роль, новость, режим) не строится дважды одновременно.
 
     Второй запрос, пришедший, пока первый еще строится (два сотрудника открыли одну новость, конвейер
@@ -252,18 +252,18 @@ async def run_once(company: dict, role: str, news: dict, request_id: str, use_ll
     """
     loop = asyncio.get_running_loop()
     key = (company["company_id"], role, news["news_id"], use_llm is False)
-    shared = _inflight.get(key)
-    if shared is not None and shared.get_loop() is loop:
+    while (shared := _inflight.get(key)) is not None and shared.get_loop() is loop:
         try:
             return await asyncio.shield(shared), False
         except asyncio.CancelledError:
             if not shared.cancelled():
                 raise  # отменили этот запрос, а не первый
+            # Первый отменен (тайм-аут) — снова проверяем: ведущим станет один из ждущих, а не каждый.
     future = loop.create_future()
     future.add_done_callback(lambda f: f.cancelled() or f.exception())  # ошибку без ждущих не логировать
     _inflight[key] = future
     try:
-        insight = await run(company, role, news, request_id, use_llm=use_llm)
+        insight = await run(company, role, news, request_id, use_llm=use_llm, charge_company=charge_company)
         if on_built is not None:
             await on_built(insight)
         future.set_result(insight)
@@ -279,11 +279,13 @@ async def run_once(company: dict, role: str, news: dict, request_id: str, use_ll
             del _inflight[key]
 
 
-async def run(company: dict, role: str, news: dict, request_id: str, use_llm: bool | None = None) -> dict:
+async def run(company: dict, role: str, news: dict, request_id: str, use_llm: bool | None = None,
+              charge_company: bool = True) -> dict:
     """use_llm=False — только правила (быстрый черновой разбор), None — LLM, если подключена.
 
-    Вызовы модели учитываются в доле компании в общем дневном бюджете (llm_usage.for_company)."""
-    with llm_usage.for_company(company["company_id"]):
+    Вызовы модели учитываются в доле компании в общем дневном бюджете (llm_usage.for_company);
+    charge_company=False — фоновый конвейер банка: у него своя доля, долю компании он не тратит."""
+    with llm_usage.for_company(company["company_id"] if charge_company else None):
         return await _run(company, role, news, request_id, use_llm)
 
 
@@ -302,6 +304,8 @@ async def _run(company: dict, role: str, news: dict, request_id: str, use_llm: b
     t0 = time.perf_counter()
     plan = _rules_plan(news, company)
     planner = asyncio.create_task(asyncio.to_thread(_llm_queries, news, company, role)) if use_llm else None
+    if planner:  # разбор может прерваться раньше, чем дождется планировщика: ошибку все равно забираем
+        planner.add_done_callback(lambda t: t.cancelled() or t.exception())
     trace.add("plan", "plan", "Обязательные шаги: " + " → ".join(s["tool"] for s in plan), "ok",
               (time.perf_counter() - t0) * 1000, {"steps": [{"tool": s["tool"], "why": s["why"]} for s in plan]})
 

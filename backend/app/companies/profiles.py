@@ -41,7 +41,7 @@ def _load() -> dict:
             data_dir = fallback
         signature = _signature(data_dir)
         with database.session() as db:
-            db.execute(select(func.pg_advisory_xact_lock(72810402)))
+            db.execute(select(func.pg_advisory_xact_lock(72810407)))  # 72810402 — у конвейера
             meta = database.state("profiles", db)
             explicit = os.environ.get("PROFILES_PATH")  # optional legacy import / test fixture
             if not meta or meta.get("signature") != signature:

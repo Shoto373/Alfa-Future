@@ -8,7 +8,8 @@ import secrets
 # и при успешном входе перехэшируется текущими (store.rehash_if_needed).
 SCRYPT_PARAMS = {"n": 2 ** 14, "r": 8, "p": 1, "dklen": 32}
 LEGACY_PARAMS = {"n": 2 ** 14, "r": 8, "p": 1, "dklen": 32}  # записи JSON-хранилища без параметров
-MAX_FAILS = 5
+MAX_FAILS = 5              # неудач с одного адреса на email за окно — потом 429
+MAX_FAILS_PER_EMAIL = 30   # со всех адресов на email за окно — против перебора с множества адресов
 FAIL_WINDOW_SECONDS = 15 * 60
 
 

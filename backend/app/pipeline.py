@@ -92,6 +92,7 @@ def _llm_budget_left() -> bool:
 
     if not llm.available():
         return False
+    llm_usage.sweep()  # резервы упавшего процесса не должны навсегда выключить AI-версии конвейера
     u = llm_usage.usage()
     share = config.pipeline_llm_share()
     # С резервом идущих вызовов: доля конвейера не съедает бюджет, уже обещанный запросам пользователей.
@@ -104,7 +105,8 @@ async def _analyze(company: dict, role: str, news: dict, use_llm: bool) -> dict 
     request_id = f"req_auto_{uuid.uuid4().hex}"
     try:
         # Тот же разбор уже строит пользователь — ждем его результат, модель вызывается один раз.
-        job = orchestrator.run_once(company, role, news, request_id, use_llm=use_llm,
+        # Конвейер — работа банка: тратит свою долю (PIPELINE_LLM_SHARE), а не долю компании пользователей.
+        job = orchestrator.run_once(company, role, news, request_id, use_llm=use_llm, charge_company=False,
                                     on_built=lambda ins: asyncio.to_thread(storage.save_insight, ins))
         insight, _ = await asyncio.wait_for(job, timeout=config.analysis_timeout())
     except Exception as exc:  # одна неудачная карточка не останавливает конвейер

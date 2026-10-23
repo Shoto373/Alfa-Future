@@ -98,9 +98,15 @@ def _extract_json(text: str) -> dict:
     return json.loads(text[start:end + 1])
 
 
-def _failed(reservation: llm_usage.Reservation, committed: bool) -> None:
-    """Вызов не удался: до списания — снять резерв, после — только отметить ошибку."""
+def _failed(reservation: llm_usage.Reservation, committed: bool, exc: Exception | None = None) -> None:
+    """Вызов не удался: до списания — снять резерв, после — только отметить ошибку.
+
+    Тайм-аут ответа: запрос ушел, и шлюз мог его оплатить — списываем оценку резерва (с запасом),
+    иначе неучтенные траты незаметно превысили бы лимит шлюза."""
     if committed:
+        llm_usage.record_error(reservation)
+    elif isinstance(exc, (httpx.ReadTimeout, httpx.WriteTimeout)):
+        llm_usage.commit(reservation, reservation.tokens, reservation.cost)
         llm_usage.record_error(reservation)
     else:
         llm_usage.release(reservation)
@@ -160,7 +166,7 @@ def chat_json(system: str, user: str, model_kind: str = "compose", max_tokens: i
         _failed(reservation, committed)
         raise
     except (httpx.HTTPError, KeyError, ValueError, IndexError, TypeError, AttributeError) as exc:
-        _failed(reservation, committed)
+        _failed(reservation, committed, exc)
         logger.warning("llm call failed model=%s error=%s", model, type(exc).__name__)
         raise LLMError(f"Ошибка вызова модели: {type(exc).__name__}") from exc
     return data, {"model": model, "tokens": tokens, "duration_ms": round((time.perf_counter() - started) * 1000, 1)}

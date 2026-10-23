@@ -378,8 +378,12 @@ def test_legacy_json_accounts_move_to_postgres_once(tmp_path, company, new_clien
     from app import database
     from app.models import AppState
 
-    with database.session() as db:  # тестовый сервис при старте уже отметил перенос пустой папки — как первый запуск на сервере
+    with database.session() as db:  # как первый запуск на сервере: переноса еще не было
         db.execute(delete(AppState).where(AppState.key == legacy_import.AUTH_MARKER))
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert legacy_import.import_auth_once(empty) is None
+    assert database.state(legacy_import.AUTH_MARKER) is None, "без users.json отметка не ставится: файлы подложат позже"
     first = legacy_import.import_auth_once(tmp_path)
     assert first == {"users": 1, "memberships": 2, "sessions": 1}, "дубль по регистру слит, мертвая сессия пропущена"
     assert legacy_import.import_auth_once(tmp_path) is None, "повторный запуск ничего не делает"
@@ -395,3 +399,42 @@ def test_legacy_json_accounts_move_to_postgres_once(tmp_path, company, new_clien
     store.remove_member(cid, "mem-old2")
     legacy_import.import_auth_once(tmp_path)
     assert all(m["member_id"] != "mem-old2" for m in store.list_members(cid))
+
+
+def test_others_cannot_lock_the_owner_out(raw_client):
+    """Пять неверных паролей с чужого адреса не запирают владельца; общий потолок — против перебора."""
+    from app.auth import security, store
+
+    register(raw_client, "victim@example.com")
+    raw_client.post(f"{API}/auth/logout")
+    for _ in range(security.MAX_FAILS + 1):
+        store.login_attempt("victim@example.com", "203.0.113.7")  # злоумышленник
+    assert not store.login_attempt("victim@example.com", "203.0.113.7"), "адрес злоумышленника заблокирован"
+    ok = raw_client.post(f"{API}/auth/login", json={"email": "victim@example.com", "password": "correct-horse"})
+    assert ok.status_code == 200, "владелец со своего адреса входит"
+    for i in range(security.MAX_FAILS_PER_EMAIL):
+        store.login_attempt("victim@example.com", f"198.51.100.{i}")  # перебор с множества адресов
+    assert not store.login_attempt("victim@example.com", "192.0.2.1"), "общий потолок на email"
+
+
+def test_parallel_wrong_passwords_cannot_exceed_the_limit(raw_client):
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app.auth import security, store
+
+    with ThreadPoolExecutor(20) as pool:
+        allowed = list(pool.map(lambda _: store.login_attempt("burst@example.com", "203.0.113.9"), range(20)))
+    assert sum(allowed) <= security.MAX_FAILS, "попытка записывается до проверки — параллельные видят друг друга"
+
+
+def test_client_ip_trusts_proxy_header_only_from_internal_address():
+    from types import SimpleNamespace
+
+    from app.auth.deps import client_ip
+
+    def req(host, header=None):
+        return SimpleNamespace(client=SimpleNamespace(host=host), headers={"x-real-ip": header} if header else {})
+
+    assert client_ip(req("172.18.0.5", "203.0.113.7")) == "203.0.113.7", "nginx во внутренней сети"
+    assert client_ip(req("93.184.216.34", "1.2.3.4")) == "93.184.216.34", "внешний клиент не подделает адрес"
+    assert client_ip(req("127.0.0.1")) == "127.0.0.1"

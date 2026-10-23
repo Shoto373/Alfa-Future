@@ -124,6 +124,10 @@ def membership_view(m: dict, members: list[dict] | None = None) -> dict:
 
 def user_view(user: dict) -> dict:
     with database.session() as db:
+        # Приглашение, созданное одновременно с регистрацией (другой воркер), регистрация не увидела —
+        # привязываем при чтении: обычно запрос ничего не меняет.
+        db.execute(update(AuthMembership).where(AuthMembership.email == user["email"], AuthMembership.user_id.is_(None))
+                   .values(user_id=user["user_id"]))
         mine = [_member_dict(m) for m in db.scalars(select(AuthMembership).where(AuthMembership.user_id == user["user_id"])
                                                     .order_by(AuthMembership.created_at, AuthMembership.member_id))]
         companies = {m["company_id"] for m in mine}
@@ -136,24 +140,28 @@ def user_view(user: dict) -> dict:
 
 # ---- вход: блокировка после неудач (общая для всех воркеров) ----
 
-def login_blocked(email: str) -> bool:
-    since = _now() - timedelta(seconds=security.FAIL_WINDOW_SECONDS)
+def login_attempt(email: str, ip: str) -> bool:
+    """Записывает попытку до проверки пароля и решает, можно ли проверять. False — 429.
+
+    Запись до проверки: параллельные запросы с разных воркеров видят друг друга и не обходят лимит.
+    Блокировка — по паре email + адрес (чужие неверные пароли не запирают владельца), плюс общий
+    потолок на email против перебора с множества адресов. Успешный вход удаляет записи своего адреса.
+    """
+    email, now = email.lower(), _now()
     with database.session() as db:
-        fails = db.scalar(select(func.count()).select_from(LoginFailure)
-                          .where(LoginFailure.email == email.lower(), LoginFailure.at >= since)) or 0
-    return fails >= security.MAX_FAILS
-
-
-def login_failed(email: str) -> None:
+        db.add(LoginFailure(email=email, ip=ip, at=now))
+        db.execute(delete(LoginFailure).where(LoginFailure.at < now - timedelta(days=1)))  # не нужны для окна
+    since = now - timedelta(seconds=security.FAIL_WINDOW_SECONDS)
     with database.session() as db:
-        db.add(LoginFailure(email=email.lower(), at=_now()))
-        # Старые записи не нужны для окна блокировки.
-        db.execute(delete(LoginFailure).where(LoginFailure.at < _now() - timedelta(days=1)))
+        recent = select(func.count()).select_from(LoginFailure).where(LoginFailure.email == email, LoginFailure.at >= since)
+        from_ip = db.scalar(recent.where(LoginFailure.ip == ip)) or 0
+        total = db.scalar(recent) or 0
+    return from_ip <= security.MAX_FAILS and total <= security.MAX_FAILS_PER_EMAIL
 
 
-def login_succeeded(email: str) -> None:
+def login_succeeded(email: str, ip: str) -> None:
     with database.session() as db:
-        db.execute(delete(LoginFailure).where(LoginFailure.email == email.lower()))
+        db.execute(delete(LoginFailure).where(LoginFailure.email == email.lower(), LoginFailure.ip == ip))
 
 
 # ---- сессии ----

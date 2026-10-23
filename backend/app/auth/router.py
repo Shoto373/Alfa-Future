@@ -7,7 +7,7 @@ from app import config
 from app.api.errors import ApiError
 from app.api.router import ERRORS, company_or_404
 from app.auth import security, store
-from app.auth.deps import COOKIE, check_origin, current_user, member_of, require_admin, require_member
+from app.auth.deps import COOKIE, check_origin, client_ip, current_user, member_of, require_admin, require_member
 from app.auth.schemas import (ClaimRequest, LoginRequest, Member, MemberCreateRequest, MembersResponse,
                               MemberUpdateRequest, Membership, RegisterRequest, User)
 
@@ -31,8 +31,9 @@ def register(payload: RegisterRequest, response: Response) -> dict:
 
 @router.post("/auth/login", response_model=User, responses=ERRORS)
 def login(payload: LoginRequest, request: Request, response: Response) -> dict:
-    # 5 неудач на email за 15 минут — блокировка (в базе: общая для всех воркеров, переживает перезапуск).
-    if store.login_blocked(payload.email):
+    # 5 неудач с адреса на email за 15 минут (и 30 со всех адресов) — блокировка; счетчик в базе, общий для воркеров.
+    ip = client_ip(request)
+    if not store.login_attempt(payload.email, ip):
         raise ApiError("TOO_MANY_ATTEMPTS")
     user = store.find_user_by_email(payload.email)
     if user is None:
@@ -41,9 +42,8 @@ def login(payload: LoginRequest, request: Request, response: Response) -> dict:
     else:
         ok = security.verify_password(payload.password, user["pw_salt"], user["pw_hash"], user["pw_params"])
     if not ok:
-        store.login_failed(payload.email)
-        raise ApiError("INVALID_CREDENTIALS")
-    store.login_succeeded(payload.email)
+        raise ApiError("INVALID_CREDENTIALS")  # попытка уже записана
+    store.login_succeeded(payload.email, ip)
     store.rehash_if_needed(user, payload.password)
     _set_cookie(response, store.create_session(user["user_id"]))
     return store.user_view(user)
