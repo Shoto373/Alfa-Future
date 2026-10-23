@@ -205,3 +205,34 @@ def test_daily_report_shows_budget(client, monkeypatch):
     assert d["budget"]["by_model"][0]["model"] == MODEL
     line = quality.report_text(d).splitlines()[-1]
     assert "0.25 из" in line and "отклонено бюджетом 0" in line and MODEL in line
+
+
+def test_without_key_reason_is_disabled_not_outage(client, company, monkeypatch):
+    import asyncio
+
+    from app.agent import orchestrator
+    from app.news import store
+
+    news = store.make_item("ЦБ сохранил ключевую ставку", "Банк России сохранил ключевую ставку на уровне 14%.", "Проверка")
+    assert asyncio.run(orchestrator.run(company, "cfo", news, "req_nokey"))["fallback_reason"] == "disabled"
+    assert asyncio.run(orchestrator.run(company, "cfo", news, "req_fast", use_llm=False))["fallback_reason"] is None
+    # Ключ есть, но шлюз недавно не ответил (предохранитель) — это «не отвечает», а не «не подключена».
+    monkeypatch.setenv("LLM_BASE_URL", "http://llm.test/v1")
+    monkeypatch.setenv("LLM_API_KEY", "k")
+    monkeypatch.setattr(llm, "_down_until", float("inf"))
+    assert asyncio.run(orchestrator.run(company, "cfo", news, "req_breaker"))["fallback_reason"] == "unavailable"
+
+
+def test_cached_rules_card_reports_disabled_when_opened_without_key(client, company):
+    import asyncio
+
+    from app import pipeline, ranking
+    from app.news import store
+
+    news = ranking.company_feed(company["company_id"], "cfo", 500)[0]["news"]
+    card = asyncio.run(pipeline._analyze(company, "cfo", store.get(news["news_id"]), use_llm=False))  # как конвейер
+    assert card["fallback_reason"] is None, "конвейер строит правилами намеренно — причины в разборе нет"
+    body = {"company_id": company["company_id"], "news_id": news["news_id"]}
+    assert client.post("/api/v1/insights", json={**body, "fast": True}).json()["fallback_reason"] is None
+    opened = client.post("/api/v1/insights", json=body).json()
+    assert opened["insight_id"] == card["insight_id"] and opened["fallback_reason"] == "disabled"

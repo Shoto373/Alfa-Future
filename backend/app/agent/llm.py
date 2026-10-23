@@ -42,9 +42,14 @@ def is_allowed(model: str) -> bool:
     return any(_norm(a) in n for a in config.ALLOWED_MODELS)
 
 
-def available() -> bool:
+def configured() -> bool:
+    """Ключ и адрес шлюза заданы (иначе модель не подключена, а не временно недоступна)."""
     s = config.llm_settings()
-    return bool(s["base_url"] and s["api_key"]) and time.monotonic() >= _down_until
+    return bool(s["base_url"] and s["api_key"])
+
+
+def available() -> bool:
+    return configured() and time.monotonic() >= _down_until
 
 
 def _post(payload: dict, s: dict) -> httpx.Response:

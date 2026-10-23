@@ -209,6 +209,10 @@ async def create_insight(payload: InsightRequest, request: Request, user: dict =
 
     c, n, cached = await asyncio.to_thread(prepare)
     if cached:
+        # Готовый разбор на правилах (часто — от конвейера, без модели) не знает, почему модели нет сейчас:
+        # причина — состояние сервера в момент открытия, для плашки «не подключена» / «не отвечает».
+        if cached["mode"] == "rules" and not cached.get("fallback_reason") and not payload.fast and not llm.available():
+            cached = {**cached, "fallback_reason": "unavailable" if llm.configured() else "disabled"}
         return cached
     try:
         job = orchestrator.run(c, role, n, request_id, use_llm=False) if payload.fast else orchestrator.run(c, role, n, request_id)

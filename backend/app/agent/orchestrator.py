@@ -240,7 +240,11 @@ async def run(company: dict, role: str, news: dict, request_id: str, use_llm: bo
     """use_llm=False — только правила (быстрый черновой разбор), None — LLM, если подключена."""
     trace = Trace()
     runner = ToolRunner(request_id)
+    wanted = use_llm is not False  # модель нужна, если ее не отключили явно (быстрый разбор, правила конвейера)
     use_llm = llm.available() if use_llm is None else (use_llm and llm.available())
+    # Почему модель не дала итог — для плашки в карточке: disabled — ключ не задан, unavailable — шлюз
+    # не отвечает (предохранитель), budget — лимит, checks — выводы модели не прошли проверки.
+    fallback_reason = None if use_llm or not wanted else "unavailable" if llm.configured() else "disabled"
     model = None
     started = time.perf_counter()
 
@@ -317,7 +321,6 @@ async def run(company: dict, role: str, news: dict, request_id: str, use_llm: bo
     t0 = time.perf_counter()
     draft = composer.compose(ctx)
     mode = "rules"
-    fallback_reason = None  # почему модель не дала итог: budget | unavailable | checks — для плашки в карточке
     if use_llm:
         try:
             data, meta = await asyncio.to_thread(llm.chat_json, prompts.COMPOSE_SYSTEM, prompts.compose_user(ctx, _sources(ctx)), "compose", 8000)

@@ -394,6 +394,12 @@
   border-color: var(--amber);
 }
 
+// Штатный режим без модели: статичный значок вместо индикатора загрузки.
+.upgradeNoteInfo::before {
+  animation: none;
+  border-color: var(--blue);
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
