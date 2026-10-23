@@ -1,0 +1,10 @@
+[Unit]
+Description=Alfa Pulse GitOps agent (pull deploy from branch "deploy")
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/alfa-gitops
+# Выкатка с бэкапом и ожиданием здоровья занимает до ~10 минут.
+TimeoutStartSec=20min

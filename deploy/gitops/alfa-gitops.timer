@@ -1,0 +1,10 @@
+[Unit]
+Description=Check branch "deploy" for a new release every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

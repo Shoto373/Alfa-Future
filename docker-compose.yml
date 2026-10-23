@@ -1,6 +1,10 @@
-# Прод-деплой: backend + frontend за nginx (HTTPS, pointers-team.online).
+# Прод: backend + frontend за nginx (HTTPS, pointers-team.online).
 # Локальная разработка — compose.yaml (docker compose -f compose.yaml ...).
-# Образы собирает CD (.github/workflows/deploy.yml); build-секции позволяют собрать на сервере вручную.
+# GitOps: CI публикует этот файл и release.env (теги образов) в ветку `deploy`, а агент на сервере
+# (deploy/gitops/alfa-gitops) сам забирает их и выкатывает. build-секции — для ручной сборки на сервере.
+# Имя проекта закреплено: от него зависят тома app_postgres_data и app_runtime.
+name: app
+
 services:
   postgres:
     # PostgreSQL 17 + pgvector (векторное хранилище). Тот же Debian trixie (glibc), что у прежнего
