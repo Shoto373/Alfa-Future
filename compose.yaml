@@ -49,6 +49,9 @@ services:
       FRONTEND_ORIGIN: http://localhost:${WEB_PORT:-3000}
       ANALYSIS_TIMEOUT_SECONDS: "150"
       REDIS_URL: redis://redis:6379/0
+      # Локальная проверка: демо-сотрудник банка видит метрики, расходы и аудит (/metrics, /audit).
+      # Только для локального запуска — в production (docker-compose.yml) значения по умолчанию нет.
+      OPERATOR_EMAILS: ${OPERATOR_EMAILS:-operator@alfa.test}
     volumes:
       # Реальные CSV кейса: CASE_DATA_DIR=./контекст/data docker compose up (по умолчанию — синтетика)
       - ${CASE_DATA_DIR:-./data/synthetic}:/data/case:ro
