@@ -21,7 +21,8 @@ def other_company(company):
 def test_register_login_logout_me(raw_client):
     r = raw_client.post(f"{API}/auth/register", json={"name": " Иван ", "email": "  Ivan@Example.COM ", "password": "correct-horse"})
     assert r.status_code == 201
-    assert r.json() == {"user_id": r.json()["user_id"], "name": "Иван", "email": "ivan@example.com", "memberships": []}
+    assert r.json() == {"user_id": r.json()["user_id"], "name": "Иван", "email": "ivan@example.com", "memberships": [],
+                        "is_operator": False}
     cookie = r.headers["set-cookie"].lower()
     assert "session=" in cookie and "httponly" in cookie and "samesite=lax" in cookie and "path=/" in cookie
     assert "secure" not in cookie  # frontend_origin — http

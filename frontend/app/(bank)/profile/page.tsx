@@ -6,6 +6,7 @@ import { CompanyTile, ErrorBox, Icon, Loading } from "@/components/ui";
 import { AbortedError, api } from "@/lib/api";
 import { errorText } from "@/lib/errors";
 import { ROLE_NAMES, useSession } from "@/lib/session";
+import OperatorPanel from "@/components/OperatorPanel";
 import type { Member, Membership, Role } from "@/lib/types";
 import styles from "@/app/(bank)/profile/page.module.scss";
 import common from "@/styles/common.module.scss";
@@ -392,6 +393,8 @@ export default function ProfilePage() {
           <p className={common.muted}>{user.email}</p>
         </div>
       </div>
+
+      {user.is_operator && <OperatorPanel />}
 
       <div className={common.pageHead}>
         <h2>Мои компании</h2>

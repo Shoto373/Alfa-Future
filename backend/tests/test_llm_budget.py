@@ -348,3 +348,9 @@ def test_operator_can_pause_ai_without_removing_key(client, company, gateway, ne
     assert llm_usage.usage()["calls"] == 0, "модель не вызывалась"
     state = client.post("/api/v1/ops/llm", json={"paused": False}).json()
     assert state["paused"] is False and state["connected"] is True and state["by"] == "owner@example.com"
+
+
+def test_me_marks_bank_operator(client, monkeypatch):
+    assert client.get("/api/v1/auth/me").json()["is_operator"] is False, "администратор клиента — не сотрудник банка"
+    monkeypatch.setenv("OPERATOR_EMAILS", "OWNER@example.com")
+    assert client.get("/api/v1/auth/me").json()["is_operator"] is True

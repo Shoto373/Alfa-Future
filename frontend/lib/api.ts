@@ -1,5 +1,5 @@
 import type {
-  Answer, BankDocument, CompanyProfile, CompanySummary, Exposure, FeedItem, Insight, LookupCompany, Member, Membership, Meta, NewsBrief, Role, TopicCount, StoryChip, User, } from "./types";
+  Answer, BankDocument, CompanyProfile, CompanySummary, Exposure, FeedItem, Insight, LLMSwitch, LookupCompany, Member, Membership, Meta, NewsBrief, Role, TopicCount, StoryChip, User, } from "./types";
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
@@ -97,5 +97,8 @@ export const api = {
   analytics: () => request<{ documents: BankDocument[] }>("/api/v1/analytics"),
   metrics: () => request<Record<string, any>>("/api/v1/metrics"),
   audit: () => request<{ items: Record<string, any>[] }>("/api/v1/audit?limit=60"),
+  // Сотрудник банка: выключатель AI без удаления ключа с сервера.
+  llmSwitch: () => request<LLMSwitch>("/api/v1/ops/llm"),
+  setLLMPaused: (paused: boolean) => request<LLMSwitch>("/api/v1/ops/llm", json("POST", { paused })),
   pdfUrl: (docId: string, page?: number | null) => `${API_BASE_URL}/api/v1/analytics/${docId}/pdf${page ? `#page=${page}` : ""}`,
 };

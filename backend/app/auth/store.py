@@ -113,7 +113,8 @@ def user_view(user: dict) -> dict:
     members = _read("memberships.json", "members")
     mine = [m for m in members if m["user_id"] == user["user_id"]]
     return {"user_id": user["user_id"], "name": user["name"], "email": user["email"],
-            "memberships": [membership_view(m, members) for m in mine]}
+            "memberships": [membership_view(m, members) for m in mine],
+            "is_operator": user["email"].lower() in config.operator_emails()}
 
 
 # ---- сессии ----

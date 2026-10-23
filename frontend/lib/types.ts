@@ -14,6 +14,14 @@ export interface User {
   name: string;
   email: string;
   memberships: Membership[];
+  is_operator?: boolean;  // сотрудник банка: блок «Сервис банка» в профиле
+}
+
+export interface LLMSwitch {
+  paused: boolean;
+  connected: boolean;
+  by?: string;
+  at?: string;
 }
 
 export interface LookupCompany {
