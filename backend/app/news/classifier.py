@@ -31,6 +31,8 @@ BUSINESS_CONTEXT_STEMS = ["рубл", "доллар", "юан", "валют", "�
                           "логистик", "перевоз", "грузов", "грузоп", "нефт", "топлив", "металл", "сырь", "товар",
                           "торгов", "отрасл", "промышлен", "млрд", "млн", "трлн", "регулятор", "мегарегулятор", "дивиденд",
                           "санкц", "финанс", "капитал", "ликвидн", "депозит", "лизинг", "ипотек"]
+# Разных деловых слов не меньше: одно случайное («бюджетное учреждение» в новости об учителях) — не контекст.
+BUSINESS_CONTEXT_MIN = 2
 SEMANTIC_TOPIC_SCORE = 2  # как слабое словарное совпадение: тема по смыслу не перевешивает явную
 WEAK_TOPIC_SCORE = 2      # одно упоминание в тексте — слабый сигнал темы
 LLM_TOPIC_SCORE = 3       # тема от модели-классификатора: сильнее одного упоминания, слабее явной словарной
@@ -153,13 +155,19 @@ def classify(title: str, text: str, hint: dict | None = None) -> Classification:
             topics.append({"topic": key, "name": spec["name"], "score": score, "matched": matched})
     # Смысловые темы (embedding-модель): находят тему без слов из словаря,
     # например «мегарегулятор оставил стоимость заимствований» — ключевая ставка.
-    meaning = semantic.analyze(title, text, {t["topic"] for t in topics})
-    if meaning and not topics and not _score(tokens, BUSINESS_CONTEXT_STEMS)[0]:
-        meaning = {**meaning, "added": []}  # ни словарных тем, ни деловых слов — смысл не добавляет тему
+    # Опора для смысла — только значимые словарные темы: слабое совпадение («бюджетных» в новости об учителях,
+    # «торговле» в новости о договоре по оружию) позже отсеивается и не должно смягчать порог смысловой темы.
+    strong = {t["topic"] for t in topics if t["score"] > 1}
+    meaning = semantic.analyze(title, text, strong)
+    if meaning and not strong and len(_score(tokens, BUSINESS_CONTEXT_STEMS)[1]) < BUSINESS_CONTEXT_MIN:
+        meaning = {**meaning, "added": []}  # ни словарных тем, ни делового контекста — смысл не добавляет тему
     if meaning:
         for t in topics:
             t["semantic"] = meaning["sims"][t["topic"]]
+        have = {t["topic"] for t in topics}
         for key in meaning["added"]:
+            if key in have:  # слабая словарная тема подтверждена смыслом — остается одна запись
+                continue
             if key == "sanctions_geopolitics" and not _score(tokens, SANCTIONS_BUSINESS_STEMS)[0]:
                 continue
             topics.append({"topic": key, "name": TOPICS[key]["name"], "score": SEMANTIC_TOPIC_SCORE,
