@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Card, Icon } from "@/components/ui";
+import common from "@/styles/common.module.scss";
+import documents from "@/styles/documents.module.scss";
 
 export const metadata: Metadata = { title: "Правовая информация — Альфа.Пульс" };
 
@@ -48,15 +50,15 @@ const SECTIONS: { title: string; text: string[] }[] = [
 
 export default function LegalPage() {
   return (
-    <div className="page doc-page">
-      <div className="page-head">
+    <div className={`${common.page} ${documents.docPage}`}>
+      <div className={common.pageHead}>
         <div>
-          <span className="eyebrow"><Icon name="doc" /> Альфа.Пульс</span>
+          <span className={common.eyebrow}><Icon name="doc" /> Альфа.Пульс</span>
           <h1>Правовая информация</h1>
         </div>
       </div>
       {SECTIONS.map((s) => (
-        <Card key={s.title} title={s.title}>
+        <Card key={s.title} title={s.title} className={documents.card}>
           {s.text.map((p) => <p key={p.slice(0, 40)}>{p}</p>)}
         </Card>
       ))}

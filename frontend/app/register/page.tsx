@@ -7,6 +7,9 @@ import AuthLayout from "@/components/AuthLayout";
 import PasswordField from "@/components/PasswordField";
 import { errorText } from "@/lib/errors";
 import { useSession } from "@/lib/session";
+import common from "@/styles/common.module.scss";
+import forms from "@/styles/forms.module.scss";
+import ui from "@/components/ui.module.scss";
 
 type Errors = Partial<Record<"name" | "email" | "password" | "confirm", string>>;
 
@@ -50,27 +53,27 @@ export default function RegisterPage() {
   return (
     <AuthLayout>
       <h2>Регистрация</h2>
-      <p className="muted">Создайте аккаунт. Компанию вы добавите на следующем шаге.</p>
-      <form className="form" onSubmit={submit} noValidate>
-        {error && <div className="error-box" role="alert"><span>{error}</span></div>}
-        <div className="field">
+      <p className={common.muted}>Создайте аккаунт. Компанию вы добавите на следующем шаге.</p>
+      <form className={forms.form} onSubmit={submit} noValidate>
+        {error && <div className={ui.errorBox} role="alert"><span>{error}</span></div>}
+        <div className={forms.field}>
           <label htmlFor="name">Имя и фамилия</label>
-          <input id="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)}
+          <input className={forms.input} id="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)}
             aria-invalid={Boolean(errors.name)} aria-describedby={errors.name ? "name-err" : undefined} />
-          {errors.name && <small id="name-err" className="field-error">{errors.name}</small>}
+          {errors.name && <small id="name-err" className={forms.fieldError}>{errors.name}</small>}
         </div>
-        <div className="field">
+        <div className={forms.field}>
           <label htmlFor="email">Email</label>
-          <input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)}
+          <input className={forms.input} id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)}
             aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? "email-err" : undefined} />
-          {errors.email && <small id="email-err" className="field-error">{errors.email}</small>}
+          {errors.email && <small id="email-err" className={forms.fieldError}>{errors.email}</small>}
         </div>
         <PasswordField id="password" label="Пароль" value={password} onChange={setPassword} autoComplete="new-password"
           error={errors.password} hint="От 8 до 128 символов." />
         <PasswordField id="confirm" label="Повторите пароль" value={confirm} onChange={setConfirm} autoComplete="new-password" error={errors.confirm} />
-        <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? "Создаём…" : "Зарегистрироваться"}</button>
+        <button type="submit" className={`${common.btn} ${common.btnPrimary}`} disabled={busy}>{busy ? "Создаём…" : "Зарегистрироваться"}</button>
       </form>
-      <p className="muted small">Уже есть аккаунт? <Link href="/login">Войти</Link></p>
+      <p className={`${common.muted} ${common.small}`}>Уже есть аккаунт? <Link href="/login">Войти</Link></p>
     </AuthLayout>
   );
 }

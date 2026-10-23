@@ -82,7 +82,7 @@ export const api = {
     request<{ profile: CompanyProfile; exposures: Exposure[] }>(`/api/v1/companies/${encodeURIComponent(id)}`, {}, { signal }),
   feed: (companyId: string, topic?: string, signal?: AbortSignal) =>
     request<{ items: FeedItem[]; topic_counts: TopicCount[] }>(
-      `/api/v1/feed?company_id=${encodeURIComponent(companyId)}${topic ? `&topic=${topic}` : ""}`, {}, { signal }),
+      `/api/v1/feed?company_id=${encodeURIComponent(companyId)}${topic ? `&topic=${encodeURIComponent(topic)}` : ""}`, {}, { signal }),
   // fast: готовая карточка или разбор на правилах без LLM за доли секунды; без fast — версия модели.
   insight: (companyId: string, newsId: string, opts: { force?: boolean; fast?: boolean } = {}, signal?: AbortSignal) =>
     request<Insight>("/api/v1/insights", json("POST", {

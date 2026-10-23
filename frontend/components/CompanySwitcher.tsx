@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ROLE_NAMES, useSession } from "@/lib/session";
 import { CompanyTile, Icon } from "./ui";
+import styles from "@/components/CompanySwitcher.module.scss";
+import common from "@/styles/common.module.scss";
 
 /** Переключает активную компанию среди тех, где у пользователя есть членство. Роль берется из членства и только отображается. */
 export default function CompanySwitcher() {
@@ -28,31 +30,31 @@ export default function CompanySwitcher() {
   const label = (
     <>
       <CompanyTile id={session.companyId} name={session.companyName} size={36} />
-      <span className="switcher-text">
-        <span className="switcher-name">{session.companyName}</span>
-        <span className="switcher-label">{ROLE_NAMES[session.role]}{session.isAdmin ? " · администратор" : ""}</span>
+      <span className={styles.switcherText}>
+        <span className={styles.switcherName} data-testid="company-name">{session.companyName}</span>
+        <span className={styles.switcherLabel} data-testid="company-role">{ROLE_NAMES[session.role]}{session.isAdmin ? " · администратор" : ""}</span>
       </span>
     </>
   );
 
   return (
-    <div className="switcher" ref={box}>
-      <div className="switcher-chip">
-        <Link href="/company" className="switcher-link" title="Профиль компании">{label}</Link>
+    <div className={styles.switcher} ref={box}>
+      <div className={styles.switcherChip}>
+        <Link href="/company" className={styles.switcherLink} title="Профиль компании">{label}</Link>
         {many && (
-          <button type="button" className="switcher-btn icon-btn" onClick={() => setOpen((v) => !v)} aria-expanded={open}
+          <button type="button" className={`${styles.switcherBtn} ${common.iconBtn}`} onClick={() => setOpen((v) => !v)} aria-expanded={open}
             aria-label="Сменить организацию" title="Сменить организацию">
             <Icon name="chevron" size={16} />
           </button>
         )}
       </div>
       {open && many && (
-        <div className="switcher-pop" role="dialog" aria-label="Выбор организации">
-          <p className="pop-title">Мои компании</p>
+        <div className={styles.switcherPop} role="dialog" aria-label="Выбор организации">
+          <p className={common.popTitle}>Мои компании</p>
           <ul>
             {session.memberships.map((m) => (
               <li key={m.company_id}>
-                <button type="button" className={m.company_id === session.companyId ? "current" : ""}
+                <button type="button" className={m.company_id === session.companyId ? styles.current : ""}
                   onClick={() => { setActiveCompany(m.company_id); setOpen(false); }}>
                   <CompanyTile id={m.company_id} name={m.company_name} size={32} />
                   <span><strong>{m.company_name}</strong><small>{ROLE_NAMES[m.role]}{m.is_admin ? " · администратор" : ""}</small></span>

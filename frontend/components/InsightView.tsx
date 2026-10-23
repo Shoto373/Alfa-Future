@@ -6,8 +6,18 @@ import { date } from "@/lib/format";
 import type { Claim, Insight, Source } from "@/lib/types";
 import Chat from "./Chat";
 import { Card, Icon, OriginTag, Score } from "./ui";
+import styles from "@/components/InsightView.module.scss";
+import common from "@/styles/common.module.scss";
 
 const STAGE: Record<string, string> = { plan: "План", tool: "Инструмент", compose: "Черновик", check: "Самопроверка", adapt: "Коррекция", finalize: "Итог" };
+const TRACE_STYLES: Record<string, string | undefined> = {
+  warning: styles.traceWarning,
+  error: styles.traceError,
+};
+const SOURCE_STYLES: Partial<Record<Source["kind"], string>> = {
+  bank_analytics: styles.srcBankAnalytics,
+  client_data: styles.srcClientData,
+};
 const CHECK: Record<string, string> = {
   completeness: "Все разделы заполнены",
   sources_linked: "У каждого вывода есть источник",
@@ -27,7 +37,7 @@ function SourceRefs({ ids, index }: { ids: string[]; index: Map<string, number> 
   const refs = ids.filter((id) => index.has(id));
   if (!refs.length) return null;
   return (
-    <span className="refs">
+    <span className={styles.refs}>
       {refs.map((id) => (
         <a key={id} href={`#src-${index.get(id)}`} title="Перейти к источнику"
           onClick={(e) => { e.preventDefault(); openSource(index.get(id)); }}>[{index.get(id)}]</a>
@@ -43,9 +53,9 @@ const OpenSource = createContext<(n?: number) => void>(() => {});
 
 function ClaimList({ items, index, empty = "Нет данных" }: { items: Claim[]; index: Map<string, number>; empty?: string }) {
   const rules = useContext(RulesMode);
-  if (!items.length) return <p className="muted">{empty}</p>;
+  if (!items.length) return <p className={styles.muted}>{empty}</p>;
   return (
-    <ul className="claims">
+    <ul className={common.claims}>
       {items.map((c, i) => (
         <li key={i}>
           <OriginTag origin={rules && c.origin === "ai" ? "rules" : c.origin} />
@@ -61,11 +71,11 @@ function Feedback({ insightId, section }: { insightId: string; section: string }
   const [sent, setSent] = useState<1 | -1 | null>(null);
   const send = (r: 1 | -1) => api.feedback(insightId, r, section).then(() => setSent(r)).catch(() => setSent(null));
   return (
-    <span className="feedback" aria-label="Оцените раздел">
-      {sent ? <span className="muted small">Спасибо за оценку</span> : (
+    <span className={styles.feedback} aria-label="Оцените раздел">
+      {sent ? <span className={`${styles.muted} ${common.small}`}>Спасибо за оценку</span> : (
         <>
-          <button className="icon-btn" onClick={() => send(1)} aria-label="Полезно"><Icon name="thumbUp" size={16} /></button>
-          <button className="icon-btn" onClick={() => send(-1)} aria-label="Не полезно"><Icon name="thumbDown" size={16} /></button>
+          <button className={common.iconBtn} onClick={() => send(1)} aria-label="Полезно"><Icon name="thumbUp" size={16} /></button>
+          <button className={common.iconBtn} onClick={() => send(-1)} aria-label="Не полезно"><Icon name="thumbDown" size={16} /></button>
         </>
       )}
     </span>
@@ -105,60 +115,60 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
   return (
     <RulesMode.Provider value={ins.mode === "rules"}>
     <OpenSource.Provider value={openSource}>
-    <div className="insight">
-      <div className="insight-head">
-        <div className="insight-badges">
+    <div className={styles.insight}>
+      <div className={styles.insightHead} data-testid="insight-header">
+        <div className={styles.insightBadges}>
           <Score value={ins.relevance.score} />
         </div>
-        <p className="news-title">{ins.title}</p>
+        <p className={styles.newsTitle}>{ins.title}</p>
         <h1>{ins.headline}</h1>
-        <div className="insight-actions">
-          <button className="btn btn-secondary btn-sm" onClick={onRefresh} disabled={refreshing || upgrading}>
+        <div className={styles.insightActions}>
+          <button className={`${common.btn} ${styles.btnSecondary} ${common.btnSm}`} onClick={onRefresh} disabled={refreshing || upgrading}>
             <Icon name="refresh" size={16} /> {refreshing ? "Пересчитываем…" : "Пересчитать"}
           </button>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowTrace((v) => !v)}>
+          <button className={`${common.btn} ${styles.btnSecondary} ${common.btnSm}`} onClick={() => setShowTrace((v) => !v)}>
             {showTrace ? "Скрыть ход анализа" : "Как получен вывод"}
           </button>
-          <span className="muted small">{date(ins.created_at)}</span>
+          <span className={`${styles.muted} ${common.small}`}>{date(ins.created_at)}</span>
         </div>
         {upgrading && (
-          <p className="upgrade-note" role="status">
+          <p className={styles.upgradeNote} role="status">
             Это быстрый разбор на правилах: данные компании и аналитика банка уже учтены. AI-модель дополняет выводы — карточка обновится сама.
           </p>
         )}
         {!upgrading && upgradeFailed && ins.mode === "rules" && (
-          <p className="upgrade-note upgrade-note-warn" role="status">
+          <p className={`${styles.upgradeNote} ${styles.upgradeNoteWarn}`} role="status">
             AI-версия сейчас недоступна: модель не ответила или ее выводы не прошли проверку фактов. Показан проверенный разбор на правилах — можно нажать «Пересчитать» позже.
           </p>
         )}
       </div>
 
       {showTrace && (
-        <Card title="Ход анализа агента" className="trace-card">
-          <ol className="trace">
+        <Card title="Ход анализа агента">
+          <ol className={styles.trace} data-testid="analysis-trace">
             {ins.trace.map((s) => (
-              <li key={s.step} className={`trace-${s.status}`}>
-                <span className="trace-stage">{STAGE[s.stage] ?? s.stage}</span>
+              <li key={s.step} className={TRACE_STYLES[s.status]}>
+                <span className={styles.traceStage}>{STAGE[s.stage] ?? s.stage}</span>
                 <code>{s.name}</code>
                 <span>{s.detail}</span>
-                {s.duration_ms > 0 && <span className="muted small">{s.duration_ms} мс</span>}
+                {s.duration_ms > 0 && <span className={`${styles.muted} ${common.small}`}>{s.duration_ms} мс</span>}
               </li>
             ))}
           </ol>
           <h4>Самопроверка</h4>
-          <ul className="checks">
+          <ul className={styles.checks} data-testid="quality-checks">
             {ins.quality.checks.map((c) => (
-              <li key={c.name} className={c.passed ? "ok" : "warn"}>{c.passed ? "✓" : "!"} {CHECK[c.name] ?? c.name}<span className="muted small"> — {c.detail}</span></li>
+              <li key={c.name} className={c.passed ? styles.ok : styles.warn}>{c.passed ? "✓" : "!"} {CHECK[c.name] ?? c.name}<span className={`${styles.muted} ${common.small}`}> — {c.detail}</span></li>
             ))}
           </ul>
         </Card>
       )}
 
-      <div className="insight-grid">
+      <div className={styles.insightGrid}>
         <Card title="1. Что произошло" actions={fb("what_happened")}>
           <ClaimList items={ins.what_happened.facts} index={index} />
           {(ins.what_happened.actors.length > 0 || ins.what_happened.dates.length > 0) && (
-            <p className="muted small">
+            <p className={`${styles.muted} ${common.small}`}>
               {ins.what_happened.actors.length > 0 && <>Участники: {ins.what_happened.actors.join(", ")}. </>}
               {ins.what_happened.dates.length > 0 && <>Даты: {ins.what_happened.dates.join(", ")}.</>}
             </p>
@@ -169,67 +179,67 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
         <Card title="2. Почему это важно для компании" actions={fb("why_important")}>
           <ClaimList items={ins.why_important} index={index} />
           {ins.features_used.length > 0 && (
-            <div className="features">
+            <div className={styles.features}>
               <h4>Признаки компании, повлиявшие на вывод</h4>
-              <ul className="kv">{ins.features_used.map((f) => <li key={f.name}><span>{f.label}</span><strong>{f.value}</strong></li>)}</ul>
+              <ul className={styles.kv}>{ins.features_used.map((f) => <li key={f.name}><span>{f.label}</span><strong>{f.value}</strong></li>)}</ul>
             </div>
           )}
         </Card>
 
-        <Card title="3. Какие последствия возможны" actions={fb("consequences")} className="span-2">
-          <div className="two-col">
-            <div><h4 className="neg">Риски</h4><ClaimList items={ins.risks} index={index} empty="Существенных рисков не выявлено" /></div>
-            <div><h4 className="pos">Возможности</h4><ClaimList items={ins.opportunities} index={index} empty="Явных возможностей не выявлено" /></div>
+        <Card title="3. Какие последствия возможны" actions={fb("consequences")} className={styles.span2}>
+          <div className={styles.twoCol}>
+            <div><h4 className={styles.neg}>Риски</h4><ClaimList items={ins.risks} index={index} empty="Существенных рисков не выявлено" /></div>
+            <div><h4 className={styles.pos}>Возможности</h4><ClaimList items={ins.opportunities} index={index} empty="Явных возможностей не выявлено" /></div>
           </div>
         </Card>
 
         <Card title="4. Что можно сделать" actions={fb("actions")}>
           <ClaimList items={ins.actions} index={index} />
-          {ins.questions.length > 0 && (<><h4>Вопросы для дополнительного анализа</h4><ul className="plain">{ins.questions.map((q) => <li key={q}>{q}</li>)}</ul></>)}
+          {ins.questions.length > 0 && (<><h4>Вопросы для дополнительного анализа</h4><ul className={common.plain}>{ins.questions.map((q) => <li key={q}>{q}</li>)}</ul></>)}
           {ins.products.length > 0 && (
-            <div className="offers">
-              <span className="offer-label">Предложение банка</span>
+            <div className={styles.offers}>
+              <span className={styles.offerLabel}>Предложение банка</span>
               {ins.products.map((p) => (
-                <div className="offer" key={p.product_id}><strong>{p.title}</strong><span>{p.text}</span></div>
+                <div className={styles.offer} key={p.product_id}><strong>{p.title}</strong><span>{p.text}</span></div>
               ))}
             </div>
           )}
         </Card>
 
-        <Card title="5. Как это оценивает Альфа-Банк" actions={fb("bank_view")} className="bank-card">
+        <Card title="5. Как это оценивает Альфа-Банк" actions={fb("bank_view")} className={styles.bankCard}>
           {ins.bank_view.available ? (
             <>
-              {ins.bank_view.summary && <p className="bank-summary">{ins.bank_view.summary}</p>}
+              {ins.bank_view.summary && <p className={styles.bankSummary}>{ins.bank_view.summary}</p>}
               <ClaimList items={ins.bank_view.theses.slice(ins.bank_view.summary ? 1 : 0)} index={index} />
             </>
-          ) : <p className="muted">Материалы банка по этой теме не найдены — вывод сформирован только по данным компании и новости.</p>}
-          {ins.bank_view.conflicts.map((c) => <p key={c} className="conflict">{c}</p>)}
+          ) : <p className={styles.muted}>Материалы банка по этой теме не найдены — вывод сформирован только по данным компании и новости.</p>}
+          {ins.bank_view.conflicts.map((c) => <p key={c} className={styles.conflict}>{c}</p>)}
         </Card>
 
-        <Card className="span-2" title={
-          <button type="button" className="collapse-toggle" aria-expanded={showSources} aria-controls="insight-sources"
+        <Card className={styles.span2} title={
+          <button type="button" className={styles.collapseToggle} aria-expanded={showSources} aria-controls="insight-sources"
             onClick={() => setShowSources((v) => !v)}>
-            6. На чем основан вывод <span className="muted">· {ins.sources.length}</span>
+            6. На чем основан вывод <span className={styles.muted}>· {ins.sources.length}</span>
             <Icon name="chevron" size={18} />
           </button>
         }>
-          {showSources && <ol className="sources" id="insight-sources">
+          {showSources && <ol className={styles.sources} id="insight-sources">
             {ins.sources.map((s, i) => {
               const link = sourceLink(s);
               return (
-                <li key={s.source_id} id={`src-${i + 1}`} className={focused === i + 1 ? "focused" : undefined}>
-                  <span className={`src-kind src-${s.kind}`}>{{ news: "Новость", bank_analytics: "Аналитика банка", client_data: "Данные компании", bank_product: "Продукт банка" }[s.kind]}</span>
+                <li key={s.source_id} id={`src-${i + 1}`} className={focused === i + 1 ? styles.focused : undefined}>
+                  <span className={`${styles.srcKind} ${SOURCE_STYLES[s.kind] ?? ""}`}>{{ news: "Новость", bank_analytics: "Аналитика банка", client_data: "Данные компании", bank_product: "Продукт банка" }[s.kind]}</span>
                   <div>
                     <strong>{s.title}</strong>{s.page ? `, стр. ${s.page}` : ""}{s.date ? ` · ${date(s.date)}` : ""}
-                    {s.excerpt && <p className="muted small">{s.excerpt}</p>}
+                    {s.excerpt && <p className={`${styles.muted} ${common.small}`}>{s.excerpt}</p>}
                   </div>
-                  {link && <a className="btn btn-link btn-sm" href={link} target="_blank" rel="noreferrer"><Icon name="link" size={14} /> Первоисточник</a>}
+                  {link && <a className={`${common.btn} ${common.btnLink} ${common.btnSm}`} href={link} target="_blank" rel="noreferrer"><Icon name="link" size={14} /> Первоисточник</a>}
                 </li>
               );
             })}
           </ol>}
           <h4>Почему новость попала в вашу ленту</h4>
-          <ul className="plain">{ins.relevance.reasons.map((r, i) => <li key={i}>{r.text}</li>)}</ul>
+          <ul className={common.plain}>{ins.relevance.reasons.map((r, i) => <li key={i}>{r.text}</li>)}</ul>
         </Card>
       </div>
 

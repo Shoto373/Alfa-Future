@@ -8,6 +8,8 @@ import { useRead } from "@/lib/notifications";
 import { useSession } from "@/lib/session";
 import type { FeedItem } from "@/lib/types";
 import { Icon, Score } from "./ui";
+import styles from "@/components/Notifications.module.scss";
+import common from "@/styles/common.module.scss";
 
 const REFRESH_MS = 60_000;
 const SHOWN = 10;
@@ -54,39 +56,41 @@ export default function Notifications() {
   const shown = [...unread, ...history].slice(0, SHOWN);
 
   return (
-    <div className="notif" ref={box}>
-      <button className="icon-btn" onClick={() => { setOpen((v) => !v); if (!open) refresh(); }} aria-expanded={open}
+    <div className={styles.notif} ref={box}>
+      <button className={styles.iconBtn} onClick={() => { setOpen((v) => !v); if (!open) refresh(); }} aria-expanded={open}
         aria-label={`Уведомления Альфа.Пульс: ${unread.length ? `непрочитанных ${unread.length}` : "нет новых"}`} title="Уведомления">
         <Icon name="bell" size={20} />
-        {unread.length > 0 && <span className="notif-dot">{unread.length}</span>}
+        {unread.length > 0 && <span className={styles.notifDot}>{unread.length}</span>}
       </button>
       {open && (
-        <div className="notif-pop" role="dialog" aria-label="Важные события">
-          <div className="notif-head">
-            <p className="pop-title">Важно для {session!.companyName}</p>
+        <div className={styles.notifPop} role="dialog" aria-label="Важные события">
+          <div className={styles.notifHead}>
+            <p className={common.popTitle}>Важно для {session!.companyName}</p>
             {unread.length > 0 && (
-              <button type="button" className="notif-readall" onClick={() => mark(unread.map((i) => i.news.news_id))}>Прочитать все</button>
+              <button type="button" className={styles.notifReadall} onClick={() => mark(unread.map((i) => i.news.news_id))}>Прочитать все</button>
             )}
           </div>
-          {items === null && <p className="muted small">Загружаем…</p>}
-          {items !== null && all.length === 0 && <p className="muted small">Сейчас нет событий с высокой релевантностью.</p>}
-          {items !== null && all.length > 0 && unread.length === 0 && <p className="muted small">Новых событий нет. Ниже история.</p>}
-          <ul>
-            {shown.map((i) => {
-              const isRead = read.has(i.news.news_id);
-              return (
-                <li key={i.news.news_id} className={isRead ? "is-read" : "is-unread"}>
-                  <Link href={`/pulse/n/${encodeURIComponent(i.news.news_id)}`}
-                    onClick={() => { mark([i.news.news_id]); setOpen(false); }}>
-                    <Score value={i.relevance.score} />
-                    <span>{i.news.title}</span>
-                    {!isRead && <span className="notif-new" aria-label="Не прочитано" />}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-          <Link href="/pulse" className="btn btn-secondary btn-sm" onClick={() => setOpen(false)}>Вся лента</Link>
+          <div className={styles.notifBody} role="region" aria-label="Список уведомлений" tabIndex={0}>
+            {items === null && <p className={`${common.muted} ${common.small}`}>Загружаем…</p>}
+            {items !== null && all.length === 0 && <p className={`${common.muted} ${common.small}`}>Сейчас нет событий с высокой релевантностью.</p>}
+            {items !== null && all.length > 0 && unread.length === 0 && <p className={`${common.muted} ${common.small}`}>Новых событий нет. Ниже история.</p>}
+            <ul>
+              {shown.map((i) => {
+                const isRead = read.has(i.news.news_id);
+                return (
+                  <li key={i.news.news_id} className={isRead ? styles.isRead : ""}>
+                    <Link href={`/pulse/n/${encodeURIComponent(i.news.news_id)}`}
+                      onClick={() => { mark([i.news.news_id]); setOpen(false); }}>
+                      <Score value={i.relevance.score} />
+                      <span className={styles.notifTitle}>{i.news.title}</span>
+                      {!isRead && <span className={styles.notifNew} aria-label="Не прочитано" />}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+          <Link href="/pulse" className={styles.notifFooter} onClick={() => setOpen(false)}>Вся лента</Link>
         </div>
       )}
     </div>

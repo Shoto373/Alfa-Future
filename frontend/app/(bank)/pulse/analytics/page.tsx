@@ -5,6 +5,8 @@ import { ErrorBox, Icon, Loading } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { date } from "@/lib/format";
 import type { BankDocument } from "@/lib/types";
+import styles from "@/app/(bank)/pulse/analytics/page.module.scss";
+import common from "@/styles/common.module.scss";
 
 function plural(n: number, one: string, few: string, many: string) {
   const m = n % 100, d = n % 10;
@@ -27,20 +29,20 @@ function useDesktop() {
 function Theses({ d }: { d: BankDocument }) {
   return (
     <>
-      <ol className="theses">
+      <ol className={styles.theses}>
         {d.theses.map((t) => (
-          <li key={t.id} className="thesis">
+          <li key={t.id} className={styles.thesis}>
             <p>
-              {t.stance === "forecast" && <span className="thesis-flag">Прогноз</span>}
-              {t.stale && <span className="tag tag-warn">архивный тезис</span>}
+              {t.stance === "forecast" && <span className={styles.thesisFlag}>Прогноз</span>}
+              {t.stale && <span className={`${common.tag} ${common.tagWarn}`}>архивный тезис</span>}
               {t.text}
             </p>
-            <span className="thesis-page">стр. {t.page}</span>
+            <span className={styles.thesisPage}>стр. {t.page}</span>
           </li>
         ))}
       </ol>
       {d.pdf_available && (
-        <a className="btn btn-secondary drawer-pdf" href={api.pdfUrl(d.doc_id)} target="_blank" rel="noreferrer">
+        <a className={`${common.btn} ${common.btnSecondary} ${styles.drawerPdf}`} href={api.pdfUrl(d.doc_id)} target="_blank" rel="noreferrer">
           <Icon name="file" size={16} /> Открыть PDF
         </a>
       )}
@@ -51,21 +53,21 @@ function Theses({ d }: { d: BankDocument }) {
 function DocRow({ d, open, inline, onToggle }: { d: BankDocument; open: boolean; inline: boolean; onToggle: () => void }) {
   const forecasts = d.theses.filter((t) => t.stance === "forecast").length;
   return (
-    <div className={open && inline ? "doc-item is-open" : "doc-item"}>
-      <button className="doc-row" onClick={onToggle} aria-expanded={open}>
-        <span className="doc-date">{date(d.date)}</span>
-        <span className="doc-row-main">
-          <span className="doc-row-title">{d.title}</span>
-          <span className="doc-row-sub">
+    <div className={open && inline ? `${styles.docItem} ${styles.isOpen}` : styles.docItem}>
+      <button className={styles.docRow} onClick={onToggle} aria-expanded={open}>
+        <span className={styles.docDate}>{date(d.date)}</span>
+        <span className={styles.docRowMain}>
+          <span className={styles.docRowTitle}>{d.title}</span>
+          <span className={styles.docRowSub}>
             {d.author}
-            <span className="doc-row-count"> · {d.theses.length} {plural(d.theses.length, "тезис", "тезиса", "тезисов")}</span>
-            {forecasts > 0 && <span className="doc-stat-forecast"> · {forecasts} {plural(forecasts, "прогноз", "прогноза", "прогнозов")}</span>}
+            <span> · {d.theses.length} {plural(d.theses.length, "тезис", "тезиса", "тезисов")}</span>
+            {forecasts > 0 && <span className={styles.docStatForecast}> · {forecasts} {plural(forecasts, "прогноз", "прогноза", "прогнозов")}</span>}
           </span>
         </span>
-        {d.stale && <span className="tag tag-warn">устарел</span>}
+        {d.stale && <span className={`${common.tag} ${common.tagWarn}`}>устарел</span>}
         <Icon name={inline ? "chevron" : "chevronRight"} size={20} />
       </button>
-      {open && inline && <div className="doc-panel"><Theses d={d} /></div>}
+      {open && inline && <div className={styles.docPanel}><Theses d={d} /></div>}
     </div>
   );
 }
@@ -77,15 +79,15 @@ function DocDrawer({ d, onClose }: { d: BankDocument; onClose: () => void }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
   return (
-    <div className="drawer-backdrop" onClick={onClose}>
-      <aside className="drawer" role="dialog" aria-modal="true" aria-label={d.title} onClick={(e) => e.stopPropagation()}>
-        <button className="drawer-close" onClick={onClose} aria-label="Закрыть"><Icon name="close" size={20} /></button>
-        <div className="doc-meta">
-          <span className="doc-date">{date(d.date)}</span>
-          <span className="doc-author">{d.author}</span>
-          {d.stale && <span className="tag tag-warn">устарел</span>}
+    <div className={styles.drawerBackdrop} onClick={onClose}>
+      <aside className={styles.drawer} role="dialog" aria-modal="true" aria-label={d.title} onClick={(e) => e.stopPropagation()}>
+        <button className={styles.drawerClose} onClick={onClose} aria-label="Закрыть"><Icon name="close" size={20} /></button>
+        <div className={styles.docMeta}>
+          <span className={styles.docDate}>{date(d.date)}</span>
+          <span className={styles.docAuthor}>{d.author}</span>
+          {d.stale && <span className={`${common.tag} ${common.tagWarn}`}>устарел</span>}
         </div>
-        <h2 className="doc-title">{d.title}</h2>
+        <h2 className={styles.docTitle}>{d.title}</h2>
         <Theses d={d} />
       </aside>
     </div>
@@ -106,16 +108,16 @@ export default function AnalyticsPage() {
   }, [tick]);
 
   return (
-    <div className="page">
-      <div className="page-head">
+    <div className={common.page}>
+      <div className={common.pageHead}>
         <div>
-          <span className="eyebrow"><Icon name="doc" /> База знаний</span>
+          <span className={common.eyebrow}><Icon name="doc" /> База знаний</span>
           <h1>Аналитика Альфа-Банка</h1>
         </div>
       </div>
       {error && <ErrorBox message={error} onRetry={() => setTick((t) => t + 1)} />}
       {!docs && !error && <Loading text="Загружаем материалы…" />}
-      <div className="docs">
+      <div className={styles.docs}>
         {docs?.map((d) => (
           <DocRow key={d.doc_id} d={d} inline={desktop} open={activeId === d.doc_id}
             onToggle={() => setActiveId((id) => (id === d.doc_id ? null : d.doc_id))} />

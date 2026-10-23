@@ -17,7 +17,7 @@ async function login(page: Page, companies = 1) {
   await page.goto("/");
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("region", { name: "Альфа.Пульс на главной" })).toBeVisible();
-  await expect(page.locator(".home .top-list li").first()).toBeVisible();
+  await expect(page.getByTestId("top-news").getByRole("listitem").first()).toBeVisible();
 }
 
 test("вход, компания, роль только для чтения и персонализированная лента", async ({ page }) => {
@@ -26,19 +26,19 @@ test("вход, компания, роль только для чтения и �
   await login(page, 2);
   await page.goto("/pulse");
   await expect(page.getByRole("heading", { name: /^Лента / })).toBeVisible();
-  await expect(page.locator(".news-card").first()).toBeVisible();
+  await expect(page.getByTestId("news-card").first()).toBeVisible();
   // Роль выдаёт администратор компании: в шапке её нельзя выбрать, она только отображается.
-  await expect(page.locator(".topbar select")).toHaveCount(0);
-  await expect(page.locator(".switcher-label")).toContainText("Финансовый директор");
-  const current = await page.locator(".switcher-name").innerText();
-  await page.locator(".switcher-btn").click();
+  await expect(page.getByRole("banner").locator("select")).toHaveCount(0);
+  await expect(page.getByTestId("company-role")).toContainText("Финансовый директор");
+  const current = await page.getByTestId("company-name").innerText();
+  await page.getByRole("button", { name: "Сменить организацию" }).click();
   const dialog = page.getByRole("dialog", { name: "Выбор организации" });
   await expect(dialog.locator("li button").nth(1)).toBeVisible();
   await dialog.locator("li button").nth(1).click();
-  await expect(page.locator(".switcher-name")).not.toHaveText(current);
-  await expect(page.getByRole("heading", { name: /^Лента / })).toContainText(await page.locator(".switcher-name").innerText());
+  await expect(page.getByTestId("company-name")).not.toHaveText(current);
+  await expect(page.getByRole("heading", { name: /^Лента / })).toContainText(await page.getByTestId("company-name").innerText());
   await expect(page.getByText("Подбираем новости под компанию…")).toBeHidden();
-  await expect(page.locator(".news-card").first()).toBeVisible();
+  await expect(page.getByTestId("news-card").first()).toBeVisible();
   await page.screenshot({ path: "../data/review/acceptance/feed.png", fullPage: false });
   expect(errors).toEqual([]);
 });
@@ -51,11 +51,14 @@ test("разбор, трасса, уточнение, оценка и перво
   await page.getByRole("button", { name: "Как получен вывод" }).click();
   await expect(page.getByRole("heading", { name: "Ход анализа агента" })).toBeVisible();
   // Плашка самопроверки убрана из шапки — результат проверок виден в ходе анализа.
-  await expect(page.locator(".checks li").first()).toBeVisible();
+  await expect(page.getByTestId("quality-checks").getByRole("listitem").first()).toBeVisible();
+  await page.getByRole("button", { name: "Уточнить у аналитика", exact: true }).click();
   await page.getByRole("button", { name: "Покажи в разрезе контрагентов" }).click();
-  await expect(page.locator(".chat-turn").last()).toContainText("Структура платежей", { timeout: 60_000 });
+  await expect(page.getByTestId("chat-turn").last()).toContainText("Структура платежей", { timeout: 60_000 });
+  await page.getByRole("button", { name: "Свернуть", exact: true }).click();
   await page.getByRole("button", { name: "Полезно", exact: true }).first().click();
   await expect(page.getByText("Спасибо за оценку").first()).toBeVisible();
+  await page.getByRole("button", { name: /6\. На чем основан вывод/ }).click();
   const pdf = page.locator('a[href*="/analytics/"][href*="/pdf#page="]').first();
   const href = await pdf.getAttribute("href");
   expect(href).toMatch(/#page=\d+/);
@@ -70,7 +73,7 @@ test("разбор, трасса, уточнение, оценка и перво
   await expect(popup).toHaveURL(href!);
   await popup.close();
   await page.getByRole("button", { name: "Скрыть ход анализа" }).click();
-  await page.locator(".insight-head").scrollIntoViewIfNeeded();
+  await page.getByTestId("insight-header").scrollIntoViewIfNeeded();
   await page.screenshot({ path: "../data/review/acceptance/insight.png", fullPage: false });
 });
 
@@ -108,7 +111,7 @@ test("состояния загрузки и ошибки с повтором", 
   fail = false;
   await page.getByRole("button", { name: /Повторить/ }).click();
   await expect(page.getByText("Подбираем новости под компанию…")).toBeVisible();
-  await expect(page.locator(".news-card").first()).toBeVisible();
+  await expect(page.getByTestId("news-card").first()).toBeVisible();
 });
 
 test("аналитика, новый стиль и мобильный экран", async ({ page }) => {
@@ -121,7 +124,7 @@ test("аналитика, новый стиль и мобильный экран
   await expect(page.getByText("устарел", { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/pulse");
-  await expect(page.locator(".news-card").first()).toBeVisible();
+  await expect(page.getByTestId("news-card").first()).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
   await page.screenshot({ path: "../data/review/acceptance/mobile.png", fullPage: true });
 });
@@ -138,6 +141,6 @@ test("отказ провайдера LLM дает разбор на прави�
   await expect(page.getByRole("heading", { name: "1. Что произошло" })).toBeVisible();
   await expect(page.getByText("Агент на правилах (без LLM)", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Как получен вывод" }).click();
-  await expect(page.locator(".trace")).toContainText("LLM-план не получен");
+  await expect(page.getByTestId("analysis-trace")).toContainText("LLM-план не получен");
   await page.screenshot({ path: "../data/review/acceptance/provider-fallback.png", fullPage: true });
 });

@@ -1,5 +1,7 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { ORIGIN_LABEL } from "@/lib/format";
+import styles from "@/components/ui.module.scss";
+import common from "@/styles/common.module.scss";
 
 const PATHS: Record<string, string> = {
   home: "M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z",
@@ -47,7 +49,7 @@ const PATHS: Record<string, string> = {
 export function Icon({ name, size = 18 }: { name: string; size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
-      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="icon">
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={styles.icon}>
       <path d={PATHS[name] ?? PATHS.doc} />
     </svg>
   );
@@ -56,7 +58,7 @@ export function Icon({ name, size = 18 }: { name: string; size?: number }) {
 /** Знак Альфа-Банка: белая «А» с подчеркиванием на красном. */
 export function AlfaMark({ size = 32 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" className="alfa-mark">
+    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" className={styles.alfaMark}>
       <rect width="32" height="32" rx="9" fill="#EF3124" />
       <path fill="#fff" fillRule="evenodd"
         d="M14 6.5h4.1l5.6 15h-3.9l-1.25-3.6h-5.2L12.1 21.5H8.3zm2 4.2-1.75 4.95h3.5z" />
@@ -65,28 +67,35 @@ export function AlfaMark({ size = 32 }: { size?: number }) {
   );
 }
 
-const TILE_COLORS = ["#c8f560", "#7ad8ff", "#ffcf5c", "#b9a6ff", "#7ff0c4", "#ff9fb6"];
+const TILE_COLORS = [styles.tileLime, styles.tileSky, styles.tileAmber, styles.tileViolet, styles.tileMint, styles.tilePink];
+const ORIGIN_STYLES: Record<string, string | undefined> = {
+  fact: styles.originFact,
+  client_data: styles.originClientData,
+  bank: styles.originBank,
+  ai: styles.originAi,
+  rules: styles.originRules,
+};
 
 /** Плитка-логотип организации, как в переключателе компаний Альфа-Бизнеса. */
 export function CompanyTile({ id, name, size = 40 }: { id: string; name: string; size?: number }) {
   const hash = [...id].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7);
   const letter = (name.replace(/^(ООО|АО|ПАО|Компания)\s*[«"№]?/i, "").trim()[0] ?? "К").toUpperCase();
   return (
-    <span className="company-tile" style={{ width: size, height: size, background: TILE_COLORS[hash % TILE_COLORS.length], fontSize: size * 0.45 }}>
+    <span className={`${styles.companyTile} ${TILE_COLORS[hash % TILE_COLORS.length]}`} style={{ "--tile-size": `${size}px` } as CSSProperties}>
       {/\d/.test(letter) ? "№" : letter}
     </span>
   );
 }
 
 export function OriginTag({ origin }: { origin: string }) {
-  return <span className={`origin origin-${origin}`}>{ORIGIN_LABEL[origin] ?? origin}</span>;
+  return <span className={`${styles.origin} ${ORIGIN_STYLES[origin] ?? ""}`}>{ORIGIN_LABEL[origin] ?? origin}</span>;
 }
 
 export function Score({ value }: { value: number }) {
-  const level = value >= 70 ? "high" : value >= 40 ? "mid" : "low";
+  const level = value >= 70 ? styles.scoreHigh : value >= 40 ? styles.scoreMid : styles.scoreLow;
   return (
-    <span className={`score score-${level}`} title="Релевантность для компании и роли, 0–100">
-      <span className="score-bar"><span style={{ width: `${Math.max(4, Math.min(100, value))}%` }} /></span>
+    <span className={`${styles.score} ${level}`} title="Релевантность для компании и роли, 0–100">
+      <span className={styles.scoreBar}><span style={{ "--score-width": `${Math.max(4, Math.min(100, value))}%` } as CSSProperties} /></span>
       {Math.round(value)}
     </span>
   );
@@ -94,9 +103,9 @@ export function Score({ value }: { value: number }) {
 
 export function Card({ title, children, actions, className = "" }: { title?: ReactNode; children: ReactNode; actions?: ReactNode; className?: string }) {
   return (
-    <section className={`card ${className}`}>
+    <section className={`${common.card} ${className}`}>
       {(title || actions) && (
-        <header className="card-head">
+        <header className={common.cardHead}>
           {title && <h2>{title}</h2>}
           {actions}
         </header>
@@ -108,21 +117,21 @@ export function Card({ title, children, actions, className = "" }: { title?: Rea
 
 export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <div className="error-box" role="alert">
+    <div className={styles.errorBox} role="alert">
       <span>{message}</span>
-      {onRetry && <button className="btn btn-secondary btn-sm" onClick={onRetry}>Повторить</button>}
+      {onRetry && <button className={`${common.btn} ${common.btnSecondary} ${common.btnSm}`} onClick={onRetry}>Повторить</button>}
     </div>
   );
 }
 
 export function Loading({ text }: { text: string }) {
-  return <div className="loading" role="status"><span className="spinner" /> {text}</div>;
+  return <div className={styles.loading} role="status"><span className={styles.spinner} /> {text}</div>;
 }
 
 export function Skeleton({ lines = 3 }: { lines?: number }) {
   return (
-    <div className="skeleton" aria-hidden="true">
-      {Array.from({ length: lines }).map((_, i) => <span key={i} style={{ width: `${90 - i * 12}%` }} />)}
+    <div className={styles.skeleton} aria-hidden="true">
+      {Array.from({ length: lines }).map((_, i) => <span key={i} style={{ "--line-width": `${90 - i * 12}%` } as CSSProperties} />)}
     </div>
   );
 }

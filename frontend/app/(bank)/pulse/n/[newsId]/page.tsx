@@ -9,6 +9,8 @@ import { AbortedError, ApiError, api } from "@/lib/api";
 import { markRead } from "@/lib/notifications";
 import { useSession } from "@/lib/session";
 import type { Insight } from "@/lib/types";
+import common from "@/styles/common.module.scss";
+import styles from "@/app/(bank)/pulse/n/[newsId]/page.module.scss";
 
 const STEPS = ["Определяем контекст компании", "Ищем аналитику Альфа-Банка", "Сопоставляем риски и возможности", "Проверяем выводы и источники"];
 
@@ -82,12 +84,12 @@ export default function InsightPage() {
   }, [loading]);
 
   return (
-    <div className="page">
-      <nav className="crumbs"><Link href="/pulse"><Icon name="chevron" size={14} /> Лента Альфа.Пульс</Link></nav>
+    <div className={common.page}>
+      <nav className={styles.crumbs}><Link href="/pulse"><Icon name="chevron" size={14} /> Лента Альфа.Пульс</Link></nav>
       {loading && !insight && (
-        <div className="card agent-progress" role="status">
+        <div className={`${common.card} ${styles.agentProgress}`} role="status">
           <h2>Агент готовит разбор для {session!.companyName}</h2>
-          <ol>{STEPS.map((s, i) => <li key={s} className={i < step ? "done" : i === step ? "now" : ""}>{s}</li>)}</ol>
+          <ol>{STEPS.map((s, i) => <li key={s} className={i < step ? styles.done : i === step ? styles.now : ""}>{s}</li>)}</ol>
           <Skeleton lines={4} />
         </div>
       )}

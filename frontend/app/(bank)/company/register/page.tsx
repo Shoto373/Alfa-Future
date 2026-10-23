@@ -8,6 +8,10 @@ import { AbortedError, ApiError, api } from "@/lib/api";
 import { errorText } from "@/lib/errors";
 import { ROLE_NAMES, useSession } from "@/lib/session";
 import type { LookupCompany, Role } from "@/lib/types";
+import common from "@/styles/common.module.scss";
+import styles from "@/app/(bank)/company/register/page.module.scss";
+import forms from "@/styles/forms.module.scss";
+import ui from "@/components/ui.module.scss";
 
 const PAGE = 20;
 const LIMIT = 5;
@@ -66,58 +70,58 @@ export default function CompanyRegisterPage() {
   };
 
   return (
-    <div className="page">
-      <div className="page-head">
+    <div className={common.page}>
+      <div className={common.pageHead}>
         <div>
           <h1>Регистрация компании</h1>
-          <p className="muted">Найдите свою организацию и подтвердите свою роль в ней. Первый зарегистрировавший становится администратором компании.</p>
+          <p className={styles.muted}>Найдите свою организацию и подтвердите свою роль в ней. Первый зарегистрировавший становится администратором компании.</p>
         </div>
-        {count > 0 && <Link href="/profile" className="btn btn-secondary btn-sm">К профилю</Link>}
+        {count > 0 && <Link href="/profile" className={`${common.btn} ${common.btnSecondary} ${common.btnSm}`}>К профилю</Link>}
       </div>
 
       {count === 0 && (
-        <div className="card empty-state">
+        <div className={`${common.card} ${styles.emptyState}`}>
           <h2>Нет доступа к компаниям</h2>
-          <p className="muted">Данные Альфа.Пульса показываются только по компаниям, к которым у вас есть доступ. Зарегистрируйте свою компанию ниже или попросите администратора вашей компании пригласить вас по email.</p>
+          <p className={styles.muted}>Данные Альфа.Пульса показываются только по компаниям, к которым у вас есть доступ. Зарегистрируйте свою компанию ниже или попросите администратора вашей компании пригласить вас по email.</p>
         </div>
       )}
 
-      <div className="card">
-        <div className="field">
+      <div className={common.card}>
+        <div className={forms.field}>
           <label htmlFor="company-q">Поиск компании</label>
-          <input id="company-q" type="search" placeholder="Название, ИНН, отрасль или регион" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className={forms.input} id="company-q" type="search" placeholder="Название, ИНН, отрасль или регион" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
-        {claimError && <div className="error-box" role="alert"><span>{claimError}</span></div>}
+        {claimError && <div className={ui.errorBox} role="alert"><span>{claimError}</span></div>}
         {error && <ErrorBox message={error} onRetry={() => setAttempt((a) => a + 1)} />}
         {loading && <Loading text="Ищем компании…" />}
-        {!loading && !error && items.length === 0 && <p className="muted">Ничего не найдено. Измените запрос.</p>}
+        {!loading && !error && items.length === 0 && <p className={styles.muted}>Ничего не найдено. Измените запрос.</p>}
         {!loading && items.length > 0 && (
           <>
-            <ul className="lookup-list">
+            <ul className={styles.lookupList}>
               {items.map((c) => (
-                <li key={c.company_id} className="lookup-item">
+                <li key={c.company_id} className={styles.lookupItem}>
                   <CompanyTile id={c.company_id} name={c.display_name} size={40} />
-                  <div className="lookup-main">
+                  <div className={styles.lookupMain}>
                     <strong>{c.display_name}</strong>
-                    <small className="muted">{c.sector_name} · {c.region ?? "регион н/д"}</small>
+                    <small className={styles.muted}>{c.sector_name} · {c.region ?? "регион н/д"}</small>
                   </div>
-                  <div className="lookup-action">
+                  <div className={styles.lookupAction}>
                     {c.claimed ? (
                       <>
-                        <span className="tag">Уже зарегистрирована</span>
-                        <small className="muted">Попросите администратора компании пригласить вас</small>
+                        <span className={common.tag}>Уже зарегистрирована</span>
+                        <small className={styles.muted}>Попросите администратора компании пригласить вас</small>
                       </>
                     ) : picking === c.company_id ? (
-                      <div className="inline-form">
-                        <label className="sr-only" htmlFor={`role-${c.company_id}`}>Ваша роль в компании</label>
-                        <select id={`role-${c.company_id}`} value={role} onChange={(e) => setRole(e.target.value as Role)}>
+                      <div className={styles.inlineForm}>
+                        <label className={common.srOnly} htmlFor={`role-${c.company_id}`}>Ваша роль в компании</label>
+                        <select className={forms.select} id={`role-${c.company_id}`} value={role} onChange={(e) => setRole(e.target.value as Role)}>
                           {(Object.keys(ROLE_NAMES) as Role[]).map((r) => <option key={r} value={r}>{ROLE_NAMES[r]}</option>)}
                         </select>
-                        <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => claim(c)}>{busy ? "Сохраняем…" : "Подтвердить"}</button>
-                        <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={() => setPicking(null)}>Отмена</button>
+                        <button type="button" className={`${common.btn} ${common.btnPrimary} ${common.btnSm}`} disabled={busy} onClick={() => claim(c)}>{busy ? "Сохраняем…" : "Подтвердить"}</button>
+                        <button type="button" className={`${common.btn} ${common.btnSecondary} ${common.btnSm}`} disabled={busy} onClick={() => setPicking(null)}>Отмена</button>
                       </div>
                     ) : (
-                      <button type="button" className="btn btn-primary btn-sm" disabled={count >= LIMIT}
+                      <button type="button" className={`${common.btn} ${common.btnPrimary} ${common.btnSm}`} disabled={count >= LIMIT}
                         title={count >= LIMIT ? `Можно зарегистрировать не больше ${LIMIT} компаний` : undefined}
                         onClick={() => { setPicking(c.company_id); setClaimError(null); }}>
                         Зарегистрировать компанию
@@ -128,7 +132,7 @@ export default function CompanyRegisterPage() {
               ))}
             </ul>
             {items.length < total && (
-              <button type="button" className="btn btn-secondary" onClick={loadMore} disabled={more}>
+              <button type="button" className={`${common.btn} ${common.btnSecondary}`} onClick={loadMore} disabled={more}>
                 {more ? "Загружаем…" : `Показать ещё (${total - items.length})`}
               </button>
             )}

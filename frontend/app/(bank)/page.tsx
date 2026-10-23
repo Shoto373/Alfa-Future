@@ -8,6 +8,8 @@ import { date, IMPORTANT_SCORE as IMPORTANT } from "@/lib/format";
 import { useFeed } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import type { BankDocument, FeedItem } from "@/lib/types";
+import styles from "@/app/(bank)/page.module.scss";
+import common from "@/styles/common.module.scss";
 
 function plural(n: number, forms: [string, string, string]) {
   const m10 = n % 10, m100 = n % 100;
@@ -32,7 +34,7 @@ function Gauge({ value }: { value: number }) {
   const angle = Math.PI * (1 - Math.max(0, Math.min(100, value)) / 100);
   const x = 100 + 80 * Math.cos(angle), y = 100 - 80 * Math.sin(angle);
   return (
-    <svg viewBox="0 0 200 112" className="gauge" aria-hidden="true">
+    <svg viewBox="0 0 200 112" className={styles.gauge} aria-hidden="true">
       <defs>
         <linearGradient id="g-arc" x1="0" x2="1">
           <stop offset="0" stopColor="#21a038" /><stop offset=".55" stopColor="#ffb800" /><stop offset="1" stopColor="#ef3124" />
@@ -67,51 +69,51 @@ export default function HomePage() {
   }, []);
 
   return (
-    <div className="page home">
-      <section className="hero" aria-label="Альфа.Пульс на главной">
-        <div className="hero-main">
-          <span className="hero-label">Альфа.Пульс</span>
+    <div className={common.page}>
+      <section className={styles.hero} aria-label="Альфа.Пульс на главной">
+        <div className={styles.heroMain}>
+          <span className={styles.heroLabel}>Альфа.Пульс</span>
           {feed.loading ? <Skeleton lines={2} /> : (
             <>
-              <p className="hero-amount">
+              <p className={styles.heroAmount}>
                 {important.length} {plural(important.length, ["событие", "события", "событий"])} для вас
               </p>
             </>
           )}
           {feed.error && <ErrorBox message={feed.error.message} onRetry={feed.reload} />}
-          <div className="hero-topics">
+          <div className={styles.heroTopics}>
             {topics.slice(0, 3).map((t) => <span key={t.topic}>{t.name}</span>)}
-            {topics.length > 3 && <span className="hero-more">+{topics.length - 3}</span>}
+            {topics.length > 3 && <span className={styles.heroMore}>+{topics.length - 3}</span>}
           </div>
           {latest && !bannerClosed && (
-            <div className="hero-banner">
-              <span className="hero-banner-dot"><Icon name="plus" size={14} /></span>
+            <div className={styles.heroBanner}>
+              <span className={styles.heroBannerDot}><Icon name="plus" size={14} /></span>
               <Link href="/pulse/analytics" title={latest.title}>Новая аналитика: <strong>{latest.title}</strong></Link>
-              <span className="badge-green">НОВОЕ</span>
-              <button className="icon-btn" onClick={() => setBannerClosed(true)} aria-label="Скрыть"><Icon name="close" size={16} /></button>
+              <span className={styles.badgeGreen}>НОВОЕ</span>
+              <button className={styles.iconBtn} onClick={() => setBannerClosed(true)} aria-label="Скрыть"><Icon name="close" size={16} /></button>
             </div>
           )}
-          <div className="hero-tiles">
-            <Link href="/pulse" className="hero-tile">
-              <span className="hero-tile-icon"><Icon name="list" /></span>
+          <div className={styles.heroTiles}>
+            <Link href="/pulse" className={styles.heroTile}>
+              <span className={styles.heroTileIcon}><Icon name="list" /></span>
               <span><strong>Открыть ленту</strong><small>{items.length} новостей с причинами отбора</small></span>
             </Link>
-            <Link href="/pulse/analytics" className="hero-tile">
-              <span className="hero-tile-icon"><Icon name="doc" /></span>
+            <Link href="/pulse/analytics" className={styles.heroTile}>
+              <span className={styles.heroTileIcon}><Icon name="doc" /></span>
               <span><strong>Аналитика банка</strong><small>Тезисы ЦМА и Альфа-КИБ</small></span>
             </Link>
           </div>
         </div>
 
-        <div className="hero-list">
+        <div className={styles.heroList}>
           <h2>Пульс по темам</h2>
           {feed.loading && <Skeleton lines={5} />}
           <ul>
             {topics.map((t) => (
               <li key={t.topic}>
-                <Link href={`/pulse?topic=${t.topic}`}>
+                <Link href={{ pathname: "/pulse", query: { topic: t.topic } }}>
                   <span>{t.name}</span>
-                  <span className={`count ${t.important ? "count-red" : ""}`} title={t.important ? "Важных событий" : "Новостей"}>
+                  <span className={`${styles.count} ${t.important ? `${styles.countRed}` : ""}`} title={t.important ? "Важных событий" : "Новостей"}>
                     {t.important || t.total}
                   </span>
                 </Link>
@@ -120,10 +122,10 @@ export default function HomePage() {
           </ul>
         </div>
 
-        <Link href="/pulse" className="hero-promo">
+        <Link href="/pulse" className={styles.heroPromo}>
           <strong>AI-аналитик для руководителя</strong>
           <span>Что произошло, почему это важно именно вам, риски, возможности и позиция Альфа-Банка</span>
-          <svg viewBox="0 0 240 120" className="promo-art" aria-hidden="true">
+          <svg viewBox="0 0 240 120" className={styles.promoArt} aria-hidden="true">
             <defs>
               <linearGradient id="pr-fade" gradientUnits="userSpaceOnUse" x1="0" x2="240" y1="0" y2="0">
                 <stop offset="0" stopColor="#fff" stopOpacity="0" />
@@ -144,26 +146,26 @@ export default function HomePage() {
         </Link>
       </section>
 
-      <div className="tabs" role="tablist" aria-label="Разделы главной">
-        <span className="tab on" role="tab" aria-selected="true">Сводка</span>
-        <Link href="/pulse" className="tab" role="tab" aria-selected="false">Лента Пульса</Link>
-        <Link href="/pulse/analytics" className="tab hide-sm" role="tab" aria-selected="false">Аналитика банка</Link>
+      <div className={styles.tabs} role="tablist" aria-label="Разделы главной">
+        <span className={`${styles.tab} ${styles.on}`} role="tab" aria-selected="true">Сводка</span>
+        <Link href="/pulse" className={styles.tab} role="tab" aria-selected="false">Лента Пульса</Link>
+        <Link href="/pulse/analytics" className={`${styles.tab} ${common.hideSm}`} role="tab" aria-selected="false">Аналитика банка</Link>
       </div>
 
-      <div className="home-grid">
-        <section className="card top-news">
-          <header className="card-head">
-            <h2>Главное для вас {important.length > 0 && <span className="count">{important.length}</span>}</h2>
+      <div className={styles.homeGrid}>
+        <section className={common.card}>
+          <header className={common.cardHead}>
+            <h2>Главное для вас {important.length > 0 && <span className={styles.count}>{important.length}</span>}</h2>
           </header>
           {feed.loading && <Skeleton lines={5} />}
-          {items.length === 0 && !feed.loading && !feed.error && <p className="muted">Пока нет новостей. Добавьте новость в ленте.</p>}
-          <ul className="top-list">
+          {items.length === 0 && !feed.loading && !feed.error && <p className={common.muted}>Пока нет новостей. Добавьте новость в ленте.</p>}
+          <ul className={styles.topList} data-testid="top-news">
             {items.slice(0, 3).map((it) => (
-              <li key={it.news.news_id} className="news-card compact">
+              <li key={it.news.news_id}>
                 <Link href={`/pulse/n/${encodeURIComponent(it.news.news_id)}`}>
-                  <span className="top-title">{it.news.title}</span>
-                  <span className="top-meta">{it.news.source} · {date(it.news.published_at)}</span>
-                  {it.relevance.reasons[0] && <span className="top-reason">{it.relevance.reasons[0].text}</span>}
+                  <span className={styles.topTitle}>{it.news.title}</span>
+                  <span className={styles.topMeta}>{it.news.source} · {date(it.news.published_at)}</span>
+                  {it.relevance.reasons[0] && <span className={styles.topReason}>{it.relevance.reasons[0].text}</span>}
                 </Link>
                 <Score value={it.relevance.score} />
               </li>
@@ -171,22 +173,22 @@ export default function HomePage() {
           </ul>
         </section>
 
-        <section className="card gauge-card">
-          <header className="card-head">
+        <section className={`${common.card} ${styles.gaugeCard}`}>
+          <header className={common.cardHead}>
             <h2>Новостной фон</h2>
           </header>
           <Gauge value={level} />
-          <p className="gauge-value">{feed.loading ? "…" : levelText}</p>
-          <p className="muted small center">Средняя релевантность топ-5 новостей для компании и роли: {Math.round(level)} из 100</p>
+          <p className={styles.gaugeValue}>{feed.loading ? "…" : levelText}</p>
+          <p className={`${common.muted} ${common.small} ${common.center}`}>Средняя релевантность топ-5 новостей для компании и роли: {Math.round(level)} из 100</p>
         </section>
 
-        <Link href="/pulse" className="story">
+        <Link href="/pulse" className={styles.story}>
           <strong>Как читать разбор</strong>
-          <span className="story-lead">У каждого вывода видно, откуда он взят</span>
-          <span className="story-legend">
+          <span className={styles.storyLead}>У каждого вывода видно, откуда он взят</span>
+          <span className={styles.storyLegend}>
             {["fact", "client_data", "bank", "ai"].map((o) => <OriginTag key={o} origin={o} />)}
           </span>
-          <span className="story-cta">Открыть ленту <Icon name="chevronRight" size={16} /></span>
+          <span className={styles.storyCta}>Открыть ленту <Icon name="chevronRight" size={16} /></span>
         </Link>
       </div>
     </div>

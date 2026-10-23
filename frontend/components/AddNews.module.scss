@@ -1,0 +1,58 @@
+.btn {
+  composes: btn from "../styles/common.module.scss";
+}
+
+.addNewsCompact > header {
+  margin-bottom: 8px;
+}
+
+.addNewsCompact h2 {
+  font-size: 15px;
+}
+
+.addNewsCompact .seg {
+  margin-bottom: 8px;
+}
+
+.addNewsCompact .seg button {
+  padding: 5px 12px;
+  font-size: 13px;
+}
+
+.addNewsCompact textarea {
+  padding: 8px 12px;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.addNewsCompact input {
+  font-size: 14px;
+}
+
+.addNewsCompact .btn {
+  padding: 8px 16px;
+  font-size: 14px;
+  border-radius: 12px;
+}
+
+.seg {
+  display: inline-flex;
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 3px;
+  margin-bottom: 10px;
+
+  button {
+    border: 0;
+    background: none;
+    padding: 7px 16px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 500;
+  }
+
+  button.on {
+    background: var(--card);
+    box-shadow: 0 1px 3px rgba(11, 31, 53, .12);
+  }
+}

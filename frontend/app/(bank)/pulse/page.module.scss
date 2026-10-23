@@ -1,0 +1,86 @@
+@use "../../../styles/breakpoints";
+
+.chips {
+  composes: chips from "../../../styles/common.module.scss";
+}
+
+.chip {
+  composes: chip from "../../../styles/common.module.scss";
+}
+
+.on {
+  composes: on from "../../../styles/common.module.scss";
+}
+
+.anchor {
+  composes: anchor from "../../../styles/common.module.scss";
+}
+
+.feedTop {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 20px;
+  align-items: stretch;
+
+  > .anchor {
+    display: flex;
+  }
+
+  > .anchor > section {
+    flex: 1;
+  }
+}
+
+.topicsCard {
+  overflow: hidden;
+
+  h2 {
+    font-size: 15px;
+    margin-bottom: 12px;
+  }
+
+  .chip:not(.on):not(.chipMore) {
+    background: var(--bg);
+  }
+
+  .chip:not(.on):not(.chipMore):hover {
+    background: #e6e8eb;
+  }
+}
+
+.chipCount {
+  color: var(--muted);
+  font-size: 12px;
+  margin-left: 2px;
+}
+
+.chip.on .chipCount {
+  color: rgba(255, 255, 255, .6);
+}
+
+.chipMore {
+  background: transparent;
+  color: var(--blue);
+
+  &:hover:not(:disabled) {
+    background: var(--blue-soft) !important;
+  }
+}
+
+.feed {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+@include breakpoints.down(breakpoints.$mobile) {
+  .feedTop {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .topicsCard .chips[role="toolbar"] {
+    margin: 0 -18px;
+    padding: 0 18px 4px;
+  }
+}

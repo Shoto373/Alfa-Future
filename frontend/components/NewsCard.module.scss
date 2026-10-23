@@ -1,0 +1,88 @@
+.newsCard {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  &.compact {
+    padding: 14px 16px;
+    gap: 6px;
+  }
+
+  h3 {
+    font-size: 17px;
+  }
+
+  h3 a {
+    text-decoration: none;
+  }
+
+  h3 a:hover {
+    color: var(--red-dark);
+  }
+}
+
+.newsMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.kind {
+  background: var(--bg);
+  padding: 1px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.lead {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.reason {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--blue-soft);
+  color: #1f4fae;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reasonSectorModel {
+  background: var(--violet-soft);
+  color: var(--violet);
+}
+
+.reasonPayments {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.reasonUser {
+  background: var(--bg);
+  color: var(--ink-2);
+}
+
+.newsFoot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}

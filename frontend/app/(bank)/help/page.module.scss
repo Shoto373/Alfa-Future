@@ -1,0 +1,33 @@
+.faq details {
+  border-top: 1px solid var(--line);
+  padding: 14px 0;
+}
+
+.faq details:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.faq summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ink);
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.faq summary::after {
+  content: "+";
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.faq details[open] summary::after {
+  content: "−";
+}
+
+.faq details p {
+  margin: 10px 0 0;
+}

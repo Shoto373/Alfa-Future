@@ -1,0 +1,77 @@
+@use "../../../../styles/breakpoints";
+
+.muted {
+  composes: muted from "../../../../styles/common.module.scss";
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-left: 4px solid var(--red);
+}
+
+.lookupList {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+}
+
+.lookupItem {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.lookupMain {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.lookupAction {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  text-align: right;
+  max-width: 340px;
+}
+
+.inlineForm {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+@include breakpoints.down(breakpoints.$mobile) {
+  .lookupItem {
+    flex-wrap: wrap;
+  }
+
+  .lookupAction {
+    align-items: flex-start;
+    text-align: left;
+    max-width: none;
+    flex-basis: 100%;
+  }
+
+  .inlineForm {
+    justify-content: flex-start;
+  }
+}
+
+.lookupAction small {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.lookupAction .muted {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
