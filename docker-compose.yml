@@ -1,0 +1,148 @@
+# Прод: backend + frontend за nginx (HTTPS, pointers-team.online).
+# Локальная разработка — compose.yaml (docker compose -f compose.yaml ...).
+# GitOps: CI публикует этот файл и release.env (теги образов) в ветку `deploy`, а агент на сервере
+# (deploy/gitops/alfa-gitops) сам забирает их и выкатывает. build-секции — для ручной сборки на сервере.
+# Имя проекта закреплено: от него зависят тома app_postgres_data и app_runtime.
+name: app
+
+services:
+  postgres:
+    # PostgreSQL 17 + pgvector (векторное хранилище). Тот же Debian trixie (glibc), что у прежнего
+    # postgres:17.6: существующий том данных и сортировки текста остаются совместимыми.
+    image: pgvector/pgvector:0.8.1-pg17-trixie
+    environment:
+      POSTGRES_DB: alfa
+      POSTGRES_USER: alfa
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alfa -d alfa"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    networks:
+      - app-network
+
+  redis:
+    # Только кэш (лента, служебные значения): без сохранения на диск, вытеснение LRU.
+    image: redis:7.4.6-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    networks:
+      - app-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: ${BACKEND_IMAGE:-alfa-backend:local}
+    container_name: alfa-backend
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      DATABASE_URL: ""
+      PGHOST: postgres
+      PGDATABASE: alfa
+      PGUSER: alfa
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      DATA_DIR: /data/case
+      RUNTIME_DIR: /app/runtime
+      BANK_PDF_DIR: /data/bank_pdf
+      FRONTEND_ORIGIN: ${PUBLIC_ORIGIN:-https://pointers-team.online}
+      ANALYSIS_TIMEOUT_SECONDS: "150"
+      RSS_REFRESH_MINUTES: ${RSS_REFRESH_MINUTES:-60}
+      REDIS_URL: redis://redis:6379/0
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      # На сервере данные кейса лежат вне репозитория: ~/case-data/{csv,pdf}
+      - ${CASE_DATA_DIR:-./case-data/csv}:/data/case:ro
+      - ${BANK_PDF_HOST_DIR:-./case-data/pdf}:/data/bank_pdf:ro
+      - runtime:/app/runtime
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      # При старте прогреваются модель, векторы, новости и ленты — первый запуск дольше.
+      start_period: 300s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    networks:
+      - app-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        # Браузер ходит в API через тот же домен (nginx проксирует /api/ на backend).
+        NEXT_PUBLIC_API_BASE_URL: ${PUBLIC_ORIGIN:-https://pointers-team.online}
+    image: ${FRONTEND_IMAGE:-alfa-frontend:local}
+    container_name: alfa-frontend
+    restart: unless-stopped
+    expose:
+      - "3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    networks:
+      - app-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: alfa-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/certbot:/var/www/certbot:ro
+    depends_on:
+      - backend
+      - frontend
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  runtime:
+  postgres_data:
