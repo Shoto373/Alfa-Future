@@ -1,9 +1,9 @@
 {
-  "commit": "5f11a9b591a24aa8eafbc43c7a431551a5fa2bbb",
-  "short": "5f11a9b",
-  "subject": "Merge pull request #13 from dvaJf/ci/gitops",
-  "author": "Egor",
-  "url": "https://github.com/dvaJf/alfa/commit/5f11a9b591a24aa8eafbc43c7a431551a5fa2bbb",
-  "run_url": "https://github.com/dvaJf/alfa/actions/runs/39972890859",
-  "built_at": "2026-10-23T14:51:14+00:00"
+  "commit": "b65a9bcb6c985821d1f59e348a66615fe8e860c6",
+  "short": "b65a9bc",
+  "subject": "Merge pull request #14 from dvaJf/fix(ui)/refactoring",
+  "author": "андрей голубев",
+  "url": "https://github.com/dvaJf/alfa/commit/b65a9bcb6c985821d1f59e348a66615fe8e860c6",
+  "run_url": "https://github.com/dvaJf/alfa/actions/runs/39973942602",
+  "built_at": "2026-10-23T15:01:34+00:00"
 }
