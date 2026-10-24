@@ -79,13 +79,15 @@ def analyze() -> tuple[dict[str, set[str]], list[str]]:
         source = path.read_text(encoding="utf-8")
         lines = source.splitlines()
         tree = ast.parse(source)
-        top = {id(n) for n in tree.body}
+        # Импорт в функции — нарушение; на уровне модуля (в том числе внутри if/try) — нет.
+        in_function = {id(n) for f in ast.walk(tree) if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))
+                       for n in ast.walk(f) if isinstance(n, (ast.Import, ast.ImportFrom))}
         if module not in PACKAGES and layer_of(module) is None:
             problems.append(f"{module}: модуль не отнесен ни к одному слою (LAYERS в tools/check_imports.py)")
         for node in ast.walk(tree):
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 targets = _targets(module, path, node, known)
-                if id(node) not in top and "# optional" not in lines[node.lineno - 1]:
+                if id(node) in in_function and "# optional" not in lines[node.lineno - 1]:
                     names = ", ".join(a.name for a in node.names)
                     problems.append(f"{module}:{node.lineno}: импорт внутри функции ({names}) — перенесите в начало модуля")
                 graph[module].update(targets)

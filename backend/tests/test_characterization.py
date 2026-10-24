@@ -12,7 +12,7 @@ import asyncio
 import json
 import os
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -20,6 +20,7 @@ import pytest
 from app import llm, ranking
 from app.agent import orchestrator, prompts, review
 from app.companies import profiles
+from app.knowledge import kb
 from app.news import store
 
 SNAPSHOTS = Path(__file__).with_name("fixtures") / "characterization"
@@ -29,6 +30,20 @@ NEWS = ("seed-rate-hold", "seed-inflation-week", "seed-fuel-prices", "seed-autol
 VOLATILE = {"insight_id", "request_id", "created_at", "duration_ms", "total_duration_ms", "ts"}
 TIMING = re.compile(r"\d+(?:[.,]\d+)? мс")
 FIXED_NOW = datetime(2026, 9, 20, 12, 0, tzinfo=timezone.utc)
+
+
+class FrozenDate(date):
+    """Свежесть тезисов банка (kb._recency) считается от «сегодня» — в снимках день зафиксирован."""
+
+    @classmethod
+    def today(cls):
+        return cls(FIXED_NOW.year, FIXED_NOW.month, FIXED_NOW.day)
+
+
+def freeze_clock(monkeypatch) -> None:
+    """Снимок не должен зависеть от даты запуска: лента и порядок тезисов банка стареют со временем."""
+    monkeypatch.setattr(ranking, "NOW_OVERRIDE", FIXED_NOW)
+    monkeypatch.setattr(kb, "date", FrozenDate)
 
 
 def normalize(value):
@@ -91,7 +106,7 @@ def check_snapshot(name: str, actual: list[dict]) -> None:
 @pytest.mark.parametrize("sector", SECTORS)
 def test_llm_insights_match_snapshot(raw_client, monkeypatch, sector, role):
     """Путь с моделью на записанных ответах: план → черновик модели → исправление → смысловая проверка или откат."""
-    monkeypatch.setattr(ranking, "NOW_OVERRIDE", FIXED_NOW)
+    freeze_clock(monkeypatch)
     monkeypatch.setattr(llm, "available", lambda: True)
     monkeypatch.setattr(llm, "chat_json", recorded_model)
     company = company_of(sector)
@@ -105,7 +120,7 @@ def test_llm_insights_match_snapshot(raw_client, monkeypatch, sector, role):
 @pytest.mark.parametrize("role", ROLES)
 @pytest.mark.parametrize("sector", SECTORS)
 def test_insights_match_snapshot(raw_client, monkeypatch, sector, role):
-    monkeypatch.setattr(ranking, "NOW_OVERRIDE", FIXED_NOW)
+    freeze_clock(monkeypatch)
     company = company_of(sector)
     actual = []
     for news_id in NEWS:

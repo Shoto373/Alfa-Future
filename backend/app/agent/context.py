@@ -121,7 +121,8 @@ def llm_repair(draft: dict, ctx: dict, source_ids: set[str]) -> dict | None:
             dropped += 1
             continue
         text, origin, ids = item.get("text"), item.get("origin"), item.get("source_ids")
-        if isinstance(text, str) and text.strip() and origin in ("fact", "client_data", "bank", "ai")                 and isinstance(ids, list) and all(isinstance(x, str) for x in ids):
+        if isinstance(text, str) and text.strip() and origin in ("fact", "client_data", "bank", "ai") \
+                and isinstance(ids, list) and all(isinstance(x, str) for x in ids):
             feats = [f for f in item.get("features") or [] if isinstance(f, str)]
             items[idx] = {"text": text.strip()[:400], "origin": origin, "source_ids": ids[:5], "features": feats[:6]}
             fixed += 1
