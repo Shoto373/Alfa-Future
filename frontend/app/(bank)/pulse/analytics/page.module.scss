@@ -135,7 +135,7 @@
 
 .docPanel {
   margin: 0 22px;
-  padding: 22px 0 8px;
+  padding: 22px 0;  // снизу как сверху — кнопка «Открыть PDF» не прилипает к краю
   border-top: 1px solid var(--line);
   display: flex;
   flex-direction: column;

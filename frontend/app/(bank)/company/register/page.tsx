@@ -74,7 +74,8 @@ export default function CompanyRegisterPage() {
       <div className={common.pageHead}>
         <div>
           <h1>Регистрация компании</h1>
-          <p className={styles.muted}>Найдите свою организацию и подтвердите свою роль в ней. Первый зарегистрировавший становится администратором компании.</p>
+          <p className={styles.muted}>Найдите свою организацию и подтвердите свою роль в ней. Первый зарегистрировавший становится администратором компании.
+            В пилоте доступны компании разных отраслей с самыми полными данными — на них разборы точнее всего.</p>
         </div>
         {count > 0 && <Link href="/profile" className={`${common.btn} ${common.btnSecondary} ${common.btnSm}`}>К профилю</Link>}
       </div>

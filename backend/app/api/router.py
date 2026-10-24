@@ -10,6 +10,7 @@ from app import cache, config, embeddings, llm, llm_usage, pipeline, quality, st
 from app.agent import audit, orchestrator, qa
 from app.auth import store as auth_store
 from app.auth.deps import check_origin, current_user, member_of, require_operator
+from app.companies import ai_settings as company_ai
 from app.companies import extra as company_extra
 from app.companies import profiles
 from app.companies.sectors import SECTOR_NAMES
@@ -18,7 +19,7 @@ from app.knowledge import kb
 from app.news import parser, store
 from app.news.taxonomy import TOPICS
 from app.ranking import ROLES, company_feed
-from app.schemas import (Answer, CompanyExtraRequest, ErrorResponse, FeedbackRequest, Insight, InsightRequest,
+from app.schemas import (AISettingsRequest, Answer, CompanyExtraRequest, ErrorResponse, FeedbackRequest, Insight, InsightRequest,
                          LLMSwitchRequest,
                          NewsCreateRequest, QuestionRequest)
 
@@ -113,9 +114,10 @@ def meta() -> dict:
 @router.get("/companies/lookup", responses=ERRORS)
 def lookup_companies(q: str = Query("", max_length=100), limit: int = Query(20, ge=1, le=50),
                            offset: int = Query(0, ge=0), _user: dict = Depends(current_user)) -> dict:
-    """Поиск компании для привязки: только публичные поля, без финансовых данных."""
+    """Поиск компании для привязки: только публичные поля, без финансовых данных.
+    Доступны компании витрины (SHOWCASE_PER_SECTOR): по каждой отрасли — с самыми полными данными."""
     try:
-        total, items = profiles.list_companies(q, None, limit, offset)
+        total, items = profiles.list_companies(q, None, limit, offset, profiles.showcase_ids(config.showcase_per_sector()))
     except profiles.ProfilesError:
         raise ApiError("DATA_UNAVAILABLE")
     claimed = auth_store.claimed_ids()
@@ -152,6 +154,22 @@ def _extra_view(company_id: str) -> dict:
             "files": [{k: f[k] for k in ("file_id", "name", "kind", "size", "chars", "uploaded_at")} | {"preview": f["text"][:200]}
                       for f in value.get("files", [])],
             "fields": [{"key": k, "label": v["label"]} for k, v in company_extra.SHARES.items()]}
+
+
+@router.get("/companies/{company_id}/ai-settings", responses=ERRORS)
+def get_ai_settings(company_id: str, user: dict = Depends(current_user)) -> dict:
+    """Готовить ли AI-разборы важных новостей заранее и с какой важности (видят все участники)."""
+    member_of(user, company_id)
+    _company(company_id)
+    return {"company_id": company_id, **company_ai.get(company_id)}
+
+
+@router.put("/companies/{company_id}/ai-settings", responses=ERRORS)
+def put_ai_settings(company_id: str, payload: AISettingsRequest, user: dict = Depends(current_user)) -> dict:
+    """Меняет администратор компании; конвейер учитывает настройку со следующего цикла."""
+    _admin_of(user, company_id)
+    storage.log_event("ai_settings_saved", company_id=company_id)
+    return {"company_id": company_id, **company_ai.save(company_id, payload.enabled, payload.threshold, user["user_id"])}
 
 
 @router.get("/companies/{company_id}/extra", responses=ERRORS)

@@ -93,3 +93,66 @@
   outline: 2px solid var(--blue);
   outline-offset: 2px;
 }
+
+// Раскрытый список выбора — карточка в стиле приложения (Chrome/Edge 135+, customizable select);
+// остальные браузеры показывают системный список.
+@supports (appearance: base-select) {
+  .select,
+  .select::picker(select) {
+    appearance: base-select;
+  }
+
+  .select {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--ink);
+    transition: border-color .15s;
+
+    &:hover {
+      border-color: #c9ced6;
+    }
+
+    &::picker-icon {
+      color: var(--muted);
+      transition: rotate .2s;
+    }
+
+    &:open::picker-icon {
+      rotate: 180deg;
+    }
+  }
+
+  .select::picker(select) {
+    margin-top: 6px;
+    padding: 6px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--card);
+    box-shadow: var(--shadow-pop);
+  }
+
+  .select option {
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 14px;
+    color: var(--ink);
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--bg);
+      outline: none;
+    }
+
+    &:checked {
+      background: var(--blue-soft);
+      font-weight: 600;
+    }
+
+    &::checkmark {
+      color: var(--blue);
+    }
+  }
+}

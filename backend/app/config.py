@@ -162,6 +162,9 @@ def pipeline_start_delay() -> float:
     return float(_env("PIPELINE_START_DELAY_SECONDS", "15"))
 
 
+REASONING_DEFAULTS = {"compose": "off"}
+
+
 def llm_settings() -> dict:
     return {
         "base_url": os.environ.get("LLM_BASE_URL", "").rstrip("/"),
@@ -182,11 +185,26 @@ def llm_settings() -> dict:
         # GLM без ограничения тратит весь лимит на рассуждения; DeepSeek с ним, наоборот, рассуждает дольше.
         "reasoning_effort": os.environ.get("LLM_REASONING_EFFORT", "low"),
         "reasoning_effort_models": [m.strip() for m in _env("LLM_REASONING_EFFORT_MODELS", "glm").split(",") if m.strip()],
+        # Рассуждения по ролям: off — выключены, low|medium|high — бюджет рассуждений, пусто — как решит модель.
+        # Черновик — без рассуждений: на эталоне DeepSeek с ними 70 с и 0,64 ₽ на разбор и иногда упирается в лимит
+        # ответа, без них — 29 с и 0,27 ₽ при тех же темах и аналитике банка и чаще проходит проверки с первого раза.
+        "reasoning": {kind: _env(f"LLM_REASONING_{kind.upper()}", REASONING_DEFAULTS.get(kind, "")).lower()
+                      for kind in ("plan", "compose", "review", "qa", "classify")},
         "daily_token_limit": int(_env("LLM_DAILY_TOKEN_LIMIT", "400000")),
         "timeout": float(_env("LLM_TIMEOUT_SECONDS", "75")),
         # Провайдер кейса возвращает usage.cost в рублях; бюджет — 500 ₽/день на команду.
         "daily_cost_limit": float(_env("LLM_DAILY_COST_LIMIT", "450")),
     }
+
+
+def showcase_per_sector() -> int:
+    """Сколько компаний каждой отрасли доступно для регистрации (самые полные данные); 0 — все компании."""
+    return int(_env("SHOWCASE_PER_SECTOR", "2"))
+
+
+def llm_extra_queries() -> bool:
+    """Уточняющие запросы модели-исследователя к аналитике банка перед черновиком (≈4 с ожидания)."""
+    return _env("LLM_EXTRA_QUERIES", "1") != "0"
 
 
 def llm_company_share() -> float:

@@ -6,6 +6,7 @@ import HomeHero, { type TopicRow } from "@/components/home/HomeHero";
 import { EmptyState, Icon, OriginTag, Score, Skeleton } from "@/components/ui";
 import { date, IMPORTANT_SCORE as IMPORTANT } from "@/lib/format";
 import { useFeedWithTopics } from "@/lib/hooks";
+import { useRead } from "@/lib/notifications";
 import { useSession } from "@/lib/session";
 import type { FeedItem, TopicCount } from "@/lib/types";
 import styles from "@/app/(bank)/page.module.scss";
@@ -27,9 +28,11 @@ export default function HomePage() {
   const total = page.data?.total ?? 0;
   const important = items.filter((i) => i.relevance.score >= IMPORTANT);
   const topics = topicCounts(page.data?.topic_counts ?? [], items).slice(0, 7);
-  const top5 = items.slice(0, 5);
+  // Новостной фон — по еще не прочитанному: прочитанное уже учтено, и после разбора важных новостей фон спокойнее.
+  const { read } = useRead(session!.user.user_id, session!.companyId);
+  const top5 = items.filter((i) => !read.has(i.news.news_id)).slice(0, 5);
   const level = top5.length ? top5.reduce((a, i) => a + i.relevance.score, 0) / top5.length : 0;
-  const levelText = level >= 70 ? "Требует внимания" : level >= 45 ? "Умеренный фон" : "Спокойный фон";
+  const levelText = !top5.length && items.length ? "Все прочитано" : level >= 70 ? "Требует внимания" : level >= 45 ? "Умеренный фон" : "Спокойный фон";
 
   return (
     <div className={common.page}>
@@ -68,7 +71,8 @@ export default function HomePage() {
           </header>
           <Gauge value={level} />
           <p className={styles.gaugeValue}>{feed.loading ? "…" : levelText}</p>
-          <p className={`${common.muted} ${common.small} ${common.center}`}>Средняя релевантность топ-5 новостей для компании и роли: {Math.round(level)} из 100</p>
+          <p className={`${common.muted} ${common.small} ${common.center}`}>{top5.length ? <>Средняя релевантность {top5.length} самых важных непрочитанных новостей: {Math.round(level)} из 100</>
+            : "Непрочитанных новостей нет"}</p>
         </section>
 
         <Link href="/pulse" className={styles.story}>

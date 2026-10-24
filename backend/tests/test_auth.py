@@ -92,7 +92,8 @@ def test_endpoints_require_session(raw_client, company):
     assert raw_client.get(f"{API}/meta").status_code == 200
 
 
-def test_lookup_hides_financials_and_shows_claimed(client, company, new_client):
+def test_lookup_hides_financials_and_shows_claimed(client, company, new_client, monkeypatch):
+    monkeypatch.setenv("SHOWCASE_PER_SECTOR", "0")  # все компании: проверяются поля и отметка «занята»
     body = client.get(f"{API}/companies/lookup", params={"q": company["company_id"]}).json()
     item = body["items"][0]
     assert set(item) == {"company_id", "display_name", "sector_name", "region", "claimed"} and item["claimed"] is True
@@ -438,3 +439,15 @@ def test_client_ip_trusts_proxy_header_only_from_internal_address():
     assert client_ip(req("172.18.0.5", "203.0.113.7")) == "203.0.113.7", "nginx во внутренней сети"
     assert client_ip(req("93.184.216.34", "1.2.3.4")) == "93.184.216.34", "внешний клиент не подделает адрес"
     assert client_ip(req("127.0.0.1")) == "127.0.0.1"
+
+
+def test_lookup_offers_showcase_companies(client, monkeypatch):
+    """Для регистрации — по 1–2 компании каждой отрасли с самыми полными данными, а не весь набор."""
+    from app.companies import profiles
+
+    monkeypatch.setenv("SHOWCASE_PER_SECTOR", "1")
+    shown = client.get(f"{API}/companies/lookup", params={"limit": 50}).json()
+    sectors = [profiles.get(i["company_id"])["sector"] for i in shown["items"]]
+    assert shown["total"] >= 1 and len(sectors) == len(set(sectors)), "не больше одной компании на отрасль"
+    monkeypatch.setenv("SHOWCASE_PER_SECTOR", "0")
+    assert client.get(f"{API}/companies/lookup", params={"limit": 1}).json()["total"] > shown["total"]

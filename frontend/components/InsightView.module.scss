@@ -397,6 +397,10 @@
   .insightHead {
     padding: 20px;
 
+    .upgradeNote {
+      margin-top: 20px;
+    }
+
     h1 {
       font-size: 22px;
     }
@@ -437,7 +441,8 @@
 }
 
 .upgradeNote {
-  margin: 12px 0 0;
+  // Над плашкой — столько же, сколько под ней (внутренний отступ шапки).
+  margin: 28px 0 0;
   padding: 10px 12px 10px 38px;
   position: relative;
   border-radius: var(--radius-sm);
@@ -650,5 +655,14 @@
       grid-template-columns: minmax(0, 1fr);
       gap: 2px;
     }
+  }
+}
+
+// Повтор той же метки подряд: место держится, метка не видна (на узком экране метка над текстом — убирается совсем).
+.repeatOrigin {
+  visibility: hidden;
+
+  @include breakpoints.down(breakpoints.$mobile) {
+    display: none;
   }
 }

@@ -95,3 +95,17 @@
 .more {
   align-self: center;
 }
+
+// Темы: скрытая копия всех чипов той же ширины — по ней считается, сколько тем влезает в 3 строки.
+.chipsBox {
+  position: relative;
+}
+
+.chipsMeasure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  visibility: hidden;
+  pointer-events: none;
+}

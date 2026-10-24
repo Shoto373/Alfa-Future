@@ -120,6 +120,14 @@ export interface QualityOverview {
 export type ExtraShareKey = "floating_debt_share" | "fx_revenue_share" | "import_share";
 
 /** Сведения, которые компания сообщила о себе: доли в процентах и свободный текст. */
+/** Готовить AI-разборы важных новостей заранее: включено и с какой оценки важности. */
+export interface AISettings {
+  company_id: string;
+  enabled: boolean;
+  threshold: number;
+  updated_at: string | null;
+}
+
 export interface CompanyExtra {
   company_id: string;
   shares: Partial<Record<ExtraShareKey, number>>;

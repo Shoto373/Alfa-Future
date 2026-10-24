@@ -101,8 +101,37 @@ def meta() -> dict:
         "profiles": len(d["companies"]), "synthetic": bool(d.get("synthetic", True))}
 
 
-def list_companies(query: str = "", sector: str | None = None, limit: int = 50, offset: int = 0) -> tuple[int, list[dict]]:
+SHOWCASE_MIN_FEATURES = 6  # столько признаков чувствительности нужно, чтобы разборы были содержательными
+
+
+def showcase_ids(per_sector: int) -> frozenset[str] | None:
+    """Компании для регистрации: в каждой отрасли — до per_sector с самыми полными данными (признаки
+    чувствительности, платежи, продукты банка). На них разборы самые содержательные. Правило, а не список:
+    реальные идентификаторы в коде не фиксируются. per_sector=0 — все компании (None)."""
+    if per_sector <= 0:
+        return None
+    return _showcase(signature(), per_sector)
+
+
+@lru_cache(maxsize=4)
+def _showcase(_signature: str, per_sector: int) -> frozenset[str]:
+    by_sector: dict[str, list[tuple]] = {}
+    for c in _load()["companies"]:
+        if c["sector"] in (None, "unknown"):
+            continue
+        features = {e["feature"] for e in _base_exposures(c["company_id"])}  # по данным кейса, без сведений компании
+        payments = c["suppliers"]["counterparties"] + c["customers"]["counterparties"]
+        if len(features) < SHOWCASE_MIN_FEATURES or not payments or not any(c["products"].values()):
+            continue
+        by_sector.setdefault(c["sector"], []).append((len(features), payments, c.get("revenue") or 0, c["company_id"]))
+    return frozenset(row[3] for rows in by_sector.values() for row in sorted(rows, reverse=True)[:per_sector])
+
+
+def list_companies(query: str = "", sector: str | None = None, limit: int = 50, offset: int = 0,
+                   only: frozenset[str] | None = None) -> tuple[int, list[dict]]:
     items = _load()["companies"]
+    if only is not None:
+        items = [c for c in items if c["company_id"] in only]
     q = query.strip().lower()
     if q:
         items = [c for c in items if q in c["company_id"].lower() or q in c["display_name"].lower()

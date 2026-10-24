@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 
+from app.companies import ai_settings as company_ai
 from app import llm, pipeline, storage
 from app.news import parser
 
@@ -72,9 +73,24 @@ def test_cycle_upgrades_top_cards_with_llm_within_limits(client, company, monkey
                               request=httpx.Request("POST", url))
 
     monkeypatch.setattr(llm.httpx, "post", fake_post)
+    company_ai.save(company["company_id"], True, 40, "test")  # заранее — все новости ленты от 40
     calls = _spy(monkeypatch)
     report = asyncio.run(pipeline.cycle())
     assert calls.count(True) == 1, "не больше PIPELINE_LLM_PER_CYCLE AI-разборов за цикл"
+    assert report["rules_built"] >= 1
+
+
+def test_cycle_respects_company_ai_setting(client, company, monkeypatch):
+    """Компания выключила «AI-разборы заранее» — конвейер строит только быстрые разборы."""
+    monkeypatch.setenv("PIPELINE_RULES_TOP", "3")
+    monkeypatch.setenv("LLM_BASE_URL", "http://llm.test/v1")
+    monkeypatch.setenv("LLM_API_KEY", "k")
+    monkeypatch.setattr(llm, "_down_until", 0.0)
+    monkeypatch.setattr(llm.httpx, "post", lambda *a, **k: (_ for _ in ()).throw(AssertionError("LLM called")))
+    company_ai.save(company["company_id"], False, 40, "test")
+    calls = _spy(monkeypatch)
+    report = asyncio.run(pipeline.cycle())
+    assert calls.count(True) == 0 and report["llm_built"] == 0
     assert report["rules_built"] >= 1
 
 
@@ -85,6 +101,7 @@ def test_cycle_leaves_llm_budget_to_users(client, company, monkeypatch):
     monkeypatch.setenv("LLM_API_KEY", "k")
     monkeypatch.setattr(llm, "_down_until", 0.0)
     monkeypatch.setattr(llm.httpx, "post", lambda *a, **k: (_ for _ in ()).throw(AssertionError("LLM called")))
+    company_ai.save(company["company_id"], True, 40, "test")
     report = asyncio.run(pipeline.cycle())
     assert report["llm_built"] == 0 and report["llm_skipped"]
     assert report["rules_built"] >= 1

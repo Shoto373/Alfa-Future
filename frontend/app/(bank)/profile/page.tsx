@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback } from "react";
 import { CompanyTile, EmptyState } from "@/components/ui";
+import AISettingsCard from "@/components/AISettingsCard";
 import OperatorPanel from "@/components/OperatorPanel";
 import CompanyMenu from "@/components/profile/CompanyMenu";
 import Members from "@/components/profile/Members";
@@ -31,6 +32,8 @@ export default function ProfilePage() {
           <p className={common.muted}>{user.email}</p>
         </div>
       </div>
+
+      {session!.companyId && <AISettingsCard companyId={session!.companyId} companyName={session!.companyName} isAdmin={session!.isAdmin} />}
 
       {user.is_operator && <OperatorPanel />}
 
