@@ -136,6 +136,7 @@ export const api = {
     return request<{ doc_id: string; status: string; created: boolean }>(`/api/v1/admin/kb/documents?${q}`,
       { method: "POST", headers: { "Content-Type": "application/pdf" }, body: file }, { timeoutMs: 120_000 });
   },
+  kbUploadDemo: () => request<{ doc_id: string; status: string; created: boolean }>("/api/v1/admin/kb/demo", { method: "POST" }),
   kbDocument: (docId: string, signal?: AbortSignal) => request<KbDocument>(`/api/v1/admin/kb/documents/${cid(docId)}`, {}, { signal }),
   kbDocumentMeta: (docId: string, meta: { title?: string; date?: string }) =>
     request<KbDocument>(`/api/v1/admin/kb/documents/${cid(docId)}`, json("PATCH", meta)),

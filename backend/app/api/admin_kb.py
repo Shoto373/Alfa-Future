@@ -46,6 +46,15 @@ async def kb_upload(request: Request, name: str = Query(..., min_length=1, max_l
     return result
 
 
+@router.post("/demo", responses=ERRORS, status_code=202)
+def kb_upload_demo(user: dict = Depends(require_operator)) -> dict:
+    """Синтетический демо-обзор ЦМА (не материал банка): показать конвейер без своего PDF и без трат на модель."""
+    result = ingest.upload(ingest.DEMO_NAME, ingest.demo_pdf(), {}, user["email"])
+    if result["created"]:
+        jobs.enqueue("kb_ingest", {"doc_id": result["doc_id"]}, dedupe_key=f"kb_ingest:{result['doc_id']}", max_attempts=3)
+    return result
+
+
 @router.get("/documents/{doc_id}", responses=ERRORS)
 def kb_document(doc_id: str) -> dict:
     found = ingest.document(doc_id)

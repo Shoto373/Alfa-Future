@@ -1,15 +1,13 @@
 """Конвейер аналитики банка (SPR3-03): загрузка PDF → распознавание (записанные ответы) → черновики
 с проверками → правка → публикация аналитиком. Неподтвержденный черновик не попадает в базу знаний."""
 
-from pathlib import Path
-
 import pytest
 
 from app import config, llm, llm_usage
 from app.knowledge import ingest, kb
 from app.worker import runner
 
-DEMO = Path(ingest.__file__).parent / "recorded" / "demo_review.pdf"
+DEMO = ingest.demo_pdf()  # синтетический демо-обзор (в репозитории — только картинки страниц)
 API = "/api/v1/admin/kb"
 
 
@@ -20,7 +18,7 @@ def operator(client, monkeypatch):
 
 
 def _upload(c) -> str:
-    r = c.post(f"{API}/documents", params={"name": "Демо_обзор.pdf"}, content=DEMO.read_bytes())
+    r = c.post(f"{API}/documents", params={"name": "Демо_обзор.pdf"}, content=DEMO)
     assert r.status_code == 202, r.text
     return r.json()["doc_id"]
 
@@ -35,12 +33,12 @@ def _by_metric(doc: dict, start: str) -> dict:
 
 def test_only_bank_staff_can_use_the_review_screen(client):
     assert client.get(f"{API}/documents").status_code == 403
-    assert client.post(f"{API}/documents", params={"name": "x.pdf"}, content=DEMO.read_bytes()).status_code == 403
+    assert client.post(f"{API}/documents", params={"name": "x.pdf"}, content=DEMO).status_code == 403
 
 
 def test_upload_recognize_and_automatic_checks(operator):
     doc_id = _upload(operator)
-    again = operator.post(f"{API}/documents", params={"name": "копия.pdf"}, content=DEMO.read_bytes()).json()
+    again = operator.post(f"{API}/documents", params={"name": "копия.pdf"}, content=DEMO).json()
     assert again == {"doc_id": doc_id, "status": "queued", "created": False}, "тот же файл не распознается повторно"
     _process()
     doc = operator.get(f"{API}/documents/{doc_id}").json()
@@ -125,3 +123,13 @@ def test_recognition_has_its_own_budget_line(monkeypatch, tmp_path, client):
     assert seen == {"line": config.KB_INGEST_LINE, "kind": "vision", "images": 1}
     assert answer["model"].startswith("qwen/qwen3-vl") and config.llm_line_share(config.KB_INGEST_LINE) == 0.25
     assert llm.is_allowed(config.llm_settings()["models"]["vision"]), "модель распознавания — из списка кейса"
+
+
+def test_demo_review_button_uploads_synthetic_pdf(operator):
+    r = operator.post(f"{API}/demo")
+    assert r.status_code == 202 and r.json()["created"] is True
+    again = operator.post(f"{API}/demo").json()
+    assert again["created"] is False and again["doc_id"] == r.json()["doc_id"], "повторное нажатие не плодит документы"
+    _process()
+    doc = operator.get(f"{API}/documents/{r.json()['doc_id']}").json()
+    assert doc["filename"] == ingest.DEMO_NAME and len(doc["drafts"]) == 11, "записанные ответы найдены по sha256"

@@ -4,6 +4,7 @@
 2. process (воркер): каждая страница (изображение скана или текстовый слой) уходит визуальной модели
    (LLM_MODEL_VISION, Qwen3-VL из списка кейса) с промптом выписки тезисов в JSON-схеме. Для демо-PDF
    и тестов — записанные ответы (KB_RECORDED_DIR/<sha256>.json): модель не вызывается, бюджет не тратится.
+   Сам демо-PDF в репозитории не хранится (PDF там запрещены) — его собирает demo_pdf() из картинок страниц.
    Стоимость распознавания — отдельная статья бюджета LLM (config.KB_INGEST_LINE, своя доля дня).
 3. Черновики — в thesis_drafts со статусом draft и автоматическими проверками: числа тезиса есть в тексте
    страницы, цитата найдена на странице, дата документа распознана, тема из таксономии, нет дубля в базе.
@@ -18,6 +19,7 @@ import logging
 import re
 import uuid
 from datetime import date, datetime, timezone
+from pathlib import Path
 
 from pypdf import PdfReader
 from sqlalchemy import func, select
@@ -122,6 +124,59 @@ def pdf(doc_id: str) -> tuple[str, bytes] | None:
     with database.session() as db:
         found = db.get(KbUpload, doc_id)
         return (found.filename, found.content) if found else None
+
+
+# --- демо-обзор ---
+
+DEMO_DIR = Path(__file__).parent / "recorded"
+DEMO_NAME = "ДЕМО_обзор_ЦМА_синтетический.pdf"
+PAGE_SIZE = (595.2, 841.92)  # A4 в пунктах
+
+
+def _jpeg_size(data: bytes) -> tuple[int, int]:
+    """Ширина и высота JPEG по маркеру SOF (без декодирования изображения)."""
+    i = 2
+    while i < len(data):
+        marker, length = data[i + 1], int.from_bytes(data[i + 2:i + 4], "big")
+        if marker in (0xC0, 0xC1, 0xC2):
+            return int.from_bytes(data[i + 7:i + 9], "big"), int.from_bytes(data[i + 5:i + 7], "big")
+        i += 2 + length
+    raise IngestError("Не удалось прочитать размер изображения")
+
+
+def demo_pdf() -> bytes:
+    """Синтетический «скан» обзора ЦМА для показа конвейера (не материал банка).
+
+    В репозитории — только изображения страниц: PDF в нем запрещены (проверка CI). PDF собирается из них
+    без даты создания, поэтому побайтно одинаков, и записанные ответы модели находятся по его sha256."""
+    pages = [(DEMO_DIR / f"demo_page_{n}.jpg").read_bytes() for n in (1, 2, 3)]
+    nl = chr(10)
+    objects: list[bytes] = []
+    kids = []
+    for n, img in enumerate(pages):
+        width, height = _jpeg_size(img)
+        page, content, image = 3 + 3 * n, 4 + 3 * n, 5 + 3 * n
+        kids.append(f"{page} 0 R")
+        draw = f"q {PAGE_SIZE[0]} 0 0 {PAGE_SIZE[1]} 0 0 cm /Im0 Do Q".encode()
+        objects += [
+            (f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {PAGE_SIZE[0]} {PAGE_SIZE[1]}] "
+             f"/Resources << /XObject << /Im0 {image} 0 R >> >> /Contents {content} 0 R >>").encode(),
+            f"<< /Length {len(draw)} >>{nl}stream{nl}".encode() + draw + f"{nl}endstream".encode(),
+            (f"<< /Type /XObject /Subtype /Image /Width {width} /Height {height} /ColorSpace /DeviceRGB "
+             f"/BitsPerComponent 8 /Filter /DCTDecode /Length {len(img)} >>{nl}stream{nl}").encode()
+            + img + f"{nl}endstream".encode(),
+        ]
+    objects = [b"<< /Type /Catalog /Pages 2 0 R >>",
+               f"<< /Type /Pages /Kids [{' '.join(kids)}] /Count {len(pages)} >>".encode()] + objects
+    out, offsets = bytearray(f"%PDF-1.4{nl}".encode()), []
+    for number, body in enumerate(objects, 1):
+        offsets.append(len(out))
+        out += f"{number} 0 obj{nl}".encode() + body + f"{nl}endobj{nl}".encode()
+    xref = len(out)
+    out += f"xref{nl}0 {len(objects) + 1}{nl}0000000000 65535 f {nl}".encode()
+    out += "".join(f"{o:010d} 00000 n {nl}" for o in offsets).encode()
+    out += f"trailer{nl}<< /Size {len(objects) + 1} /Root 1 0 R >>{nl}startxref{nl}{xref}{nl}%%EOF{nl}".encode()
+    return bytes(out)
 
 
 # --- распознавание ---

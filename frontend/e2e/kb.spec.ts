@@ -1,11 +1,9 @@
-import path from "node:path";
 import { test, expect } from "@playwright/test";
 
 // SPR3-03, приемка: новый PDF → черновики с проверками → правка аналитиком → публикация.
 // Демо-PDF синтетический, ответы модели распознавания записаны (бюджет не тратится).
 
 const api = process.env.E2E_API_URL || "http://localhost:8000";
-const PDF = path.resolve(__dirname, "../../backend/app/knowledge/recorded/demo_review.pdf");
 
 test("аналитик: загрузка PDF, проверка черновиков и публикация тезиса", async ({ page }) => {
   // Демо-сотрудник банка из локального compose.yaml (DEMO_ACCOUNTS=1, OPERATOR_EMAILS).
@@ -14,8 +12,8 @@ test("аналитик: загрузка PDF, проверка черновик�
 
   await page.goto("/admin/kb");
   await expect(page.getByRole("heading", { name: "Тезисы аналитики" })).toBeVisible();
-  await page.locator('input[type="file"]').setInputFiles(PDF);
-  await page.getByRole("button", { name: "Загрузить" }).click();
+  // Демо-обзор собирает сервер (PDF в репозитории не хранятся); свой PDF загружается тем же путем.
+  await page.getByRole("button", { name: "Загрузить демо-обзор" }).click();
   await expect(page.getByRole("status")).toContainText(/поставлен на распознавание|уже загружен/);
 
   // Распознавание — задача воркера; список обновляется сам.

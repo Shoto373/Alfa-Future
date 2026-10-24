@@ -77,6 +77,17 @@ function Upload({ onDone }: { onDone: () => void }) {
   const [docDate, setDocDate] = useState("");
   const [state, setState] = useState<{ busy: boolean; message?: string; error?: string }>({ busy: false });
 
+  const demo = async () => {
+    setState({ busy: true });
+    try {
+      const r = await api.kbUploadDemo();
+      setState({ busy: false, message: r.created ? "Демо-обзор поставлен на распознавание" : "Демо-обзор уже загружен" });
+      onDone();
+    } catch (e) {
+      setState({ busy: false, error: errorText(e) });
+    }
+  };
+
   const submit = async () => {
     const f = file.current?.files?.[0];
     if (!f) return setState({ busy: false, error: "Выберите PDF" });
@@ -107,6 +118,8 @@ function Upload({ onDone }: { onDone: () => void }) {
           {state.busy ? "Загружаем…" : "Загрузить"}
         </button>
       </div>
+      <p className={common.muted}>Нет своего PDF? <button type="button" className={`${common.btn} ${common.btnLink}`} disabled={state.busy}
+        onClick={demo}>Загрузить демо-обзор</button> — синтетический «скан» с записанными ответами модели: бюджет не тратится.</p>
       {state.message && <p className={common.muted} role="status">{state.message}</p>}
       {state.error && <ErrorState error={state.error} />}
     </Card>

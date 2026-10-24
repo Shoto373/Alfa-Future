@@ -37,8 +37,6 @@ TZ_AND_PROMPTS_ALFA_PULSE.md
 *.csv
 !/data/synthetic/*.csv
 *.pdf
-# Синтетический демо-обзор (не материал банка) для конвейера распознавания аналитики.
-!/backend/app/knowledge/recorded/demo_review.pdf
 
 # Node / Next.js
 node_modules/
