@@ -22,11 +22,13 @@ from app.news import entities, parser, store
 from app.news.sources import registry as sources
 from app.news.taxonomy import TOPICS
 from app.ranking import ROLES, company_feed
+from app.scenarios import calc as scenarios
+from app.scenarios.corridor import corridor
 from app.worker import queue as jobs
 from app.worker import runner as worker
 from app.schemas import (AISettingsRequest, Answer, CompanyExtraRequest, ErrorResponse, FeedbackRequest, Insight, InsightRequest,
                          LLMSwitchRequest,
-                         NewsCreateRequest, QuestionRequest)
+                         NewsCreateRequest, QuestionRequest, ScenarioRequest)
 
 logger = logging.getLogger("app.api")
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(check_origin)])
@@ -263,6 +265,20 @@ def company_counterparties(company_id: str, user: dict = Depends(current_user)) 
             "second_level": [n for n in found if n["level"] == 2][:graph.TOP],
             "possible_links": [n for n in found if n["relation"] == "person"][:graph.TOP],
             "events": monitoring.alerts(company_id)}
+
+
+@router.post("/scenarios", responses=ERRORS)
+def run_scenario(payload: ScenarioRequest, user: dict = Depends(current_user)) -> dict:
+    """Чувствительность компании (SPR4-02): каждое число — с формулой и происхождением входов. Модель не участвует.
+    Не хватает данных — ok=false и список недостающих входов (а не ноль)."""
+    member_of(user, payload.company_id)
+    overrides = payload.model_dump(exclude={"company_id", "scenario", "shock"})
+    try:
+        result = scenarios.simulate(payload.company_id, payload.scenario, payload.shock, **overrides).as_dict()
+        return {"ok": True, "result": result, "refusal": None, "corridor": corridor(payload.scenario)}
+    except scenarios.ScenarioError as exc:
+        return {"ok": False, "result": None, "refusal": {"message": str(exc), "missing": exc.missing},
+                "corridor": corridor(payload.scenario)}
 
 
 @router.get("/feed", responses=ERRORS)

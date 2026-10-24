@@ -111,6 +111,18 @@ class DomainConfigPreviewRequest(DomainConfigTexts):
     role: Literal["owner", "ceo", "cfo", "accountant", "treasurer", "clevel"] = "cfo"
 
 
+class ScenarioRequest(Strict):
+    """Сценарий «что если» (SPR4-02): шок и необязательные собственные значения компании вместо оценок."""
+    company_id: str = Field(..., min_length=1, max_length=64)
+    scenario: Literal["key_rate", "fx", "commodity"]
+    shock: float = Field(..., ge=-60, le=60)  # п.п. для ставки, % для курса (плюс — рубль слабее) и цены сырья
+    debt: float | None = Field(None, ge=0, le=1e14)
+    floating_share: float | None = Field(None, ge=0, le=1)
+    fx_revenue_share: float | None = Field(None, ge=0, le=1)
+    import_share: float | None = Field(None, ge=0, le=1)
+    exposure: float | None = Field(None, ge=0, le=1)
+
+
 class KbApproveRequest(Strict):
     supersedes: str | None = Field(None, max_length=64)
 

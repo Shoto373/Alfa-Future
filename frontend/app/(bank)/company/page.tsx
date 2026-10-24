@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import CompanyExtraCard from "@/components/CompanyExtraCard";
 import CompanyPanel from "@/components/CompanyPanel";
+import ScenarioPanel from "@/components/ScenarioPanel";
 import { Card, ErrorState, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useCompany } from "@/lib/hooks";
@@ -32,6 +33,7 @@ export default function CompanyPage() {
       {company.data && (
         <CompanyPanel title="Профиль компании" profile={company.data.profile} exposures={company.data.exposures} sectors={sectors} />
       )}
+      <ScenarioPanel companyId={session!.companyId} />
       <CompanyExtraCard companyId={session!.companyId} isAdmin={session!.isAdmin} onSaved={company.reload} />
     </div>
   );

@@ -192,6 +192,15 @@
   },
   "risks": [
    {
+    "features": [],
+    "origin": "client_data",
+    "source_ids": [
+     "news:seed-rate-hold",
+     "client:scenario:key_rate"
+    ],
+    "text": "Чувствительность к ставке: каждый +1 п.п. — это ≈ 265 млн ₽ процентных расходов в год (оценка: долг ≈ 53002 млн ₽ × 50% с плавающей ставкой × +1 п.п.)"
+   },
+   {
     "features": [
      "products.loans",
      "customers.by_sector",
@@ -283,6 +292,16 @@
    {
     "date": null,
     "doc_id": null,
+    "excerpt": "При изменении ставки на +1 п.п. процентные расходы вырастут ≈ на 265 млн ₽ в год: долг ≈ 53002 млн ₽ × 50% с плавающей ставкой × +1 п.п.",
+    "kind": "client_data",
+    "page": null,
+    "source_id": "client:scenario:key_rate",
+    "title": "Расчет чувствительности по формуле (оценка)",
+    "url": null
+   },
+   {
+    "date": null,
+    "doc_id": null,
     "excerpt": "Сравнить сроки и доходность размещения свободной ликвидности с учетом текущих условий и потребности в средствах.",
     "kind": "bank_product",
     "page": null,
@@ -314,7 +333,7 @@
   "title": "Банк России сохранил ключевую ставку на уровне 14% годовых",
   "trace": [
    {
-    "detail": "Обязательные шаги: get_company_profile → get_exposures → get_counterparties → search_bank_analytics → check_forecast_conflicts → get_story_history → get_story_coverage → get_bank_products",
+    "detail": "Обязательные шаги: get_company_profile → get_exposures → get_counterparties → search_bank_analytics → check_forecast_conflicts → get_story_history → get_story_coverage → get_bank_products → scenario_simulate",
     "name": "plan",
     "output": {
      "steps": [
@@ -349,6 +368,10 @@
       {
        "tool": "get_bank_products",
        "why": "релевантные решения банка"
+      },
+      {
+       "tool": "scenario_simulate",
+       "why": "во что обходится компании каждый процентный пункт ставки"
       }
      ]
     },
@@ -465,12 +488,25 @@
     "step": 9
    },
    {
+    "detail": "во что обходится компании каждый процентный пункт ставки: При изменении ставки на +1 п.п. процентные расходы вырастут ≈ на 265 млн ₽ в год (долг ≈ 53002 млн ₽ × 50% с плавающей ставкой × +1 п.п.)",
+    "name": "scenario_simulate",
+    "output": {
+     "args": {
+      "scenario": "key_rate",
+      "shock": 1.0
+     }
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 10
+   },
+   {
     "detail": "Быстрый разбор: эффект = чувствительность компании × направление события",
     "name": "rules_compose",
     "output": null,
     "stage": "compose",
     "status": "ok",
-    "step": 10
+    "step": 11
    },
    {
     "detail": "Все проверки пройдены",
@@ -522,15 +558,15 @@
     },
     "stage": "check",
     "status": "ok",
-    "step": 11
+    "step": 12
    },
    {
-    "detail": "Быстрый разбор готов, источников: 10",
+    "detail": "Быстрый разбор готов, источников: 11",
     "name": "finalize",
     "output": {},
     "stage": "finalize",
     "status": "ok",
-    "step": 12
+    "step": 13
    }
   ],
   "what_happened": {

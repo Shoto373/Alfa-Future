@@ -12,7 +12,7 @@ test("отрасли и темы: проверка ловит переверну
   const yaml = page.getByLabel("YAML: sectors");
   const text = await yaml.inputValue();
   // Строительство: рост ставки — риск (-1). Переворачиваем знак и проверяем.
-  const flipped = text.replace(/(construction:[\s\S]*?key_rate:\s*\n\s*sign: )-1/, "$11");
+  const flipped = text.replace(/(construction:[\s\S]*?key_rate: \{sign: )-1/, "$11");
   expect(flipped).not.toBe(text);
   await yaml.fill(flipped);
   await page.getByRole("button", { name: "Проверить" }).click();

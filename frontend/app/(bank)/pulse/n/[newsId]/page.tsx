@@ -7,15 +7,26 @@ import AccessDenied from "@/components/AccessDenied";
 import FeedRail from "@/components/FeedRail";
 import InsightView from "@/components/InsightView";
 import Mentions from "@/components/insight/Mentions";
+import ScenarioPanel from "@/components/ScenarioPanel";
 import { ErrorState, Icon, Skeleton } from "@/components/ui";
 import { AbortedError, ApiError, api } from "@/lib/api";
 import { markRead } from "@/lib/notifications";
 import { useSession } from "@/lib/session";
-import type { Insight, Role } from "@/lib/types";
+import type { Insight, Role, ScenarioKind } from "@/lib/types";
 import common from "@/styles/common.module.scss";
 import styles from "@/app/(bank)/pulse/n/[newsId]/page.module.scss";
 
 const STEPS = ["Определяем контекст компании", "Ищем аналитику Альфа-Банка", "Сопоставляем риски и возможности", "Проверяем выводы и источники"];
+
+// Тема разбора → сценарий «что если» под ним (SPR4-02): ставка, курс или цена сырья.
+function scenarioFor(ins: Insight): ScenarioKind | null {
+  const topics = new Set(ins.relevance.reasons.map((r) => r.topic).filter(Boolean));
+  const text = `${ins.title} ${ins.headline}`.toLowerCase();
+  if (topics.has("key_rate") || /ставк/.test(text)) return "key_rate";
+  if (topics.has("fx") || /курс|рубл|доллар|юан/.test(text)) return "fx";
+  if (topics.has("fuel_oil") || topics.has("metals_steel") || topics.has("gold")) return "commodity";
+  return null;
+}
 
 export default function InsightPage() {
   const { newsId } = useParams<{ newsId: string }>();
@@ -156,6 +167,7 @@ function NewsInsight({ newsId }: { newsId: string }) {
         upgrading={upgrading} upgradeFailed={upgradeFailed} upgradeStage={stage}
         perspective={perspective} ownRole={session!.role} onPerspective={setPerspective}
         mentions={<Mentions newsId={decodeURIComponent(newsId)} companyId={companyId} />} />}
+      {insight && scenarioFor(insight) && <ScenarioPanel companyId={companyId} initial={scenarioFor(insight)!} />}
     </div>
   );
 }

@@ -14,6 +14,7 @@ from app.agent import audit
 from app.companies import graph, profiles
 from app.companies.sectors import SECTOR_NAMES
 from app.knowledge import kb
+from app.scenarios import calc as scenarios
 from app.news import entities, store
 
 # Обычный разбор — 7 обязательных вызовов + до 3 поисков, предложенных моделью, + 1 расширенный поиск
@@ -175,6 +176,14 @@ def _counterparty_chain(company_id: str, news_id: str) -> list[dict]:
     return [{k: c[k] for k in ("company_id", "name", "relation", "level", "weight", "text")} for c in found]
 
 
+def _scenario(company_id: str, scenario: str, shock: float) -> dict:
+    """scenario.simulate (SPR4-02): чувствительность по формуле; нет данных — отказ с причиной (не ноль)."""
+    try:
+        return {"ok": True, **scenarios.simulate(company_id, scenario, shock).as_dict()}
+    except scenarios.ScenarioError as exc:
+        return {"ok": False, "scenario": scenario, "message": str(exc), "missing": exc.missing}
+
+
 REGISTRY: dict[str, Tool] = {t.name: t for t in [
     Tool("get_company_profile", "Профиль компании: отрасль, масштаб, продукты банка, ВЭД, группа, качество данных",
          {"company_id": str}, _profile),
@@ -190,6 +199,8 @@ REGISTRY: dict[str, Tool] = {t.name: t for t in [
          {"topics": list}, _forecasts),
     Tool("lookup_counterparty_chain", "Контрагенты компании (до второго уровня), названные в новости, с цепочкой связи",
          {"company_id": str, "news_id": str}, _counterparty_chain),
+    Tool("scenario_simulate", "Сценарий «что если»: изменение ставки, курса или цены сырья → рубли в год по формуле",
+         {"company_id": str, "scenario": str, "shock": float}, _scenario),
 ]}
 
 

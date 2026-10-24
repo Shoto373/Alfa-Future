@@ -47,11 +47,24 @@ class Sensitivity(Strict):
     why: str = Field(..., min_length=5)
 
 
+class Commodity(Strict):
+    """Сырье, от цены которого зависит выручка отрасли (сценарий «цена сырья → маржа», SPR4-02)."""
+    label: str = Field(..., min_length=2)
+    revenue_exposure: float = Field(..., gt=0, le=1)  # доля выручки, которая меняется вместе с ценой сырья
+
+
+class FinanceModel(Strict):
+    """Отраслевые параметры сценариев (оценки, а не данные компании): долг/выручка и сырье."""
+    debt_to_revenue: float | None = Field(None, ge=0, le=5)
+    commodity: Commodity | None = None
+
+
 class Sector(Strict):
     name: str = Field(..., min_length=2)
     okved: list[str] = Field(default_factory=list)
     stems: list[str] = Field(default_factory=list)
     sensitivity: dict[str, Sensitivity] = Field(default_factory=dict)
+    finance: FinanceModel = Field(default_factory=FinanceModel)
 
 
 class ControlCase(Strict):

@@ -38,6 +38,7 @@ TOPIC_EFFECT: dict[str, tuple[str, str]] = {}
 TOPIC_EFFECT_DOWN: dict[str, tuple[str, str]] = {}
 ACTIONS: dict[str, dict[str, list[tuple[str, str | None]]]] = {}
 QUESTIONS: dict[str, str] = {}
+SECTOR_FINANCE: dict[str, dict] = {}
 
 _state = {"signature": "", "version": None}
 _on_change: list[Callable[[], None]] = []
@@ -94,6 +95,7 @@ def build(docs: dict) -> dict:
         "ACTIONS": {**{k: _actions(t["actions"]) for k, t in topics.items() if t.get("actions")},
                     "default": _actions(docs["topics"]["default_actions"])},
         "QUESTIONS": {k: t["question"] for k, t in topics.items() if t.get("question")},
+        "SECTOR_FINANCE": {k: dict(s["finance"]) for k, s in sectors.items()},
         "FOREIGN_CURRENCY": list(lang["foreign_currency"]), "ACTORS": list(lang["actors"]),
         "FOREIGN_CENTRAL_BANKS": list(lang["foreign_central_banks"]), "CENTRAL_BANK_WORDS": list(lang["central_bank_words"]),
         "BANK_OF_RUSSIA": list(lang["bank_of_russia"]),

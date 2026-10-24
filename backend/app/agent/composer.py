@@ -9,6 +9,7 @@
 from app.companies.profiles import _bn, group, group_mix
 from app.companies.sectors import SECTOR_NAMES
 from app.domain_config.runtime import ACTIONS, DIRECTION_VALUE, QUESTIONS, TOPIC_EFFECT, TOPIC_EFFECT_DOWN
+from app.scenarios.calc import mln as scenario_mln
 from app.news.taxonomy import TOPICS
 from app.ranking import ROLES
 
@@ -225,6 +226,17 @@ def _chain_claims(ctx: dict, news_src: str) -> list[dict]:
     return out
 
 
+def _scenario_claims(ctx: dict, news_src: str) -> list[dict]:
+    """Чувствительность по формуле (SPR4-02): «каждый +1 п.п. ставки — ≈ X млн ₽ в год» со ссылкой на расчет."""
+    out = []
+    for sc in ctx.get("scenarios") or []:
+        if sc["scenario"] == "key_rate" and sc["effect_rub"] < 0:
+            out.append(_claim(f"Чувствительность к ставке: каждый {sc['shock']:+g} п.п. — это ≈ {scenario_mln(sc['effect_rub'])} "
+                              f"процентных расходов в год (оценка: {sc['formula']})", "client_data",
+                              [news_src, f"client:scenario:{sc['scenario']}"]))
+    return out
+
+
 def compose(ctx: dict) -> dict:
     """Разбор на правилах: эффект = чувствительность компании × направление события, с источником у каждого вывода."""
     news, cls, company = ctx["news"], ctx["news"]["classification"], ctx["company"]
@@ -260,7 +272,7 @@ def compose(ctx: dict) -> dict:
         "what_happened": {"summary": news["lead"], "facts": facts, "actors": cls["actors"], "dates": cls["dates"],
                           "assumptions": _assumptions(ctx, cls, news_src)},
         "why_important": (_chain_claims(ctx, news_src) + _why_important(exposures, company, event, news_src))[:WHY_MAX],
-        "risks": _dedupe(risks)[:4],
+        "risks": (_scenario_claims(ctx, news_src) + _dedupe(risks))[:4],
         "opportunities": _dedupe(opps)[:4],
         "actions": _actions(topics, role, company, theses, news_src),
         "questions": [QUESTIONS[t] for t in topics if t in QUESTIONS][:3],

@@ -374,3 +374,24 @@ export interface CounterpartiesView {
   possible_links: Counterparty[];
   events: CounterpartyEvent[];
 }
+
+// Сценарии «что если» (SPR4-02).
+export type ScenarioKind = "key_rate" | "fx" | "commodity";
+
+export interface ScenarioResult {
+  scenario: ScenarioKind;
+  shock: number;
+  shock_unit: string;
+  effect_rub: number;
+  text: string;
+  formula: string;
+  inputs: { name: string; label: string; value: number; unit: string; origin: string; source: string }[];
+  caveats: string[];
+}
+
+export interface ScenarioResponse {
+  ok: boolean;
+  result: ScenarioResult | null;
+  refusal: { message: string; missing: string[] } | null;
+  corridor: { label: string; horizon: string; unit: string; low: number; high: number; sources: string[] } | null;
+}

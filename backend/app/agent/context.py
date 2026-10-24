@@ -43,7 +43,8 @@ def rules_plan(news: dict, company: dict) -> list[dict]:
         {"tool": "get_bank_products", "args": {"company_id": cid, "topics": topics}, "why": "релевантные решения банка"},
     ] + ([{"tool": "lookup_counterparty_chain", "args": {"company_id": cid, "news_id": news["news_id"]},
            "why": "в новости названы организации — проверить, не контрагенты ли это (до второго уровня)"}]
-         if any(e["company_id"] for e in entities.of_news(news)) else [])
+         if any(e["company_id"] for e in entities.of_news(news)) else [])         + ([{"tool": "scenario_simulate", "args": {"company_id": cid, "scenario": "key_rate", "shock": 1.0},
+             "why": "во что обходится компании каждый процентный пункт ставки"}] if "key_rate" in topics[:2] else [])
 
 
 def llm_queries(news: dict, company: dict, role: str) -> tuple[list[dict], dict]:
@@ -87,6 +88,10 @@ def sources(ctx: dict) -> list[dict]:
     out.append({"source_id": "client:payments", "kind": "client_data", "title": "Платежи компании (данные кейса)",
                 "excerpt": f"Поставщиков: {c['suppliers']['counterparties']}, покупателей: {c['customers']['counterparties']}",
                 "url": None, "doc_id": None, "page": None, "date": None})
+    for sc in ctx.get("scenarios") or []:
+        out.append({"source_id": f"client:scenario:{sc['scenario']}", "kind": "client_data",
+                    "title": "Расчет чувствительности по формуле (оценка)", "excerpt": f"{sc['text']}: {sc['formula']}"[:300],
+                    "url": None, "doc_id": None, "page": None, "date": None})
     if ctx.get("counterparty_chains"):
         out.append({"source_id": "client:graph", "kind": "client_data", "title": "Граф платежей компании (данные кейса)",
                     "excerpt": "; ".join(ch["text"] for ch in ctx["counterparty_chains"])[:300], "url": None, "doc_id": None,

@@ -69,6 +69,8 @@ def source_texts(ctx: dict) -> dict[str, str]:
     result.update({f"product:{p['id']}": p["text"] for p in ctx.get("products", [])})
     if c.get("extra"):
         result["client:extra"] = company_extra.text(c["extra"])
+    for sc in ctx.get("scenarios") or []:
+        result[f"client:scenario:{sc['scenario']}"] = f"{sc['text']} {sc['formula']}"
     if ctx.get("counterparty_chains"):
         result["client:graph"] = " ".join(ch["text"] for ch in ctx["counterparty_chains"])
     return result
