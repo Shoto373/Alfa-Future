@@ -27,7 +27,9 @@ test("лента-заглушка Интерфакса: упоминание к�
 
   await page.goto("/pulse");
   const card = page.getByTestId("news-card").filter({ hasText: "Сытый Колос-Урал" }).first();
-  await expect(card.getByText("Упоминается ваш поставщик")).toBeVisible();
+  // Значок в шапке карточки (точный текст); причина отбора ниже добавляет название поставщика.
+  await expect(card.getByText("Упоминается ваш поставщик", { exact: true })).toBeVisible();
+  await expect(card.getByText("Упоминается ваш поставщик — ООО «Сытый Колос-Урал»")).toBeVisible();
   await card.getByRole("link").first().click();
   const mentions = page.getByRole("region", { name: "Организации в новости" });
   await expect(mentions).toBeVisible({ timeout: 30_000 });
