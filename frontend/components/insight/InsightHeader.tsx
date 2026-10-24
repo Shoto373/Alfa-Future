@@ -33,9 +33,15 @@ function NewsLink({ ins }: { ins: Insight }) {
 
 /** Шапка разбора: релевантность, метка эффекта, вывод, действия и пояснение о режиме (быстрый разбор или модель).
  *  perspective — «другой разрез»: тот же разбор глазами другой роли компании. */
-export default function InsightHeader({ ins, onRefresh, refreshing, upgrading, upgradeFailed, showTrace, onToggleTrace,
+// Этап агента в потоке разбора (SPR4-03) — для подсказки «что сейчас делает модель».
+const STAGE_TEXT: Record<string, string> = {
+  plan: "планирует поиск", tool: "собирает данные компании и аналитику банка", compose: "пишет выводы",
+  check: "проверяет выводы и источники", adapt: "исправляет непроверенное", finalize: "оформляет карточку",
+};
+
+export default function InsightHeader({ ins, onRefresh, refreshing, upgrading, upgradeFailed, upgradeStage, showTrace, onToggleTrace,
   perspective, ownRole, onPerspective }: {
-  ins: Insight; onRefresh: () => void; refreshing: boolean; upgrading: boolean; upgradeFailed: boolean;
+  ins: Insight; onRefresh: () => void; refreshing: boolean; upgrading: boolean; upgradeFailed: boolean; upgradeStage?: string;
   showTrace: boolean; onToggleTrace: () => void;
   perspective?: Role; ownRole?: Role; onPerspective?: (role: Role) => void;
 }) {
@@ -62,6 +68,7 @@ export default function InsightHeader({ ins, onRefresh, refreshing, upgrading, u
       {upgrading && (
         <p className={styles.upgradeNote} role="status">
           Это быстрый разбор: данные компании и аналитика банка уже учтены. AI-модель дополняет выводы — карточка обновится сама.
+          {upgradeStage && STAGE_TEXT[upgradeStage] && <> Сейчас модель {STAGE_TEXT[upgradeStage]}.</>}
         </p>
       )}
       {!upgrading && upgradeFailed && ins.mode === "rules" && (

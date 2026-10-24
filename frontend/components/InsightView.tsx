@@ -26,9 +26,9 @@ const scrollToSource = (n: number) =>
   // Блок раскрывается в этом же кадре — прокрутка после отрисовки.
   requestAnimationFrame(() => document.getElementById(`src-${n}`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
 
-export default function InsightView({ insight: ins, onRefresh, refreshing, upgrading = false, upgradeFailed = false,
+export default function InsightView({ insight: ins, onRefresh, refreshing, upgrading = false, upgradeFailed = false, upgradeStage,
   perspective, ownRole, onPerspective, mentions }: {
-  insight: Insight; onRefresh: () => void; refreshing: boolean; upgrading?: boolean; upgradeFailed?: boolean;
+  insight: Insight; onRefresh: () => void; refreshing: boolean; upgrading?: boolean; upgradeFailed?: boolean; upgradeStage?: string;
   perspective?: Role; ownRole?: Role; onPerspective?: (role: Role) => void; mentions?: ReactNode;
 }) {
   const { groups, index } = groupSources(ins);
@@ -55,6 +55,7 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
     <OpenSource.Provider value={openSource}>
     <div className={styles.insight}>
       <InsightHeader ins={ins} onRefresh={onRefresh} refreshing={refreshing} upgrading={upgrading} upgradeFailed={upgradeFailed}
+        upgradeStage={upgradeStage}
         showTrace={showTrace} onToggleTrace={() => setShowTrace((v) => !v)}
         perspective={perspective} ownRole={ownRole} onPerspective={onPerspective} />
 

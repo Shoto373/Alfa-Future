@@ -26,6 +26,7 @@ ROUTES = {
     ("DELETE", "/api/v1/companies/{company_id}/extra/files/{file_id}"): (None, {403}),
     ("GET", "/api/v1/feed"): (None, {403}),
     ("GET", "/api/v1/news/{news_id}"): (None, {403}),
+    ("GET", "/api/v1/insights/stream"): (None, {403}),
     ("POST", "/api/v1/insights"): ({"fast": True}, {403}),
     ("GET", "/api/v1/insights/{insight_id}"): (None, {403, 404}),
     ("POST", "/api/v1/insights/{insight_id}/questions"): ({"question": "Что с долгом?"}, {403, 404}),
@@ -85,6 +86,8 @@ def test_outsider_cannot_touch_other_company(victim, route):
     url = path.format(company_id=victim["company_id"], insight_id=victim["insight_id"],
                       member_id=victim["member_id"], file_id="file-0", news_id=victim["news_id"])
     params = {"company_id": victim["company_id"]} if path in ("/api/v1/feed", "/api/v1/news/{news_id}") else None
+    if path == "/api/v1/insights/stream":
+        params = {"company_id": victim["company_id"], "news_id": victim["news_id"]}
     client = victim["outsider"]
     if body == "file":
         r = client.post(url, params={"name": "data.csv"}, content=b"a;b\n1;2\n")

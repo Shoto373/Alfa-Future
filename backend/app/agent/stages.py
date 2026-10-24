@@ -15,6 +15,9 @@ import copy
 import logging
 import time
 import uuid
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -34,13 +37,23 @@ MAX_ADAPT_ROUNDS = 2
 DISCLAIMER = ("Прототип для хакатона. Данные о компаниях обезличены, новости демо-ленты пересказывают материалы кейса. "
               "Материал не является инвестиционной рекомендацией. Выводы с пометкой «AI» сформированы автоматически.")
 
+# Подписчик на ход разбора (SSE, SPR4-03): получает каждый шаг трассы по мере выполнения. Задается вызывающим
+# через contextvar — этапы агента о потоке не знают, синхронный путь работает как раньше.
+progress: ContextVar[Callable[[dict], None] | None] = ContextVar("agent_progress", default=None)
+TOOL_THREADS = 6
+
+
 class Trace:
     def __init__(self):
         self.steps: list[dict] = []
 
     def add(self, stage: str, name: str, detail: str, status: str = "ok", duration_ms: float = 0.0, output=None):
-        self.steps.append({"step": len(self.steps) + 1, "stage": stage, "name": name, "detail": detail[:400],
-                           "status": status, "duration_ms": round(duration_ms, 1), "output": output})
+        step = {"step": len(self.steps) + 1, "stage": stage, "name": name, "detail": detail[:400],
+                "status": status, "duration_ms": round(duration_ms, 1), "output": output}
+        self.steps.append(step)
+        listener = progress.get()
+        if listener is not None:
+            listener(step)
 
 MAX_THESES = 8  # тезисов банка в контексте модели после основного и уточняющих поисков
 
@@ -132,12 +145,21 @@ def _absorb(ctx: dict, tool: str, result) -> str:
     return "получено"
 
 
+def _call(run: Run, step: dict) -> tuple:
+    try:
+        return (*run.runner.call(step["tool"], **step["args"]), None)
+    except ToolError as exc:
+        return None, 0.0, exc
+
+
 def _run_steps(run: Run, steps: list[dict]) -> None:
-    for step in steps:
-        try:
-            result, ms = run.runner.call(step["tool"], **step["args"])
-        except ToolError as exc:
-            run.trace.add("tool", step["tool"], f"{step['why']}: ошибка — {exc}", "error")
+    """Независимые инструменты — параллельно (SPR4-03); результаты складываются в контекст в порядке плана,
+    поэтому трасса и выводы такие же, как при последовательном выполнении."""
+    with ThreadPoolExecutor(max_workers=max(1, min(TOOL_THREADS, len(steps)))) as pool:
+        outcomes = list(pool.map(lambda s: _call(run, s), steps))
+    for step, (result, ms, error) in zip(steps, outcomes):
+        if error is not None:
+            run.trace.add("tool", step["tool"], f"{step['why']}: ошибка — {error}", "error")
             continue
         summary = _absorb(run.ctx, step["tool"], result)
         run.trace.add("tool", step["tool"], f"{step['why']}: {summary}", "ok", ms,

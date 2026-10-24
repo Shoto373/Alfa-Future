@@ -114,6 +114,21 @@ export const api = {
       company_id: companyId, news_id: newsId, force_refresh: !!opts.force, fast: !!opts.fast,
       ...(opts.perspective ? { perspective: opts.perspective } : {}),
     }), { signal, timeoutMs: opts.fast ? 30_000 : 180_000 }),
+  // Потоковый разбор (SSE, SPR4-03): проверенный разбор правил сразу, затем ход модели и итог. Возвращает «закрыть поток».
+  insightStream: (companyId: string, newsId: string, perspective: Role | undefined, on: {
+    insight: (ins: Insight) => void; stage: (stage: string) => void; done: (ins: Insight) => void; failed: () => void;
+  }) => {
+    const q = new URLSearchParams({ company_id: companyId, news_id: newsId, ...(perspective ? { perspective } : {}) });
+    const source = new EventSource(`${API_BASE_URL}/api/v1/insights/stream?${q}`, { withCredentials: true });
+    let finished = false;
+    const parse = (e: Event) => JSON.parse((e as MessageEvent).data);
+    source.addEventListener("insight", (e) => on.insight(parse(e)));
+    source.addEventListener("stage", (e) => on.stage(parse(e).stage));
+    source.addEventListener("done", (e) => { finished = true; source.close(); on.done(parse(e)); });
+    // Обрыв до итога (прокси без SSE, сеть): закрываем — интерфейс перейдет на обычный запрос.
+    source.onerror = () => { if (!finished) { source.close(); on.failed(); } };
+    return () => { finished = true; source.close(); };
+  },
   ask: (insightId: string, question: string) =>
     request<Answer>(`/api/v1/insights/${insightId}/questions`, json("POST", { question }), { timeoutMs: 90_000 }),
   feedback: (insightId: string, rating: 1 | -1, section: string, comment?: string) =>

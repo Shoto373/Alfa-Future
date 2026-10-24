@@ -5,6 +5,7 @@
 Инструменты не меняют данные и не обращаются в сеть.
 """
 
+import threading
 from dataclasses import dataclass
 from typing import Callable
 
@@ -182,13 +183,14 @@ class ToolRunner:
     def __init__(self, request_id: str):
         self.request_id = request_id
         self.calls = 0
+        self._lock = threading.Lock()  # инструменты одного разбора вызываются параллельно (SPR4-03)
 
     def call(self, name: str, **args):
         tool = REGISTRY.get(name)
         if tool is None:
             audit.log(self.request_id, name, args, "denied", 0, "unknown tool")
             raise ToolError(f"Инструмент {name} не разрешен")
-        if self.calls >= MAX_CALLS_PER_RUN:
+        if self.calls >= MAX_CALLS_PER_RUN:  # проверка без блокировки: параллельных вызовов не больше TOOL_THREADS
             audit.log(self.request_id, name, args, "denied", 0, "call budget exceeded")
             raise ToolError("Превышен бюджет вызовов инструментов")
         clean = {}
@@ -202,7 +204,8 @@ class ToolRunner:
         if unknown:
             audit.log(self.request_id, name, args, "denied", 0, f"unknown args {sorted(unknown)}")
             raise ToolError(f"Лишние аргументы инструмента {name}: {sorted(unknown)}")
-        self.calls += 1
+        with self._lock:
+            self.calls += 1
         with audit.Timer() as t:
             try:
                 result = tool.fn(**clean)

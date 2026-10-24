@@ -38,6 +38,8 @@ function NewsInsight({ newsId }: { newsId: string }) {
   const [step, setStep] = useState(0);
   const [upgrading, setUpgrading] = useState(false);
   const [upgradeFailed, setUpgradeFailed] = useState(false);
+  const [stage, setStage] = useState<string | undefined>(undefined);
+  const closeStream = useRef<(() => void) | null>(null);
   // Другой разрез: тот же разбор глазами другой роли компании; по умолчанию — своя роль.
   const [perspective, setPerspective] = useState<Role>(session!.role);
   const seq = useRef(0);
@@ -51,12 +53,45 @@ function NewsInsight({ newsId }: { newsId: string }) {
   // Запрос разбора; состояние меняется только по ответам — сброс перед повтором делает load.
   const run = useCallback((force: boolean) => {
     controller.current?.abort();
+    closeStream.current?.();
     const c = new AbortController();
     controller.current = c;
     const mine = ++seq.current;
     const id = decodeURIComponent(newsId);
-    // 1) Сразу — готовая карточка или разбор на правилах (доли секунды).
     const view = perspective === session!.role ? undefined : perspective;
+    // Поток (SSE, SPR4-03): проверенный разбор правил за доли секунды, затем ход модели и итог в одном соединении.
+    // «Пересчитать» и браузеры без EventSource — прежний путь из двух запросов.
+    if (!force && typeof EventSource !== "undefined") {
+      let shown = false;
+      closeStream.current = api.insightStream(companyId, id, view, {
+        insight: (ins) => {
+          if (mine !== seq.current) return;
+          shown = true;
+          setInsight(ins);
+          setLoading(false);
+          setUpgrading(ins.mode === "rules");
+        },
+        stage: (s) => { if (mine === seq.current) setStage(s); },
+        done: (full) => {
+          if (mine !== seq.current) return;
+          setInsight(full);
+          setLoading(false);
+          setUpgrading(false);
+          setStage(undefined);
+          if (full.mode === "rules") setUpgradeFailed(true);
+        },
+        failed: () => {
+          if (mine !== seq.current) return;
+          setStage(undefined);
+          if (shown) { setUpgrading(false); setUpgradeFailed(true); } else { requestPair(); }
+        },
+      });
+      return;
+    }
+    requestPair();
+
+    function requestPair() {
+    // 1) Сразу — готовая карточка или разбор на правилах (доли секунды).
     api.insight(companyId, id, { force, fast: true, perspective: view }, c.signal)
       .then((ins) => {
         if (mine !== seq.current) return;
@@ -81,6 +116,7 @@ function NewsInsight({ newsId }: { newsId: string }) {
         setError(e instanceof ApiError ? e : new ApiError("Непредвиденная ошибка", "CLIENT", true));
         setLoading(false);
       });
+    }
   }, [companyId, newsId, perspective, session]);
 
   // «Пересчитать» и «Повторить»: сброс состояния и новый запрос.
@@ -96,7 +132,7 @@ function NewsInsight({ newsId }: { newsId: string }) {
 
   useEffect(() => {
     run(false);
-    return () => controller.current?.abort();
+    return () => { controller.current?.abort(); closeStream.current?.(); };  // уход со страницы закрывает поток
   }, [run]);
 
   useEffect(() => {
@@ -117,7 +153,7 @@ function NewsInsight({ newsId }: { newsId: string }) {
       )}
       {error && (error.code === "FORBIDDEN" ? <AccessDenied /> : <ErrorState error={error} onRetry={() => load()} />)}
       {insight && <InsightView insight={insight} onRefresh={() => load(true)} refreshing={loading}
-        upgrading={upgrading} upgradeFailed={upgradeFailed}
+        upgrading={upgrading} upgradeFailed={upgradeFailed} upgradeStage={stage}
         perspective={perspective} ownRole={session!.role} onPerspective={setPerspective}
         mentions={<Mentions newsId={decodeURIComponent(newsId)} companyId={companyId} />} />}
     </div>
