@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import config
 from app.api.errors import error_response
 from app.errors import ApiError
+from app.schemas import SCHEMA_VERSION
 
 logger = logging.getLogger("app.api")
 
@@ -49,6 +50,8 @@ class RequestContextMiddleware:
         async def send_logged(message):
             if message["type"] == "http.response.start":
                 status_holder["status"] = message["status"]
+                # Версия контракта в каждом ответе: клиент видит, с какой версией API говорит.
+                message["headers"] = [*message.get("headers", []), (b"x-api-version", SCHEMA_VERSION.encode())]
             await send(message)
 
         try:
@@ -143,4 +146,5 @@ def configure_api(app: FastAPI) -> None:
         allow_methods=["GET", "POST", "PATCH", "DELETE"],
         allow_credentials=True,
         allow_headers=["Content-Type"],
+        expose_headers=["X-API-Version"],
     )

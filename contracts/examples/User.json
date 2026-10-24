@@ -1,0 +1,15 @@
+{
+  "user_id": "usr-0123456789ab",
+  "name": "Демо",
+  "email": "demo@alfa.test",
+  "memberships": [
+    {
+      "company_id": "U_26",
+      "company_name": "ПАО «Пример»",
+      "role": "cfo",
+      "is_admin": true,
+      "is_founder": true
+    }
+  ],
+  "is_operator": false
+}

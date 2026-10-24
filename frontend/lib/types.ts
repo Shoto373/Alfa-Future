@@ -1,21 +1,22 @@
-// Типы публичного контракта 1.0.0 (contracts/schemas/common.json).
+// Типы публичного контракта 1.0.0: схемы с сервера генерируются в api-types.ts (npm run gen:api
+// из contracts/openapi.json) — здесь только имена для кода. Ниже — типы адресов, у которых на сервере
+// пока нет схемы ответа (лента, профиль компании, аналитика), их описание ручное.
+import type { components } from "./api-types";
 
-export type Role = "owner" | "ceo" | "cfo" | "accountant" | "treasurer" | "clevel";
-export interface Membership {
-  company_id: string;
-  company_name: string;
-  role: Role;
-  is_admin: boolean;
-  is_founder: boolean;
-}
-
-export interface User {
-  user_id: string;
-  name: string;
-  email: string;
-  memberships: Membership[];
-  is_operator?: boolean;  // сотрудник банка: блок «Сервис банка» в профиле
-}
+type Schemas = components["schemas"];
+export type Membership = Schemas["Membership"];
+export type User = Schemas["User"];
+export type Member = Schemas["Member"];
+export type Role = Membership["role"];
+export type Claim = Schemas["Claim"];
+export type Origin = Claim["origin"];
+export type Source = Schemas["Source"];
+export type RelevanceReason = Schemas["RelevanceReason"];
+export type Relevance = Schemas["Relevance"];
+export type TraceStep = Schemas["TraceStep"];
+export type Insight = Schemas["Insight"];
+export type Effect = NonNullable<Insight["effect"]>;
+export type Answer = Schemas["Answer"];
 
 export interface LLMSwitch {
   paused: boolean;
@@ -30,51 +31,6 @@ export interface LookupCompany {
   sector_name: string;
   region: string | null;
   claimed: boolean;
-}
-
-export interface Member {
-  member_id: string;
-  user_id: string | null;
-  name: string | null;
-  email: string;
-  role: Role;
-  is_admin: boolean;
-  is_founder: boolean;
-  status: "active" | "invited";
-}
-
-export type Origin = "fact" | "client_data" | "bank" | "ai";
-
-export interface Claim {
-  text: string;
-  origin: Origin;
-  source_ids: string[];
-  features: string[];
-}
-
-export interface Source {
-  source_id: string;
-  kind: "news" | "bank_analytics" | "client_data" | "bank_product";
-  title: string;
-  url: string | null;
-  doc_id: string | null;
-  page: number | null;
-  date: string | null;
-  excerpt: string | null;
-}
-
-export interface RelevanceReason {
-  kind: string;
-  feature: string;
-  origin: string;
-  weight: number;
-  text: string;
-  topic?: string | null;
-}
-
-export interface Relevance {
-  score: number;
-  reasons: RelevanceReason[];
 }
 
 /** Ответ /feed: total и topic_counts — по всей ленте компании, items — с учетом фильтра. */
@@ -146,56 +102,6 @@ export interface CompanyFile {
   chars: number;
   uploaded_at: string;
   preview: string;
-}
-
-export interface TraceStep {
-  step: number;
-  stage: "plan" | "tool" | "compose" | "check" | "adapt" | "finalize";
-  name: string;
-  detail: string;
-  status: "ok" | "warning" | "error" | "skipped";
-  duration_ms: number;
-  output?: Record<string, unknown> | null;
-}
-
-export interface Insight {
-  schema_version: "1.0.0";
-  insight_id: string;
-  request_id: string;
-  company_id: string;
-  role: Role;
-  news_id: string;
-  created_at: string;
-  mode: "llm" | "rules";
-  model: string | null;
-  fallback_reason?: "paused" | "disabled" | "budget" | "company_budget" | "unavailable" | "checks" | null;
-  title: string;
-  headline: string;
-  effect?: Effect | null;
-  what_happened: { summary: string; facts: Claim[]; actors: string[]; dates: string[]; assumptions: Claim[] };
-  why_important: Claim[];
-  risks: Claim[];
-  opportunities: Claim[];
-  actions: Claim[];
-  questions: string[];
-  bank_view: { available: boolean; summary: string | null; theses: Claim[]; conflicts: string[] };
-  products: { product_id: string; title: string; text: string; reason: string }[];
-  features_used: { name: string; label: string; value: string }[];
-  relevance: Relevance;
-  sources: Source[];
-  quality: { passed: boolean; attempts: number; checks: { name: string; passed: boolean; detail: string }[] };
-  trace: TraceStep[];
-  disclaimer: string;
-}
-
-export interface Answer {
-  insight_id: string;
-  question: string;
-  answer: string;
-  claims: Claim[];
-  sources: Source[];
-  mode: "llm" | "rules";
-  refused: boolean;
 }
 
 export interface CompanySummary {
@@ -274,8 +180,6 @@ export interface StoryChip {
 }
 
 // Общий знак события для компании: скорее риск, скорее возможность, и то и другое, зависит от операций, нет влияния.
-export type Effect = "neg" | "pos" | "mixed" | "unclear" | "none";
-
 export interface FeedItem {
   news: NewsBrief;
   relevance: Relevance;

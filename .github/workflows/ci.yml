@@ -60,6 +60,12 @@ jobs:
         working-directory: backend
         run: python tools/check_imports.py
 
+      # Контракт 1.0.0: contracts/openapi.json совпадает со схемами сервера (docs/api-versioning.md).
+      - name: API contract in sync
+        if: always()
+        working-directory: backend
+        run: python tools/gen_contracts.py --check
+
       # Порог качества проверяет tests/test_golden_quality.py; здесь — читаемый отчет по golden set.
       - name: Quality report (golden set, rules)
         if: always()
@@ -110,6 +116,8 @@ jobs:
         working-directory: frontend
         run: |
           npm ci
+          npm run gen:api
+          git diff --exit-code lib/api-types.ts || (echo "::error::lib/api-types.ts устарел: npm run gen:api"; exit 1)
           npm run lint
           npm run build
           npm run typecheck

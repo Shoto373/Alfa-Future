@@ -8,6 +8,7 @@ from app import config, database, demo_accounts, legacy_import, pipeline, warmup
 from app.api.router import router
 from app.api.setup import configure_api
 from app.auth.router import router as auth_router
+from app.schemas import SCHEMA_VERSION
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("app")
@@ -44,7 +45,7 @@ app = FastAPI(
     title="Альфа.Пульс API",
     description="Новостная аналитика для руководителей крупного бизнеса: профили компаний, персональная лента, "
                 "агентная интерпретация событий с позицией Альфа-Банка и трассировкой.",
-    version="1.0.0",
+    version=SCHEMA_VERSION,  # версия контракта; политика — docs/api-versioning.md
     lifespan=lifespan,
 )
 

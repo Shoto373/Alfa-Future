@@ -48,11 +48,11 @@ playwright-report/
 /контекст/
 
 # Not needed on the server: local docs, agent notes, generators, e2e tools, legacy app
+# docs/ (отчеты спринтов), contracts/ (контракт API) и infra/ (мониторинг, бэкапы) — часть репозитория.
 *.md
 !/README.md
-/docs/
-/infra/
-/contracts/
+!/docs/
+!/docs/**/*.md
 /tests/
 /app/
 /Dockerfile

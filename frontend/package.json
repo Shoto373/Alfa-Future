@@ -8,6 +8,7 @@
     "start": "next start -H 0.0.0.0 -p 3000",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
+    "gen:api": "openapi-typescript ../contracts/openapi.json -o lib/api-types.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -22,6 +23,7 @@
     "@types/react-dom": "19.3.0",
     "eslint": "9.39.5",
     "eslint-config-next": "16.4.3",
+    "openapi-typescript": "7.13.0",
     "sass": "1.93.2",
     "typescript": "5.9.3"
   },

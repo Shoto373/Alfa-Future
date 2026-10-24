@@ -21,7 +21,9 @@ Effect = Literal["neg", "pos", "mixed", "unclear", "none"]
 
 
 class Strict(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # В ответах API поле со значением по умолчанию всегда присутствует (model_dump) — так и в контракте:
+    # сгенерированные типы интерфейса не считают его необязательным.
+    model_config = ConfigDict(extra="forbid", json_schema_serialization_defaults_required=True)
 
 
 class InsightRequest(Strict):
