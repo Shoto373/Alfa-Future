@@ -8,7 +8,8 @@ from decimal import Decimal
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import (BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Identity, Index, Integer, Numeric, Text,
+from sqlalchemy import (BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Identity, Index, Integer, LargeBinary,
+                        Numeric, Text,
                         UniqueConstraint, func)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -55,6 +56,33 @@ class BankThesis(Base, Payload):
     doc_id: Mapped[str] = mapped_column(ForeignKey("bank_documents.doc_id"))
     page: Mapped[int] = mapped_column(Integer)
     __table_args__ = (CheckConstraint("page > 0", name="bank_theses_page_check"),)
+
+
+class KbUpload(Base, Payload):
+    """PDF аналитики банка, загруженный на распознавание (SPR3-03): файл, статус и тексты страниц в payload."""
+    __tablename__ = "kb_uploads"
+    doc_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    filename: Mapped[str] = mapped_column(Text)
+    sha256: Mapped[str] = mapped_column(Text, unique=True)
+    content: Mapped[bytes] = mapped_column(LargeBinary)
+    status: Mapped[str] = mapped_column(Text, server_default="queued")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (CheckConstraint("status IN ('queued', 'processing', 'ready', 'failed')", name="kb_uploads_status_check"),)
+
+
+class ThesisDraft(Base, Payload):
+    """Черновик тезиса из распознанного PDF: в базу знаний попадает только после проверки аналитиком."""
+    __tablename__ = "thesis_drafts"
+    draft_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    doc_id: Mapped[str] = mapped_column(ForeignKey("kb_uploads.doc_id", ondelete="CASCADE"))
+    page: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(Text, server_default="draft")
+    thesis_id: Mapped[str | None] = mapped_column(Text, nullable=True)  # опубликованный тезис
+    reviewed_by: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (CheckConstraint("status IN ('draft', 'approved', 'rejected')", name="thesis_drafts_status_check"),
+                      Index("thesis_drafts_doc_idx", "doc_id", "page"))
 
 
 class BankProduct(Base, Payload):

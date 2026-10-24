@@ -225,6 +225,8 @@ def llm_settings() -> dict:
             "qa": _env("LLM_MODEL_QA", "deepseek/deepseek-v4.1-flash"),
             # Классификация неуверенных новостей — Gemma 4 (рекомендована кейсом для классификации).
             "classify": _env("LLM_MODEL_CLASSIFY", "google/gemma-4-26b-a4b-it"),
+            # Распознавание сканов аналитики банка (SPR3-03) — визуальная модель из списка кейса.
+            "vision": _env("LLM_MODEL_VISION", "qwen/qwen3-vl-30b-a3b-instruct"),
         },
         # GLM без ограничения тратит весь лимит на рассуждения; DeepSeek с ним, наоборот, рассуждает дольше.
         "reasoning_effort": os.environ.get("LLM_REASONING_EFFORT", "low"),
@@ -255,6 +257,23 @@ def llm_extra_queries() -> bool:
 def llm_company_share() -> float:
     """Доля общего дневного бюджета LLM, которую может израсходовать одна компания-клиент."""
     return float(_env("LLM_COMPANY_SHARE", "0.2"))
+
+
+# Статьи бюджета LLM помимо компаний-клиентов: учитываются в llm_usage_companies под ключом «budget:<статья>».
+BUDGET_LINE_PREFIX = "budget:"
+KB_INGEST_LINE = "budget:kb_ingest"
+
+
+def llm_line_share(line: str | None) -> float:
+    """Доля дневного бюджета для компании-клиента или отдельной статьи (распознавание аналитики — KB_INGEST_LLM_SHARE)."""
+    if line == KB_INGEST_LINE:
+        return float(_env("KB_INGEST_LLM_SHARE", "0.15"))
+    return llm_company_share()
+
+
+def kb_recorded_dir() -> Path:
+    """Записанные ответы модели распознавания по sha256 PDF: демо и тесты без вызова модели и трат бюджета."""
+    return Path(_env("KB_RECORDED_DIR", str(Path(__file__).parent / "knowledge" / "recorded")))
 
 
 def llm_user_limits() -> dict[str, int]:

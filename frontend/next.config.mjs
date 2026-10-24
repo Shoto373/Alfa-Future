@@ -6,7 +6,7 @@ const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  `img-src 'self' data: blob: ${api}`,  // сканы страниц PDF на экране аналитика (SPR3-03)
   "font-src 'self' data:",
   `connect-src 'self' ${api}`,
   "frame-ancestors 'none'",

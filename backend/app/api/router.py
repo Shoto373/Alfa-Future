@@ -3,9 +3,10 @@ import logging
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from app import cache, config, embeddings, llm, llm_usage, pipeline, quality, ratelimit, storage, vectors
 from app.agent import audit, orchestrator, qa
@@ -16,7 +17,7 @@ from app.companies import extra as company_extra
 from app.companies import profiles
 from app.companies.sectors import SECTOR_NAMES
 from app.errors import AnalysisUnavailable, ApiError, InvalidAnalysisResult
-from app.knowledge import kb
+from app.knowledge import ingest, kb
 from app.news import entities, parser, store
 from app.news.sources import registry as sources
 from app.news.taxonomy import TOPICS
@@ -438,6 +439,12 @@ def analytics() -> dict:
 @router.get("/analytics/{doc_id}/pdf", responses=ERRORS, dependencies=[Depends(current_user)])
 def analytics_pdf(doc_id: str):
     doc = kb.document(doc_id)
+    if doc is not None and doc.get("ingested"):  # PDF, загруженный аналитиком, хранится в базе
+        found = ingest.pdf(doc_id)
+        if found is None:
+            raise ApiError("DOCUMENT_NOT_FOUND")
+        return Response(found[1], media_type="application/pdf",
+                        headers={"Content-Disposition": f"inline; filename*=UTF-8''{quote(found[0])}"})
     pdf_dir = config.bank_pdf_dir()
     if doc is None or pdf_dir is None:
         raise ApiError("DOCUMENT_NOT_FOUND")

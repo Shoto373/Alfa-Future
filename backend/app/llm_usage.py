@@ -146,7 +146,7 @@ def reserve(model: str, prompt_chars: int, max_tokens: int) -> Reservation:
     s = config.llm_settings()
     tokens, cost = estimate(model, prompt_chars, max_tokens)
     day, company_id = budget_day(), _company.get()
-    share = config.llm_company_share()
+    share = config.llm_line_share(company_id)
     # Лимит токенов не задан (0) — ограничивают только рубли: условие по токенам всегда выполнено.
     token_limit = s["daily_token_limit"] or 10 ** 15
     sweep()  # своей транзакцией: отказ ниже откатил бы и снятие зависших резервов

@@ -225,3 +225,55 @@ export interface LLMBudget {
   reserved_cost: number;
   rejected_by_budget: number;
 }
+
+// Проверка аналитиком тезисов из распознанных PDF (SPR3-03).
+export interface KbCheck {
+  name: "numbers" | "quote" | "document_date" | "topic" | "duplicate";
+  ok: boolean;
+  detail: string;
+  missing?: string[];
+  duplicate_of?: string | null;
+}
+
+export interface KbDraft {
+  draft_id: string;
+  doc_id: string;
+  page: number;
+  status: "draft" | "approved" | "rejected";
+  topic?: string;
+  sectors?: string[];
+  metric?: string;
+  value?: string;
+  horizon?: string;
+  quote?: string;
+  text?: string;
+  stance?: "forecast";
+  forecast_values?: Record<string, number>;
+  checks: KbCheck[];
+  edited?: boolean;
+  thesis_id: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  reject_reason?: string;
+  supersedes?: string | null;
+  supersedes_candidate: string | null;
+}
+
+export interface KbUploadItem {
+  doc_id: string;
+  filename: string;
+  status: "queued" | "processing" | "ready" | "failed";
+  created_at: string;
+  title: string | null;
+  date: string | null;
+  pages: number | null;
+  error: string | null;
+  model: string | null;
+  drafts: { draft: number; approved: number; rejected: number };
+}
+
+export interface KbDocument extends Omit<KbUploadItem, "drafts" | "created_at"> {
+  page_texts: Record<string, string>;
+  topics: Record<string, string>;
+  drafts: KbDraft[];
+}

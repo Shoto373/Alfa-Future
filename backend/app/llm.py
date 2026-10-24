@@ -6,6 +6,7 @@
 бюджете (app/llm_usage.py): параллельные вызовы не превышают лимит вместе.
 """
 
+import base64
 import json
 import logging
 import re
@@ -112,14 +113,23 @@ def _failed(reservation: llm_usage.Reservation, committed: bool, exc: Exception 
         llm_usage.release(reservation)
 
 
+def _content(text: str, images: list[tuple[str, bytes]] | None) -> str | list[dict]:
+    if not images:
+        return text
+    return [{"type": "text", "text": text}] + [
+        {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{base64.b64encode(data).decode()}"}}
+        for mime, data in images]
+
+
 class TruncatedError(LLMError):
     """Ответ обрезан по лимиту токенов — обычно модель израсходовала его на рассуждения."""
 
 
 def chat_json(system: str, user: str, model_kind: str = "compose", max_tokens: int = 2000,
-              reasoning: str | None = None) -> tuple[dict, dict]:
-    """Вызов модели роли model_kind (plan | compose | review | qa) с ответом в JSON. Возвращает (json, meta).
-    reasoning — переопределить рассуждения для этого вызова (off|low|medium|high), иначе — из настроек роли."""
+              reasoning: str | None = None, images: list[tuple[str, bytes]] | None = None) -> tuple[dict, dict]:
+    """Вызов модели роли model_kind (plan | compose | review | qa | vision) с ответом в JSON. Возвращает (json, meta).
+    reasoning — переопределить рассуждения для этого вызова (off|low|medium|high), иначе — из настроек роли.
+    images — изображения (тип, байты) к сообщению пользователя: страницы сканов для визуальной модели."""
     s = config.llm_settings()
     if not available():
         raise LLMError("LLM не подключена")
@@ -134,13 +144,14 @@ def chat_json(system: str, user: str, model_kind: str = "compose", max_tokens: i
     if not is_allowed(model):
         raise LLMError(f"Модель {model} не входит в список разрешенных кейсом")
     try:
-        reservation = llm_usage.reserve(model, len(system) + len(user), max_tokens)
+        # Изображение страницы стоит порядка 1500 токенов — резерв оценивается с запасом.
+        reservation = llm_usage.reserve(model, len(system) + len(user) + 4500 * len(images or []), max_tokens)
     except llm_usage.BudgetExceeded as exc:  # агент откатится к правилам, причина — в трассе
         raise BudgetError(str(exc), exc.scope) from exc
 
     payload = {
         "model": model,
-        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+        "messages": [{"role": "system", "content": system}, {"role": "user", "content": _content(user, images)}],
         "temperature": 0.2,
         "max_tokens": max_tokens,
         "response_format": {"type": "json_object"},

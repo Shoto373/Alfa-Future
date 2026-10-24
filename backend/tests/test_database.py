@@ -28,7 +28,7 @@ def test_migrations_are_idempotent_and_transactional():
     database.migrate()
     with database.session() as conn:
         context = MigrationContext.configure(conn.connection(), opts={"version_table_schema": database.schema()})
-        assert context.get_current_revision() == "0009"
+        assert context.get_current_revision() == "0010"
     with pytest.raises(RuntimeError):
         with database.session() as conn:
             database.set_state("rollback_probe", {"value": 1}, conn)

@@ -69,6 +69,32 @@ class LLMSwitchRequest(Strict):
     paused: bool
 
 
+# Проверка аналитиком тезисов из распознанных PDF (SPR3-03).
+class KbDraftPatch(Strict):
+    topic: str | None = Field(None, max_length=40)
+    sectors: list[str] | None = Field(None, max_length=8)
+    metric: str | None = Field(None, max_length=300)
+    value: str | None = Field(None, max_length=100)
+    horizon: str | None = Field(None, max_length=20)
+    quote: str | None = Field(None, max_length=1000)
+    text: str | None = Field(None, max_length=1000)
+    stance: Literal["forecast"] | None = None
+    forecast_values: dict[str, float] | None = None
+
+
+class KbApproveRequest(Strict):
+    supersedes: str | None = Field(None, max_length=64)
+
+
+class KbRejectRequest(Strict):
+    reason: str = Field(..., min_length=1, max_length=300)
+
+
+class KbDocumentMeta(Strict):
+    title: str | None = Field(None, max_length=300)
+    date: str | None = Field(None, pattern=r"^\d{4}-\d{2}(-\d{2})?$")
+
+
 class FeedbackRequest(Strict):
     insight_id: str = Field(..., min_length=1, max_length=64)
     rating: Literal[1, -1]

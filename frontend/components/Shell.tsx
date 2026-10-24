@@ -22,6 +22,7 @@ const NAV: (NavItem | "divider")[] = [
   { href: "/pulse", label: "Альфа.Пульс", icon: "pulse", accent: true },
   { href: "/pulse/analytics", label: "Аналитика банка", icon: "doc" },
   { href: "/quality", label: "Качество", icon: "shield", operatorOnly: true },
+  { href: "/admin/kb", label: "Тезисы аналитики", icon: "check", operatorOnly: true },
 ];
 
 // Нижняя навигация на телефоне: главные разделы под большим пальцем, боковое меню — за кнопкой.
@@ -41,8 +42,10 @@ export default function Shell({ children }: { children: ReactNode }) {
   const menuOpen = menuPath === path;
   const setMenuOpen = (open: boolean) => setMenuPath(open ? path : null);
 
-  // Без компаний доступны только регистрация компании и профиль.
-  const noCompanyOk = path === "/company/register" || path === "/profile";
+  // Без компаний доступны регистрация компании и профиль, сотруднику банка — еще его служебные разделы
+  // (качество, тезисы аналитики): своей компании-клиента у него обычно нет.
+  const staffPage = Boolean(session?.user.is_operator) && (path === "/quality" || path.startsWith("/admin/"));
+  const noCompanyOk = path === "/company/register" || path === "/profile" || staffPage;
   const needCompany = Boolean(session) && session!.memberships.length === 0 && !noCompanyOk;
 
   useEffect(() => {
@@ -55,7 +58,8 @@ export default function Shell({ children }: { children: ReactNode }) {
     return <div className={styles.boot}><span className={ui.spinner} aria-label="Загрузка" /></div>;
   }
 
-  const active = (href: string) => path === href || (href === "/pulse" && path.startsWith("/pulse/n/"));
+  const active = (href: string) => path === href || (href === "/pulse" && path.startsWith("/pulse/n/"))
+    || (href === "/admin/kb" && path.startsWith("/admin/kb/"));
 
   return (
     <div className={styles.app}>

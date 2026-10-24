@@ -17,9 +17,11 @@ from app.schemas import SCHEMA_VERSION
 logger = logging.getLogger("app.api")
 
 MAX_BODY_BYTES = 64 * 1024
-# Загрузка файла компании (CSV/PDF) — единственный адрес с большим телом запроса.
+# Адреса с большим телом запроса: файл компании (CSV/PDF, 5 МБ) и PDF аналитики банка на распознавание (20 МБ).
 UPLOAD_MAX_BYTES = 5 * 1024 * 1024 + 1024
 UPLOAD_PATH = re.compile(r"^/api/v1/companies/[^/]+/extra/files$")
+KB_UPLOAD_MAX_BYTES = 20 * 1024 * 1024 + 1024
+KB_UPLOAD_PATH = re.compile(r"^/api/v1/admin/kb/documents$")
 
 
 # Заголовки безопасности всех ответов API (SPR3-04). Ответы JSON дополнительно запрещают любую загрузку
@@ -87,7 +89,9 @@ class RequestContextMiddleware:
 
     async def _handle(self, scope, receive, send, request_id):
         headers = dict(scope.get("headers") or [])
-        limit = UPLOAD_MAX_BYTES if UPLOAD_PATH.match(scope.get("path", "")) else self.max_bytes
+        path = scope.get("path", "")
+        limit = (UPLOAD_MAX_BYTES if UPLOAD_PATH.match(path) else KB_UPLOAD_MAX_BYTES if KB_UPLOAD_PATH.match(path)
+                 else self.max_bytes)
         length = headers.get(b"content-length")
         if length is not None and length.isdigit() and int(length) > limit:
             await error_response("REQUEST_TOO_LARGE", request_id)(scope, receive, send)

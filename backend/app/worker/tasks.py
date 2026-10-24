@@ -4,6 +4,7 @@ import logging
 from collections.abc import Callable
 
 from app import config, llm_usage, pipeline, ranking
+from app.knowledge import ingest
 from app.news import store
 from app.worker import queue
 
@@ -24,6 +25,11 @@ def news_reclassify(payload: dict) -> dict:
 def news_index(payload: dict) -> dict:
     """Сюжеты в базе и организации в новостях (news_entities): после сбора, добавления и переклассификации."""
     return pipeline.index_news()
+
+
+def kb_ingest(payload: dict) -> dict:
+    """Распознать загруженный PDF аналитики банка и сохранить черновики тезисов (SPR3-03)."""
+    return ingest.process(payload["doc_id"])
 
 
 def warm_feeds(payload: dict) -> dict:
@@ -47,6 +53,7 @@ HANDLERS: dict[str, Callable[[dict], dict]] = {
     "news_cycle": news_cycle,
     "news_reclassify": news_reclassify,
     "news_index": news_index,
+    "kb_ingest": kb_ingest,
     "warm_feeds": warm_feeds,
     "llm_sweep": llm_sweep,
     "jobs_cleanup": jobs_cleanup,

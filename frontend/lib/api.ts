@@ -1,5 +1,5 @@
 import type {
-  AISettings, Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, LookupCompany, Member, Membership, Mention, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
+  AISettings, Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, KbDocument, KbDraft, KbUploadItem, LookupCompany, Member, Membership, Mention, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
@@ -129,5 +129,21 @@ export const api = {
   setLLMPaused: (paused: boolean) => request<LLMSwitch>("/api/v1/ops/llm", json("POST", { paused })),
   qualityOverview: (hours: number, signal?: AbortSignal) =>
     request<QualityOverview>(`/api/v1/metrics/overview?hours=${hours}`, {}, { signal }),
+  // Экран аналитика банка (SPR3-03): PDF на распознавание, черновики тезисов, публикация.
+  kbDocuments: (signal?: AbortSignal) => request<{ items: KbUploadItem[] }>("/api/v1/admin/kb/documents", {}, { signal }),
+  kbUpload: (file: File, meta: { title?: string; date?: string }) => {
+    const q = new URLSearchParams({ name: file.name, ...(meta.title ? { title: meta.title } : {}), ...(meta.date ? { date: meta.date } : {}) });
+    return request<{ doc_id: string; status: string; created: boolean }>(`/api/v1/admin/kb/documents?${q}`,
+      { method: "POST", headers: { "Content-Type": "application/pdf" }, body: file }, { timeoutMs: 120_000 });
+  },
+  kbDocument: (docId: string, signal?: AbortSignal) => request<KbDocument>(`/api/v1/admin/kb/documents/${cid(docId)}`, {}, { signal }),
+  kbDocumentMeta: (docId: string, meta: { title?: string; date?: string }) =>
+    request<KbDocument>(`/api/v1/admin/kb/documents/${cid(docId)}`, json("PATCH", meta)),
+  kbPageImageUrl: (docId: string, page: number) => `${API_BASE_URL}/api/v1/admin/kb/documents/${cid(docId)}/pages/${page}/image`,
+  kbPdfUrl: (docId: string, page?: number) => `${API_BASE_URL}/api/v1/admin/kb/documents/${cid(docId)}/pdf${page ? `#page=${page}` : ""}`,
+  kbEditDraft: (draftId: string, patch: Partial<KbDraft>) => request<KbDraft>(`/api/v1/admin/kb/drafts/${cid(draftId)}`, json("PATCH", patch)),
+  kbApprove: (draftId: string, supersedes?: string | null) =>
+    request<{ thesis: { id: string } }>(`/api/v1/admin/kb/drafts/${cid(draftId)}/approve`, json("POST", { supersedes: supersedes ?? null })),
+  kbReject: (draftId: string, reason: string) => request<KbDraft>(`/api/v1/admin/kb/drafts/${cid(draftId)}/reject`, json("POST", { reason })),
   pdfUrl: (docId: string, page?: number | null) => `${API_BASE_URL}/api/v1/analytics/${docId}/pdf${page ? `#page=${page}` : ""}`,
 };
