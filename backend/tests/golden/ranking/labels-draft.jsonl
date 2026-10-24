@@ -1,0 +1,210 @@
+{"news_id": "seed-rate-hold", "company_id": "U_44", "role": "cfo", "grade": 3, "reason": "кредиты на оборотку и сезонные работы дорожают; важно для роли", "annotator": "assistant-draft"}
+{"news_id": "seed-inflation-week", "company_id": "U_44", "role": "cfo", "grade": 1, "reason": "топливо для техники дорожает", "annotator": "assistant-draft"}
+{"news_id": "seed-fuel-prices", "company_id": "U_44", "role": "cfo", "grade": 2, "reason": "дизель и перевозки — заметная доля затрат агробизнеса", "annotator": "assistant-draft"}
+{"news_id": "seed-ofz-yields", "company_id": "U_44", "role": "cfo", "grade": 2, "reason": "косвенно: стоимость долга; важно для роли", "annotator": "assistant-draft"}
+{"news_id": "seed-autoloan-limits", "company_id": "U_44", "role": "cfo", "grade": 0, "reason": "автокредиты населения не про агробизнес", "annotator": "assistant-draft"}
+{"news_id": "seed-gold-august", "company_id": "U_44", "role": "cfo", "grade": 0, "reason": "золото не связано с бизнесом", "annotator": "assistant-draft"}
+{"news_id": "seed-gdp-h1", "company_id": "U_44", "role": "cfo", "grade": 1, "reason": "общий фон экономики", "annotator": "assistant-draft"}
+{"news_id": "seed-import-growth", "company_id": "U_44", "role": "cfo", "grade": 1, "reason": "конкуренция импорта на продовольственном рынке", "annotator": "assistant-draft"}
+{"news_id": "seed-labor-market", "company_id": "U_44", "role": "cfo", "grade": 1, "reason": "сезонный найм дорожает", "annotator": "assistant-draft"}
+{"news_id": "seed-corp-results", "company_id": "U_44", "role": "cfo", "grade": 1, "reason": "общий фон прибыли компаний", "annotator": "assistant-draft"}
+{"news_id": "seed-budget", "company_id": "U_44", "role": "cfo", "grade": 1, "reason": "субсидии АПК зависят от бюджета", "annotator": "assistant-draft"}
+{"news_id": "seed-consumption-peak", "company_id": "U_44", "role": "cfo", "grade": 2, "reason": "спрос на продукты питания", "annotator": "assistant-draft"}
+{"news_id": "seed-rushydro", "company_id": "U_44", "role": "cfo", "grade": 0, "reason": "рейтинг энергокомпании не про агробизнес", "annotator": "assistant-draft"}
+{"news_id": "seed-mortgage", "company_id": "U_44", "role": "cfo", "grade": 0, "reason": "ипотека не про агробизнес", "annotator": "assistant-draft"}
+{"news_id": "seed-rate-hold", "company_id": "U_32", "role": "ceo", "grade": 2, "reason": "кредиты на оборотку и сезонные работы дорожают", "annotator": "assistant-draft"}
+{"news_id": "seed-inflation-week", "company_id": "U_32", "role": "ceo", "grade": 1, "reason": "топливо для техники дорожает", "annotator": "assistant-draft"}
+{"news_id": "seed-fuel-prices", "company_id": "U_32", "role": "ceo", "grade": 2, "reason": "дизель и перевозки — заметная доля затрат агробизнеса", "annotator": "assistant-draft"}
+{"news_id": "seed-ofz-yields", "company_id": "U_32", "role": "ceo", "grade": 1, "reason": "косвенно: стоимость долга", "annotator": "assistant-draft"}
+{"news_id": "seed-autoloan-limits", "company_id": "U_32", "role": "ceo", "grade": 0, "reason": "автокредиты населения не про агробизнес", "annotator": "assistant-draft"}
+{"news_id": "seed-gold-august", "company_id": "U_32", "role": "ceo", "grade": 0, "reason": "золото не связано с бизнесом", "annotator": "assistant-draft"}
+{"news_id": "seed-gdp-h1", "company_id": "U_32", "role": "ceo", "grade": 1, "reason": "общий фон экономики", "annotator": "assistant-draft"}
+{"news_id": "seed-import-growth", "company_id": "U_32", "role": "ceo", "grade": 1, "reason": "конкуренция импорта на продовольственном рынке", "annotator": "assistant-draft"}
+{"news_id": "seed-labor-market", "company_id": "U_32", "role": "ceo", "grade": 2, "reason": "сезонный найм дорожает; важно для роли", "annotator": "assistant-draft"}
+{"news_id": "seed-corp-results", "company_id": "U_32", "role": "ceo", "grade": 1, "reason": "общий фон прибыли компаний", "annotator": "assistant-draft"}
+{"news_id": "seed-budget", "company_id": "U_32", "role": "ceo", "grade": 1, "reason": "субсидии АПК зависят от бюджета", "annotator": "assistant-draft"}
+{"news_id": "seed-consumption-peak", "company_id": "U_32", "role": "ceo", "grade": 2, "reason": "спрос на продукты питания", "annotator": "assistant-draft"}
+{"news_id": "seed-rushydro", "company_id": "U_32", "role": "ceo", "grade": 0, "reason": "рейтинг энергокомпании не про агробизнес", "annotator": "assistant-draft"}
+{"news_id": "seed-mortgage", "company_id": "U_32", "role": "ceo", "grade": 0, "reason": "ипотека не про агробизнес", "annotator": "assistant-draft"}
+{"news_id": "seed-rate-hold", "company_id": "U_17", "role": "owner", "grade": 2, "reason": "кредиты на оборотку и сезонные работы дорожают", "annotator": "assistant-draft"}
+{"news_id": "seed-inflation-week", "company_id": "U_17", "role": "owner", "grade": 1, "reason": "топливо для техники дорожает", "annotator": "assistant-draft"}
+{"news_id": "seed-fuel-prices", "company_id": "U_17", "role": "owner", "grade": 2, "reason": "дизель и перевозки — заметная доля затрат агробизнеса", "annotator": "assistant-draft"}
+{"news_id": "seed-ofz-yields", "company_id": "U_17", "role": "owner", "grade": 1, "reason": "косвенно: стоимость долга", "annotator": "assistant-draft"}
+{"news_id": "seed-autoloan-limits", "company_id": "U_17", "role": "owner", "grade": 0, "reason": "автокредиты населения не про агробизнес", "annotator": "assistant-draft"}
+{"news_id": "seed-gold-august", "company_id": "U_17", "role": "owner", "grade": 0, "reason": "золото не связано с бизнесом", "annotator": "assistant-draft"}
+{"news_id": "seed-gdp-h1", "company_id": "U_17", "role": "owner", "grade": 1, "reason": "общий фон экономики", "annotator": "assistant-draft"}
+{"news_id": "seed-import-growth", "company_id": "U_17", "role": "owner", "grade": 1, "reason": "конкуренция импорта на продовольственном рынке", "annotator": "assistant-draft"}
+{"news_id": "seed-labor-market", "company_id": "U_17", "role": "owner", "grade": 1, "reason": "сезонный найм дорожает", "annotator": "assistant-draft"}
+{"news_id": "seed-corp-results", "company_id": "U_17", "role": "owner", "grade": 2, "reason": "общий фон прибыли компаний; важно для роли", "annotator": "assistant-draft"}
+{"news_id": "seed-budget", "company_id": "U_17", "role": "owner", "grade": 1, "reason": "субсидии АПК зависят от бюджета", "annotator": "assistant-draft"}
+{"news_id": "seed-consumption-peak", "company_id": "U_17", "role": "owner", "grade": 2, "reason": "спрос на продукты питания", "annotator": "assistant-draft"}
+{"news_id": "seed-rushydro", "company_id": "U_17", "role": "owner", "grade": 0, "reason": "рейтинг энергокомпании не про агробизнес", "annotator": "assistant-draft"}
+{"news_id": "seed-mortgage", "company_id": "U_17", "role": "owner", "grade": 0, "reason": "ипотека не про агробизнес", "annotator": "assistant-draft"}
+{"news_id": "seed-rate-hold", "company_id": "U_45", "role": "cfo", "grade": 3, "reason": "оборотный капитал оптовика в кредит; важно для роли", "annotator": "assistant-draft"}
+{"news_id": "seed-inflation-week", "company_id": "U_45", "role": "cfo", "grade": 1, "reason": "инфляция меняет закупочные цены", "annotator": "assistant-draft"}
+{"news_id": "seed-fuel-prices", "company_id": "U_45", "role": "cfo", "grade": 1, "reason": "логистика дорожает", "annotator": "assistant-draft"}
+{"news_id": "seed-ofz-yields", "company_id": "U_45", "role": "cfo", "grade": 2, "reason": "косвенно: стоимость долга; важно для роли", "annotator": "assistant-draft"}
+{"news_id": "seed-autoloan-limits", "company_id": "U_45", "role": "cfo", "grade": 0, "reason": "автокредиты не про опт", "annotator": "assistant-draft"}
+{"news_id": "seed-gold-august", "company_id": "U_45", "role": "cfo", "grade": 0, "reason": "золото не связано", "annotator": "assistant-draft"}
+{"news_id": "seed-gdp-h1", "company_id": "U_45", "role": "cfo", "grade": 1, "reason": "общий фон экономики", "annotator": "assistant-draft"}
+{"news_id": "seed-import-growth", "company_id": "U_45", "role": "cfo", "grade": 3, "reason": "закупки по импорту и валютный риск оптовика", "annotator": "assistant-draft"}
+{"news_id": "seed-labor-market", "company_id": "U_45", "role": "cfo", "grade": 1, "reason": "персонал склада", "annotator": "assistant-draft"}
+{"news_id": "seed-corp-results", "company_id": "U_45", "role": "cfo", "grade": 1, "reason": "общий фон прибыли", "annotator": "assistant-draft"}
+{"news_id": "seed-budget", "company_id": "U_45", "role": "cfo", "grade": 0, "reason": "бюджет мало влияет на опт", "annotator": "assistant-draft"}
+{"news_id": "seed-consumption-peak", "company_id": "U_45", "role": "cfo", "grade": 2, "reason": "спрос в рознице — сбыт оптовика", "annotator": "assistant-draft"}
+{"news_id": "seed-rushydro", "company_id": "U_45", "role": "cfo", "grade": 0, "reason": "рейтинг энергокомпании не про опт", "annotator": "assistant-draft"}
+{"news_id": "seed-mortgage", "company_id": "U_45", "role": "cfo", "grade": 0, "reason": "ипотека не про опт", "annotator": "assistant-draft"}
+{"news_id": "seed-rate-hold", "company_id": "U_4", "role": "ceo", "grade": 2, "reason": "оборотный капитал оптовика в кредит", "annotator": "assistant-draft"}
+{"news_id": "seed-inflation-week", "company_id": "U_4", "role": "ceo", "grade": 1, "reason": "инфляция меняет закупочные цены", "annotator": "assistant-draft"}
+{"news_id": "seed-fuel-prices", "company_id": "U_4", "role": "ceo", "grade": 1, "reason": "логистика дорожает", "annotator": "assistant-draft"}
+{"news_id": "seed-ofz-yields", "company_id": "U_4", "role": "ceo", "grade": 1, "reason": "косвенно: стоимость долга", "annotator": "assistant-draft"}
+{"news_id": "seed-autoloan-limits", "company_id": "U_4", "role": "ceo", "grade": 0, "reason": "автокредиты не про опт", "annotator": "assistant-draft"}
+{"news_id": "seed-gold-august", "company_id": "U_4", "role": "ceo", "grade": 0, "reason": "золото не связано", "annotator": "assistant-draft"}
+{"news_id": "seed-gdp-h1", "company_id": "U_4", "role": "ceo", "grade": 1, "reason": "общий фон экономики", "annotator": "assistant-draft"}
+{"news_id": "seed-import-growth", "company_id": "U_4", "role": "ceo", "grade": 3, "reason": "закупки по импорту и валютный риск оптовика", "annotator": "assistant-draft"}
+{"news_id": "seed-labor-market", "company_id": "U_4", "role": "ceo", "grade": 2, "reason": "персонал склада; важно для роли", "annotator": "assistant-draft"}
+{"news_id": "seed-corp-results", "company_id": "U_4", "role": "ceo", "grade": 1, "reason": "общий фон прибыли", "annotator": "assistant-draft"}
+{"news_id": "seed-budget", "company_id": "U_4", "role": "ceo", "grade": 0, "reason": "бюджет мало влияет на опт", "annotator": "assistant-draft"}
+{"news_id": "seed-consumption-peak", "company_id": "U_4", "role": "ceo", "grade": 2, "reason": "спрос в рознице — сбыт оптовика", "annotator": "assistant-draft"}
+{"news_id": "seed-rushydro", "company_id": "U_4", "role": "ceo", "grade": 0, "reason": "рейтинг энергокомпании не про опт", "annotator": "assistant-draft"}
+{"news_id": "seed-mortgage", "company_id": "U_4", "role": "ceo", "grade": 0, "reason": "ипотека не про опт", "annotator": "assistant-draft"}
+{"news_id": "seed-rate-hold", "company_id": "U_12", "role": "owner", "grade": 2, "reason": "оборотный капитал оптовика в кредит", "annotator": "assistant-draft"}
+{"news_id": "seed-inflation-week", "company_id": "U_12", "role": "owner", "grade": 1, "reason": "инфляция меняет закупочные цены", "annotator": "assistant-draft"}
+{"news_id": "seed-fuel-prices", "company_id": "U_12", "role": "owner", "grade": 1, "reason": "логистика дорожает", "annotator": "assistant-draft"}
+{"news_id": "seed-ofz-yields", "company_id": "U_12", "role": "owner", "grade": 1, "reason": "косвенно: стоимость долга", "annotator": "assistant-draft"}
+{"news_id": "seed-autoloan-limits", "company_id": "U_12", "role": "owner", "grade": 0, "reason": "автокредиты не про опт", "annotator": "assistant-draft"}
+{"news_id": "seed-gold-august", "company_id": "U_12", "role": "owner", "grade": 0, "reason": "золото не связано", "annotator": "assistant-draft"}
+{"news_id": "seed-gdp-h1", "company_id": "U_12", "role": "owner", "grade": 1, "reason": "общий фон экономики", "annotator": "assistant-draft"}
+{"news_id": "seed-import-growth", "company_id": "U_12", "role": "owner", "grade": 3, "reason": "закупки по импорту и валютный риск оптовика", "annotator": "assistant-draft"}
+{"news_id": "seed-labor-market", "company_id": "U_12", "role": "owner", "grade": 1, "reason": "персонал склада", "annotator": "assistant-draft"}
+{"news_id": "seed-corp-results", "company_id": "U_12", "role": "owner", "grade": 2, "reason": "общий фон прибыли; важно для роли", "annotator": "assistant-draft"}
+{"news_id": "seed-budget", "company_id": "U_12", "role": "owner", "grade": 0, "reason": "бюджет мало влияет на опт", "annotator": "assistant-draft"}
+{"news_id": "seed-consumption-peak", "company_id": "U_12", "role": "owner", "grade": 2, "reason": "спрос в рознице — сбыт оптовика", "annotator": "assistant-draft"}
+{"news_id": "seed-rushydro", "company_id": "U_12", "role": "owner", "grade": 0, "reason": "рейтинг энергокомпании не про опт", "annotator": "assistant-draft"}
+{"news_id": "seed-mortgage", "company_id": "U_12", "role": "owner", "grade": 0, "reason": "ипотека не про опт", "annotator": "assistant-draft"}
+{"news_id": "seed-rate-hold", "company_id": "U_34", "role": "cfo", "grade": 3, "reason": "лизинг транспорта и кредиты; важно для роли", "annotator": "assistant-draft"}
+{"news_id": "seed-inflation-week", "company_id": "U_34", "role": "cfo", "grade": 1, "reason": "инфляция затрат", "annotator": "assistant-draft"}
+{"news_id": "seed-fuel-prices", "company_id": "U_34", "role": "cfo", "grade": 3, "reason": "топливо — главная статья затрат перевозчика", "annotator": "assistant-draft"}
+{"news_id": "seed-ofz-yields", "company_id": "U_34", "role": "cfo", "grade": 2, "reason": "косвенно: стоимость долга; важно для роли", "annotator": "assistant-draft"}
+{"news_id": "seed-autoloan-limits", "company_id": "U_34", "role": "cfo", "grade": 0, "reason": "автокредиты населения не про грузоперевозки", "annotator": "assistant-draft"}
+{"news_id": "seed-gold-august", "company_id": "U_34", "role": "cfo", "grade": 0, "reason": "золото не связано", "annotator": "assistant-draft"}
+{"news_id": "seed-gdp-h1", "company_id": "U_34", "role": "cfo", "grade": 2, "reason": "объем грузов зависит от промышленности", "annotator": "assistant-draft"}
+{"news_id": "seed-import-growth", "company_id": "U_34", "role": "cfo", "grade": 2, "reason": "импортные грузопотоки", "annotator": "assistant-draft"}
+{"news_id": "seed-labor-market", "company_id": "U_34", "role": "cfo", "grade": 2, "reason": "дефицит водителей", "annotator": "assistant-draft"}
+{"news_id": "seed-corp-results", "company_id": "U_34", "role": "cfo", "grade": 1, "reason": "общий фон прибыли", "annotator": "assistant-draft"}
+{"news_id": "seed-budget", "company_id": "U_34", "role": "cfo", "grade": 0, "reason": "бюджет мало влияет", "annotator": "assistant-draft"}
+{"news_id": "seed-consumption-peak", "company_id": "U_34", "role": "cfo", "grade": 1, "reason": "спрос на перевозки потребительских товаров", "annotator": "assistant-draft"}
+{"news_id": "seed-rushydro", "company_id": "U_34", "role": "cfo", "grade": 0, "reason": "рейтинг энергокомпании не про транспорт", "annotator": "assistant-draft"}
+{"news_id": "seed-mortgage", "company_id": "U_34", "role": "cfo", "grade": 0, "reason": "ипотека не про транспорт", "annotator": "assistant-draft"}
+{"news_id": "seed-rate-hold", "company_id": "U_36", "role": "ceo", "grade": 2, "reason": "лизинг транспорта и кредиты", "annotator": "assistant-draft"}
+{"news_id": "seed-inflation-week", "company_id": "U_36", "role": "ceo", "grade": 1, "reason": "инфляция затрат", "annotator": "assistant-draft"}
+{"news_id": "seed-fuel-prices", "company_id": "U_36", "role": "ceo", "grade": 3, "reason": "топливо — главная статья затрат перевозчика", "annotator": "assistant-draft"}
+{"news_id": "seed-ofz-yields", "company_id": "U_36", "role": "ceo", "grade": 1, "reason": "косвенно: стоимость долга", "annotator": "assistant-draft"}
+{"news_id": "seed-autoloan-limits", "company_id": "U_36", "role": "ceo", "grade": 0, "reason": "автокредиты населения не про грузоперевозки", "annotator": "assistant-draft"}
+{"news_id": "seed-gold-august", "company_id": "U_36", "role": "ceo", "grade": 0, "reason": "золото не связано", "annotator": "assistant-draft"}
+{"news_id": "seed-gdp-h1", "company_id": "U_36", "role": "ceo", "grade": 2, "reason": "объем грузов зависит от промышленности", "annotator": "assistant-draft"}
+{"news_id": "seed-import-growth", "company_id": "U_36", "role": "ceo", "grade": 2, "reason": "импортные грузопотоки", "annotator": "assistant-draft"}
+{"news_id": "seed-labor-market", "company_id": "U_36", "role": "ceo", "grade": 3, "reason": "дефицит водителей; важно для роли", "annotator": "assistant-draft"}
+{"news_id": "seed-corp-results", "company_id": "U_36", "role": "ceo", "grade": 1, "reason": "общий фон прибыли", "annotator": "assistant-draft"}
+{"news_id": "seed-budget", "company_id": "U_36", "role": "ceo", "grade": 0, "reason": "бюджет мало влияет", "annotator": "assistant-draft"}
+{"news_id": "seed-consumption-peak", "company_id": "U_36", "role": "ceo", "grade": 1, "reason": "спрос на перевозки потребительских товаров", "annotator": "assistant-draft"}
+{"news_id": "seed-rushydro", "company_id": "U_36", "role": "ceo", "grade": 0, "reason": "рейтинг энергокомпании не про транспорт", "annotator": "assistant-draft"}
+{"news_id": "seed-mortgage", "company_id": "U_36", "role": "ceo", "grade": 0, "reason": "ипотека не про транспорт", "annotator": "assistant-draft"}
+{"news_id": "seed-rate-hold", "company_id": "U_8", "role": "owner", "grade": 2, "reason": "лизинг транспорта и кредиты", "annotator": "assistant-draft"}
+{"news_id": "seed-inflation-week", "company_id": "U_8", "role": "owner", "grade": 1, "reason": "инфляция затрат", "annotator": "assistant-draft"}
+{"news_id": "seed-fuel-prices", "company_id": "U_8", "role": "owner", "grade": 3, "reason": "топливо — главная статья затрат перевозчика", "annotator": "assistant-draft"}
+{"news_id": "seed-ofz-yields", "company_id": "U_8", "role": "owner", "grade": 1, "reason": "косвенно: стоимость долга", "annotator": "assistant-draft"}
+{"news_id": "seed-autoloan-limits", "company_id": "U_8", "role": "owner", "grade": 0, "reason": "автокредиты населения не про грузоперевозки", "annotator": "assistant-draft"}
+{"news_id": "seed-gold-august", "company_id": "U_8", "role": "owner", "grade": 0, "reason": "золото не связано", "annotator": "assistant-draft"}
+{"news_id": "seed-gdp-h1", "company_id": "U_8", "role": "owner", "grade": 2, "reason": "объем грузов зависит от промышленности", "annotator": "assistant-draft"}
+{"news_id": "seed-import-growth", "company_id": "U_8", "role": "owner", "grade": 2, "reason": "импортные грузопотоки", "annotator": "assistant-draft"}
+{"news_id": "seed-labor-market", "company_id": "U_8", "role": "owner", "grade": 2, "reason": "дефицит водителей", "annotator": "assistant-draft"}
+{"news_id": "seed-corp-results", "company_id": "U_8", "role": "owner", "grade": 2, "reason": "общий фон прибыли; важно для роли", "annotator": "assistant-draft"}
+{"news_id": "seed-budget", "company_id": "U_8", "role": "owner", "grade": 0, "reason": "бюджет мало влияет", "annotator": "assistant-draft"}
+{"news_id": "seed-consumption-peak", "company_id": "U_8", "role": "owner", "grade": 1, "reason": "спрос на перевозки потребительских товаров", "annotator": "assistant-draft"}
+{"news_id": "seed-rushydro", "company_id": "U_8", "role": "owner", "grade": 0, "reason": "рейтинг энергокомпании не про транспорт", "annotator": "assistant-draft"}
+{"news_id": "seed-mortgage", "company_id": "U_8", "role": "owner", "grade": 0, "reason": "ипотека не про транспорт", "annotator": "assistant-draft"}
+{"news_id": "seed-rate-hold", "company_id": "U_35", "role": "cfo", "grade": 3, "reason": "проектное финансирование напрямую зависит от ставки", "annotator": "assistant-draft"}
+{"news_id": "seed-inflation-week", "company_id": "U_35", "role": "cfo", "grade": 1, "reason": "удорожание стройматериалов", "annotator": "assistant-draft"}
+{"news_id": "seed-fuel-prices", "company_id": "U_35", "role": "cfo", "grade": 1, "reason": "топливо для техники", "annotator": "assistant-draft"}
+{"news_id": "seed-ofz-yields", "company_id": "U_35", "role": "cfo", "grade": 2, "reason": "косвенно: стоимость долга; важно для роли", "annotator": "assistant-draft"}
+{"news_id": "seed-autoloan-limits", "company_id": "U_35", "role": "cfo", "grade": 0, "reason": "автокредиты не про стройку", "annotator": "assistant-draft"}
+{"news_id": "seed-gold-august", "company_id": "U_35", "role": "cfo", "grade": 0, "reason": "золото не связано", "annotator": "assistant-draft"}
+{"news_id": "seed-gdp-h1", "company_id": "U_35", "role": "cfo", "grade": 2, "reason": "в новости — стагнация строительства", "annotator": "assistant-draft"}
+{"news_id": "seed-import-growth", "company_id": "U_35", "role": "cfo", "grade": 1, "reason": "импортное оборудование", "annotator": "assistant-draft"}
+{"news_id": "seed-labor-market", "company_id": "U_35", "role": "cfo", "grade": 2, "reason": "нехватка строителей", "annotator": "assistant-draft"}
+{"news_id": "seed-corp-results", "company_id": "U_35", "role": "cfo", "grade": 1, "reason": "общий фон прибыли", "annotator": "assistant-draft"}
+{"news_id": "seed-budget", "company_id": "U_35", "role": "cfo", "grade": 2, "reason": "госзаказ зависит от бюджета", "annotator": "assistant-draft"}
+{"news_id": "seed-consumption-peak", "company_id": "U_35", "role": "cfo", "grade": 0, "reason": "розничный спрос не про стройку", "annotator": "assistant-draft"}
+{"news_id": "seed-rushydro", "company_id": "U_35", "role": "cfo", "grade": 0, "reason": "рейтинг энергокомпании не про стройку", "annotator": "assistant-draft"}
+{"news_id": "seed-mortgage", "company_id": "U_35", "role": "cfo", "grade": 3, "reason": "ипотека — спрос на жилье застройщика", "annotator": "assistant-draft"}
+{"news_id": "seed-rate-hold", "company_id": "U_40", "role": "ceo", "grade": 3, "reason": "проектное финансирование напрямую зависит от ставки", "annotator": "assistant-draft"}
+{"news_id": "seed-inflation-week", "company_id": "U_40", "role": "ceo", "grade": 1, "reason": "удорожание стройматериалов", "annotator": "assistant-draft"}
+{"news_id": "seed-fuel-prices", "company_id": "U_40", "role": "ceo", "grade": 1, "reason": "топливо для техники", "annotator": "assistant-draft"}
+{"news_id": "seed-ofz-yields", "company_id": "U_40", "role": "ceo", "grade": 1, "reason": "косвенно: стоимость долга", "annotator": "assistant-draft"}
+{"news_id": "seed-autoloan-limits", "company_id": "U_40", "role": "ceo", "grade": 0, "reason": "автокредиты не про стройку", "annotator": "assistant-draft"}
+{"news_id": "seed-gold-august", "company_id": "U_40", "role": "ceo", "grade": 0, "reason": "золото не связано", "annotator": "assistant-draft"}
+{"news_id": "seed-gdp-h1", "company_id": "U_40", "role": "ceo", "grade": 2, "reason": "в новости — стагнация строительства", "annotator": "assistant-draft"}
+{"news_id": "seed-import-growth", "company_id": "U_40", "role": "ceo", "grade": 1, "reason": "импортное оборудование", "annotator": "assistant-draft"}
+{"news_id": "seed-labor-market", "company_id": "U_40", "role": "ceo", "grade": 3, "reason": "нехватка строителей; важно для роли", "annotator": "assistant-draft"}
+{"news_id": "seed-corp-results", "company_id": "U_40", "role": "ceo", "grade": 1, "reason": "общий фон прибыли", "annotator": "assistant-draft"}
+{"news_id": "seed-budget", "company_id": "U_40", "role": "ceo", "grade": 2, "reason": "госзаказ зависит от бюджета", "annotator": "assistant-draft"}
+{"news_id": "seed-consumption-peak", "company_id": "U_40", "role": "ceo", "grade": 0, "reason": "розничный спрос не про стройку", "annotator": "assistant-draft"}
+{"news_id": "seed-rushydro", "company_id": "U_40", "role": "ceo", "grade": 0, "reason": "рейтинг энергокомпании не про стройку", "annotator": "assistant-draft"}
+{"news_id": "seed-mortgage", "company_id": "U_40", "role": "ceo", "grade": 3, "reason": "ипотека — спрос на жилье застройщика", "annotator": "assistant-draft"}
+{"news_id": "seed-rate-hold", "company_id": "U_16", "role": "owner", "grade": 3, "reason": "проектное финансирование напрямую зависит от ставки", "annotator": "assistant-draft"}
+{"news_id": "seed-inflation-week", "company_id": "U_16", "role": "owner", "grade": 1, "reason": "удорожание стройматериалов", "annotator": "assistant-draft"}
+{"news_id": "seed-fuel-prices", "company_id": "U_16", "role": "owner", "grade": 1, "reason": "топливо для техники", "annotator": "assistant-draft"}
+{"news_id": "seed-ofz-yields", "company_id": "U_16", "role": "owner", "grade": 1, "reason": "косвенно: стоимость долга", "annotator": "assistant-draft"}
+{"news_id": "seed-autoloan-limits", "company_id": "U_16", "role": "owner", "grade": 0, "reason": "автокредиты не про стройку", "annotator": "assistant-draft"}
+{"news_id": "seed-gold-august", "company_id": "U_16", "role": "owner", "grade": 0, "reason": "золото не связано", "annotator": "assistant-draft"}
+{"news_id": "seed-gdp-h1", "company_id": "U_16", "role": "owner", "grade": 2, "reason": "в новости — стагнация строительства", "annotator": "assistant-draft"}
+{"news_id": "seed-import-growth", "company_id": "U_16", "role": "owner", "grade": 1, "reason": "импортное оборудование", "annotator": "assistant-draft"}
+{"news_id": "seed-labor-market", "company_id": "U_16", "role": "owner", "grade": 2, "reason": "нехватка строителей", "annotator": "assistant-draft"}
+{"news_id": "seed-corp-results", "company_id": "U_16", "role": "owner", "grade": 2, "reason": "общий фон прибыли; важно для роли", "annotator": "assistant-draft"}
+{"news_id": "seed-budget", "company_id": "U_16", "role": "owner", "grade": 2, "reason": "госзаказ зависит от бюджета", "annotator": "assistant-draft"}
+{"news_id": "seed-consumption-peak", "company_id": "U_16", "role": "owner", "grade": 0, "reason": "розничный спрос не про стройку", "annotator": "assistant-draft"}
+{"news_id": "seed-rushydro", "company_id": "U_16", "role": "owner", "grade": 0, "reason": "рейтинг энергокомпании не про стройку", "annotator": "assistant-draft"}
+{"news_id": "seed-mortgage", "company_id": "U_16", "role": "owner", "grade": 3, "reason": "ипотека — спрос на жилье застройщика", "annotator": "assistant-draft"}
+{"news_id": "seed-rate-hold", "company_id": "U_26", "role": "cfo", "grade": 3, "reason": "инвестпрограммы в кредит; важно для роли", "annotator": "assistant-draft"}
+{"news_id": "seed-inflation-week", "company_id": "U_26", "role": "cfo", "grade": 0, "reason": "недельная инфляция не про металлургию", "annotator": "assistant-draft"}
+{"news_id": "seed-fuel-prices", "company_id": "U_26", "role": "cfo", "grade": 1, "reason": "логистика сырья", "annotator": "assistant-draft"}
+{"news_id": "seed-ofz-yields", "company_id": "U_26", "role": "cfo", "grade": 2, "reason": "косвенно: стоимость долга; важно для роли", "annotator": "assistant-draft"}
+{"news_id": "seed-autoloan-limits", "company_id": "U_26", "role": "cfo", "grade": 0, "reason": "автокредиты не про металлургию", "annotator": "assistant-draft"}
+{"news_id": "seed-gold-august", "company_id": "U_26", "role": "cfo", "grade": 1, "reason": "рынок металлов, но другой сегмент", "annotator": "assistant-draft"}
+{"news_id": "seed-gdp-h1", "company_id": "U_26", "role": "cfo", "grade": 2, "reason": "спрос со стороны промышленности", "annotator": "assistant-draft"}
+{"news_id": "seed-import-growth", "company_id": "U_26", "role": "cfo", "grade": 1, "reason": "конкуренция импортного металла", "annotator": "assistant-draft"}
+{"news_id": "seed-labor-market", "company_id": "U_26", "role": "cfo", "grade": 1, "reason": "персонал заводов", "annotator": "assistant-draft"}
+{"news_id": "seed-corp-results", "company_id": "U_26", "role": "cfo", "grade": 2, "reason": "прибыль промышленных компаний падает", "annotator": "assistant-draft"}
+{"news_id": "seed-budget", "company_id": "U_26", "role": "cfo", "grade": 1, "reason": "госзаказ на инфраструктуру", "annotator": "assistant-draft"}
+{"news_id": "seed-consumption-peak", "company_id": "U_26", "role": "cfo", "grade": 0, "reason": "розница не про металлургию", "annotator": "assistant-draft"}
+{"news_id": "seed-rushydro", "company_id": "U_26", "role": "cfo", "grade": 0, "reason": "рейтинг энергокомпании не про металлургию", "annotator": "assistant-draft"}
+{"news_id": "seed-mortgage", "company_id": "U_26", "role": "cfo", "grade": 1, "reason": "ипотека → стройка → спрос на арматуру", "annotator": "assistant-draft"}
+{"news_id": "seed-rate-hold", "company_id": "U_30", "role": "ceo", "grade": 2, "reason": "инвестпрограммы в кредит", "annotator": "assistant-draft"}
+{"news_id": "seed-inflation-week", "company_id": "U_30", "role": "ceo", "grade": 0, "reason": "недельная инфляция не про металлургию", "annotator": "assistant-draft"}
+{"news_id": "seed-fuel-prices", "company_id": "U_30", "role": "ceo", "grade": 1, "reason": "логистика сырья", "annotator": "assistant-draft"}
+{"news_id": "seed-ofz-yields", "company_id": "U_30", "role": "ceo", "grade": 1, "reason": "косвенно: стоимость долга", "annotator": "assistant-draft"}
+{"news_id": "seed-autoloan-limits", "company_id": "U_30", "role": "ceo", "grade": 0, "reason": "автокредиты не про металлургию", "annotator": "assistant-draft"}
+{"news_id": "seed-gold-august", "company_id": "U_30", "role": "ceo", "grade": 1, "reason": "рынок металлов, но другой сегмент", "annotator": "assistant-draft"}
+{"news_id": "seed-gdp-h1", "company_id": "U_30", "role": "ceo", "grade": 2, "reason": "спрос со стороны промышленности", "annotator": "assistant-draft"}
+{"news_id": "seed-import-growth", "company_id": "U_30", "role": "ceo", "grade": 1, "reason": "конкуренция импортного металла", "annotator": "assistant-draft"}
+{"news_id": "seed-labor-market", "company_id": "U_30", "role": "ceo", "grade": 2, "reason": "персонал заводов; важно для роли", "annotator": "assistant-draft"}
+{"news_id": "seed-corp-results", "company_id": "U_30", "role": "ceo", "grade": 2, "reason": "прибыль промышленных компаний падает", "annotator": "assistant-draft"}
+{"news_id": "seed-budget", "company_id": "U_30", "role": "ceo", "grade": 1, "reason": "госзаказ на инфраструктуру", "annotator": "assistant-draft"}
+{"news_id": "seed-consumption-peak", "company_id": "U_30", "role": "ceo", "grade": 0, "reason": "розница не про металлургию", "annotator": "assistant-draft"}
+{"news_id": "seed-rushydro", "company_id": "U_30", "role": "ceo", "grade": 0, "reason": "рейтинг энергокомпании не про металлургию", "annotator": "assistant-draft"}
+{"news_id": "seed-mortgage", "company_id": "U_30", "role": "ceo", "grade": 1, "reason": "ипотека → стройка → спрос на арматуру", "annotator": "assistant-draft"}
+{"news_id": "seed-rate-hold", "company_id": "U_43", "role": "owner", "grade": 2, "reason": "инвестпрограммы в кредит", "annotator": "assistant-draft"}
+{"news_id": "seed-inflation-week", "company_id": "U_43", "role": "owner", "grade": 0, "reason": "недельная инфляция не про металлургию", "annotator": "assistant-draft"}
+{"news_id": "seed-fuel-prices", "company_id": "U_43", "role": "owner", "grade": 1, "reason": "логистика сырья", "annotator": "assistant-draft"}
+{"news_id": "seed-ofz-yields", "company_id": "U_43", "role": "owner", "grade": 1, "reason": "косвенно: стоимость долга", "annotator": "assistant-draft"}
+{"news_id": "seed-autoloan-limits", "company_id": "U_43", "role": "owner", "grade": 0, "reason": "автокредиты не про металлургию", "annotator": "assistant-draft"}
+{"news_id": "seed-gold-august", "company_id": "U_43", "role": "owner", "grade": 1, "reason": "рынок металлов, но другой сегмент", "annotator": "assistant-draft"}
+{"news_id": "seed-gdp-h1", "company_id": "U_43", "role": "owner", "grade": 2, "reason": "спрос со стороны промышленности", "annotator": "assistant-draft"}
+{"news_id": "seed-import-growth", "company_id": "U_43", "role": "owner", "grade": 1, "reason": "конкуренция импортного металла", "annotator": "assistant-draft"}
+{"news_id": "seed-labor-market", "company_id": "U_43", "role": "owner", "grade": 1, "reason": "персонал заводов", "annotator": "assistant-draft"}
+{"news_id": "seed-corp-results", "company_id": "U_43", "role": "owner", "grade": 3, "reason": "прибыль промышленных компаний падает; важно для роли", "annotator": "assistant-draft"}
+{"news_id": "seed-budget", "company_id": "U_43", "role": "owner", "grade": 1, "reason": "госзаказ на инфраструктуру", "annotator": "assistant-draft"}
+{"news_id": "seed-consumption-peak", "company_id": "U_43", "role": "owner", "grade": 0, "reason": "розница не про металлургию", "annotator": "assistant-draft"}
+{"news_id": "seed-rushydro", "company_id": "U_43", "role": "owner", "grade": 0, "reason": "рейтинг энергокомпании не про металлургию", "annotator": "assistant-draft"}
+{"news_id": "seed-mortgage", "company_id": "U_43", "role": "owner", "grade": 1, "reason": "ипотека → стройка → спрос на арматуру", "annotator": "assistant-draft"}

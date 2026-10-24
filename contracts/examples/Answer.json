@@ -1,0 +1,29 @@
+{
+  "insight_id": "ins-0123456789ab",
+  "question": "Какие источники использованы?",
+  "answer": "Разбор опирается на новость и данные компании.",
+  "claims": [
+    {
+      "text": "Разбор опирается на новость.",
+      "origin": "fact",
+      "source_ids": [
+        "news:seed-rate-hold"
+      ],
+      "features": []
+    }
+  ],
+  "sources": [
+    {
+      "source_id": "news:seed-rate-hold",
+      "kind": "news",
+      "title": "Банк России сохранил ключевую ставку на уровне 14% годовых",
+      "url": null,
+      "doc_id": null,
+      "page": null,
+      "date": "2026-09-11",
+      "excerpt": "11 сентября 2026 года совет директоров Банка России сохранил ключевую ставку на уровне 14% годовых."
+    }
+  ],
+  "mode": "rules",
+  "refused": false
+}

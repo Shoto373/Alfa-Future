@@ -3,12 +3,13 @@
     cd backend && python tools/check_imports.py      # код выхода 1 и список нарушений, если они есть
 
 Слои снизу вверх; модуль может импортировать только свой или нижние слои:
-  core     — config, database, models, cache, vector_store, embeddings, vectors, llm, llm_usage, notify, errors, schemas, text
+  core     — config, database, models, cache, vector_store, embeddings, vectors, llm, llm_usage, notify, errors, schemas, text,
+             ratelimit, observability
   domain   — companies, news, knowledge, учетные записи (auth.store, auth.security, auth.schemas)
   ranking  — ranking
   agent    — agent
-  services — storage, pipeline, warmup, quality, демо, оценка качества, перенос данных, smoke
-  api      — api, auth.deps, auth.router, main
+  services — storage, pipeline, warmup, quality, worker, демо, оценка качества, перенос данных, smoke
+  api      — api, auth.deps, auth.router, main, run
 Импорт внутри функции скрывает зависимость и цикл — разрешен только для необязательной библиотеки
 с пометкой «# optional» в той же строке. Тесты — tests/test_architecture.py.
 """
@@ -24,13 +25,17 @@ MAX_FUNCTION_LINES = 80
 
 LAYERS = [
     ("core", ["app.config", "app.database", "app.models", "app.cache", "app.vector_store", "app.embeddings", "app.vectors",
-              "app.llm", "app.llm_usage", "app.notify", "app.errors", "app.schemas", "app.text"]),
-    ("domain", ["app.companies", "app.news", "app.knowledge", "app.auth.store", "app.auth.security", "app.auth.schemas"]),
+              "app.llm", "app.llm_usage", "app.notify", "app.errors", "app.schemas", "app.text", "app.ratelimit",
+              "app.observability"]),
+    ("domain", ["app.companies", "app.news", "app.knowledge", "app.auth.store", "app.auth.security", "app.auth.schemas",
+                "app.auth.oidc"]),
     ("ranking", ["app.ranking"]),
     ("agent", ["app.agent"]),
     ("services", ["app.storage", "app.pipeline", "app.warmup", "app.quality", "app.demo", "app.demo_accounts",
-                  "app.precompute_demo", "app.eval_quality", "app.eval_classify", "app.legacy_import", "app.smoke"]),
-    ("api", ["app.api", "app.auth.deps", "app.auth.router", "app.main"]),
+                  "app.precompute_demo", "app.eval_quality", "app.eval_classify", "app.legacy_import", "app.smoke",
+                  "app.ranking_eval", "app.labeling",
+                  "app.worker"]),
+    ("api", ["app.api", "app.auth.deps", "app.auth.router", "app.main", "app.run"]),
 ]
 PACKAGES = {"app", "app.agent", "app.api", "app.auth", "app.companies", "app.knowledge", "app.news"}  # пустые __init__
 

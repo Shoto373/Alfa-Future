@@ -52,6 +52,11 @@ class Smoke:
         self.check("конвейер новостей без ошибки", not p.get("error"),
                    f"состояние {p.get('state')}, интервал {p.get('interval_minutes')} мин, последний запуск {p.get('started_at')}")
         self.check("в базе есть новости", (m.get("news") or 0) > 0, f"{m.get('news')} новостей")
+        if "worker" in m:  # версии со спринта 3: фоновые задачи выполняет отдельный воркер
+            w = m["worker"]
+            q = w.get("queue") or {}
+            self.check("фоновый воркер работает", bool(w.get("alive")) and not q.get("dead"),
+                       f"последний пульс {w.get('last_seen')}, очередь {q.get('queued', 0)}, мертвых задач {q.get('dead', 0)}")
         self.check("расходы LLM не открыты без входа", "llm_usage" not in (m.get("llm") or {}))
 
     def brute_force(self) -> None:

@@ -27,7 +27,7 @@ SNAPSHOTS = Path(__file__).with_name("fixtures") / "characterization"
 SECTORS = ("metallurgy", "auto")
 ROLES = ("cfo", "ceo", "owner")
 NEWS = ("seed-rate-hold", "seed-inflation-week", "seed-fuel-prices", "seed-autoloan-limits")
-VOLATILE = {"insight_id", "request_id", "created_at", "duration_ms", "total_duration_ms", "ts"}
+VOLATILE = {"insight_id", "request_id", "created_at", "duration_ms", "total_duration_ms", "ts", "trace_id"}
 TIMING = re.compile(r"\d+(?:[.,]\d+)? мс")
 FIXED_NOW = datetime(2026, 9, 20, 12, 0, tzinfo=timezone.utc)
 
@@ -48,7 +48,9 @@ def freeze_clock(monkeypatch) -> None:
 
 def normalize(value):
     if isinstance(value, dict):
-        return {k: normalize(v) for k, v in sorted(value.items()) if k not in VOLATILE}
+        # output шага, где был только trace_id (наблюдаемость, SPR3-05), сравнивается как пустой — как до него.
+        return {k: (None if k == "output" and v and set(v) == {"trace_id"} else normalize(v))
+                for k, v in sorted(value.items()) if k not in VOLATILE}
     if isinstance(value, list):
         return [normalize(v) for v in value]
     if isinstance(value, str):

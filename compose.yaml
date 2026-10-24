@@ -28,16 +28,19 @@ services:
       retries: 20
     restart: unless-stopped
 
+  # Два экземпляра API за nginx (сервис nginx ниже), фоновые задачи — отдельный worker (SPR3-01).
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    ports:
-      - "127.0.0.1:${API_PORT:-8000}:8000"
+    image: alfa-backend
+    deploy:
+      replicas: ${API_REPLICAS:-2}
     env_file:
       - path: .env
         required: false
-    environment:
+    environment: &backend-env
+      ROLE: api
       DATABASE_URL: ""
       PGHOST: postgres
       PGDATABASE: alfa
@@ -49,6 +52,13 @@ services:
       FRONTEND_ORIGIN: http://localhost:${WEB_PORT:-3000}
       ANALYSIS_TIMEOUT_SECONDS: "150"
       REDIS_URL: redis://redis:6379/0
+      # Заглушка лицензированных лент Интерфакс/ПРАЙМ (SPR3-02): демо-новости о компаниях профилей
+      # и их контрагентах. Реальные ленты подключаются только по договору — в docker-compose.yml ее нет.
+      LICENSED_FEED_DIR: ${LICENSED_FEED_DIR-/app/app/news/sources/demo}
+      # Трассы этапов агента — в локальный Tempo (профиль monitoring: make up-monitoring); пусто — не экспортируются.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT-}
+      # Процессов API в каждом экземпляре backend (app/run.py); воркер переменную не использует.
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
       # Локальная проверка: демо-сотрудник банка видит метрики, расходы и аудит (/metrics, /audit).
       # Только для локального запуска — в production (docker-compose.yml) значения по умолчанию нет.
       OPERATOR_EMAILS: ${OPERATOR_EMAILS:-operator@alfa.test}
@@ -56,7 +66,12 @@ services:
       # Пароль известен всем — поэтому только локально; в docker-compose.yml этих переменных нет.
       DEMO_ACCOUNTS: ${DEMO_ACCOUNTS:-1}
       DEMO_PASSWORD: ${DEMO_PASSWORD:-alfa-demo-2026}
-    volumes:
+      # Вход через Альфа-ID (OIDC): локально — Keycloak из профиля auth (make up-auth); пусто — выключен.
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_INTERNAL_ISSUER: ${OIDC_INTERNAL_ISSUER:-}
+      OIDC_REDIRECT_URI: http://localhost:${API_PORT:-8000}/api/v1/auth/oidc/callback
+      AUTH_PASSWORD_ENABLED: ${AUTH_PASSWORD_ENABLED:-1}
+    volumes: &backend-volumes
       # Реальные CSV кейса: CASE_DATA_DIR=./контекст/data docker compose up (по умолчанию — синтетика)
       - ${CASE_DATA_DIR:-./data/synthetic}:/data/case:ro
       - ${BANK_PDF_HOST_DIR:-./data/materials/an}:/data/bank_pdf:ro
@@ -78,6 +93,70 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  # Фоновый воркер: сбор новостей, предрасчет разборов, переклассификация, очистка резервов LLM.
+  # Остановка воркера не мешает API: новости просто не обновляются, пока он не запущен снова.
+  worker:
+    image: alfa-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      <<: *backend-env
+      ROLE: worker
+    volumes: *backend-volumes
+    healthcheck:
+      test: ["CMD", "python", "-c", "from app.worker.runner import healthy; raise SystemExit(0 if healthy() else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+    restart: unless-stopped
+
+  # Вход в API для браузера и интерфейса: распределяет запросы по экземплярам backend.
+  nginx:
+    image: nginx:1.27.5-alpine
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:80"
+    volumes:
+      - ./nginx/local.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+  # Демо-IdP (OIDC) вместо Альфа-ID: реалм alfa, клиент alfa-pulse (PKCE), пилотные пользователи
+  # pilot@alfa.test и pilot-ceo@alfa.test (пароль alfa-demo-2026, компания U_9). Профиль auth: make up-auth.
+  keycloak:
+    profiles: [auth]
+    image: quay.io/keycloak/keycloak:26.0.7
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-alfa-demo-2026}
+      KC_HOSTNAME: http://localhost:8180
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "127.0.0.1:8180:8080"
+    volumes:
+      - ./infra/keycloak/realm-alfa.json:/opt/keycloak/data/import/realm-alfa.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\r\n\r\n' >&3 && grep -q UP <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
 
   tests:
     profiles: [test]
@@ -117,6 +196,75 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # Наблюдаемость (SPR3-05), профиль monitoring: make up-monitoring. Grafana — http://localhost:3001
+  # (дашборды «Сервис», «Агент и LLM», «Воркер»), Prometheus с пятью алертами, Alertmanager → Telegram через backend,
+  # Tempo — трассы разборов, backup — ежедневный pg_dump с ротацией 14 дней и еженедельной проверкой восстановления.
+  prometheus:
+    profiles: [monitoring]
+    image: prom/prometheus:v2.55.1
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=30d"]
+    volumes:
+      - ./infra/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    restart: unless-stopped
+
+  alertmanager:
+    profiles: [monitoring]
+    image: prom/alertmanager:v0.27.0
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+    volumes:
+      - ./infra/alertmanager:/etc/alertmanager:ro
+    restart: unless-stopped
+
+  tempo:
+    profiles: [monitoring]
+    image: grafana/tempo:2.6.1
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    volumes:
+      - ./infra/tempo:/etc/tempo:ro
+      - tempo_data:/var/tempo
+    restart: unless-stopped
+
+  grafana:
+    profiles: [monitoring]
+    image: grafana/grafana:11.3.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-alfa-demo-2026}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3001:3000"
+    depends_on: [prometheus, tempo]
+    restart: unless-stopped
+
+  backup:
+    profiles: [monitoring]
+    image: pgvector/pgvector:0.8.1-pg17-trixie
+    entrypoint: ["bash", "/infra/backup/run.sh"]
+    environment:
+      PGHOST: postgres
+      PGDATABASE: alfa
+      PGUSER: alfa
+      PGPASSWORD: ${POSTGRES_PASSWORD:-alfa-local}
+      BACKUP_DIR: /backups
+      BACKUP_KEEP_DAYS: "14"
+    volumes:
+      - ./infra/backup:/infra/backup:ro
+      - backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   runtime:
   postgres_data:
+  prometheus_data:
+  tempo_data:
+  backups:

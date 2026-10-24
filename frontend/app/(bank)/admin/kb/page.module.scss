@@ -1,0 +1,238 @@
+@use "../../../../styles/breakpoints";
+
+// Экран аналитика банка (SPR3-03): документы, страницы PDF и черновики тезисов.
+.docs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+
+  li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 16px;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  li > div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+}
+
+.status {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--bg);
+  white-space: nowrap;
+}
+
+.ready {
+  background: #e3f6e8;
+  color: #136b2e;
+}
+
+.failed {
+  background: #fde7e6;
+  color: #a3170e;
+}
+
+.queued,
+.processing {
+  background: #fff1d6;
+  color: #8a5300;
+}
+
+.counts {
+  font-size: 13px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.error {
+  color: #a3170e;
+}
+
+.upload {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+
+  h1 {
+    margin: 0 0 4px;
+    font-size: 22px;
+  }
+}
+
+.back {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  color: var(--ink-2);
+  text-decoration: none;
+  font-size: 14px;
+
+  svg {
+    transform: rotate(90deg);
+  }
+}
+
+.filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  button {
+    border: 0;
+    border-radius: 999px;
+    padding: 8px 14px;
+    background: var(--card);
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .on {
+    background: var(--dark);
+    color: var(--white);
+  }
+}
+
+.page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.scan {
+  margin: 0;
+  position: sticky;
+  top: 84px;
+  background: var(--card);
+  border-radius: 20px;
+  padding: 12px;
+  box-shadow: var(--shadow);
+
+  figcaption {
+    font-size: 13px;
+    color: var(--ink-2);
+    margin-bottom: 8px;
+  }
+
+  img {
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+  }
+
+  pre {
+    white-space: pre-wrap;
+    font: inherit;
+    font-size: 13px;
+    max-height: 70vh;
+    overflow: auto;
+  }
+}
+
+.drafts {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.draft {
+  background: var(--card);
+  border-radius: 20px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  li {
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 6px;
+  }
+}
+
+.ok {
+  background: #e3f6e8;
+  color: #136b2e;
+}
+
+.fail {
+  background: #fde7e6;
+  color: #a3170e;
+  font-weight: 600;
+}
+
+.quote {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--line);
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.reason {
+  flex: 1;
+  min-width: 160px;
+}
+
+@include breakpoints.down(breakpoints.$tablet) {
+  .page {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .scan {
+    position: static;
+  }
+
+  .upload {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .docs li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+}

@@ -17,6 +17,8 @@ build/
 *.docx
 *.png
 *.conf
+# Конфигурации nginx (production и локальный стенд из 2 API) нужны compose; прочие *.conf (phone1.conf) — нет.
+!/nginx/*.conf
 extracted_spec.txt
 generate_word_report.py
 TZ_AND_PROMPTS_ALFA_PULSE.md
@@ -48,14 +50,20 @@ playwright-report/
 /контекст/
 
 # Not needed on the server: local docs, agent notes, generators, e2e tools, legacy app
+# docs/ (отчеты спринтов), contracts/ (контракт API) и infra/ (мониторинг, бэкапы) — часть репозитория.
 *.md
 !/README.md
-/docs/
-/infra/
-/contracts/
+!/docs/
+!/docs/**/*.md
 /tests/
 /app/
 /Dockerfile
 /requirements.txt
-/backend/scripts/
+/backend/scripts/*
+# Оценка и калибровка ранжирования (SPR3-06) — в репозитории; остальные локальные скрипты — нет.
+!/backend/scripts/_labels.py
+!/backend/scripts/eval_ranking.py
+!/backend/scripts/fit_ranking.py
 .idea/
+
+coverage/

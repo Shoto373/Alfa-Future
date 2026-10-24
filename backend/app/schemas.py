@@ -1,4 +1,4 @@
-"""Публичный контракт 1.0.0 (contracts/schemas/common.json генерируется из этих моделей).
+"""Публичный контракт 1.1.0, формат разбора 1.0.0 (contracts/schemas/common.json генерируется из этих моделей).
 
 Ключевой принцип — происхождение каждого утверждения (Claim.origin):
     fact        — подтверждено текстом новости;
@@ -11,7 +11,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Формат разбора (Insight.schema_version): меняется, только если меняются поля разбора.
 SCHEMA_VERSION = "1.0.0"
+# Версия контракта API (openapi.json, заголовок X-API-Version): 1.1.0 — аддитивно добавлены адреса спринта 3
+# (экран аналитика, разметка ленты, организации в новости). Политика — docs/api-versioning.md.
+API_VERSION = "1.1.0"
 
 Role = Literal["owner", "ceo", "cfo", "accountant", "treasurer", "clevel"]
 Origin = Literal["fact", "client_data", "bank", "ai"]
@@ -21,7 +25,9 @@ Effect = Literal["neg", "pos", "mixed", "unclear", "none"]
 
 
 class Strict(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # В ответах API поле со значением по умолчанию всегда присутствует (model_dump) — так и в контракте:
+    # сгенерированные типы интерфейса не считают его необязательным.
+    model_config = ConfigDict(extra="forbid", json_schema_serialization_defaults_required=True)
 
 
 class InsightRequest(Strict):
@@ -65,6 +71,41 @@ class NewsCreateRequest(Strict):
 
 class LLMSwitchRequest(Strict):
     paused: bool
+
+
+# Проверка аналитиком тезисов из распознанных PDF (SPR3-03).
+class KbDraftPatch(Strict):
+    topic: str | None = Field(None, max_length=40)
+    sectors: list[str] | None = Field(None, max_length=8)
+    metric: str | None = Field(None, max_length=300)
+    value: str | None = Field(None, max_length=100)
+    horizon: str | None = Field(None, max_length=20)
+    quote: str | None = Field(None, max_length=1000)
+    text: str | None = Field(None, max_length=1000)
+    stance: Literal["forecast"] | None = None
+    forecast_values: dict[str, float] | None = None
+
+
+class LabelRequest(Strict):
+    """Оценка аналитика для пары «новость × компания × роль» (SPR3-06)."""
+    news_id: str = Field(..., min_length=1, max_length=64)
+    company_id: str = Field(..., min_length=1, max_length=64)
+    role: Literal["owner", "ceo", "cfo", "accountant", "treasurer", "clevel"]
+    grade: int = Field(..., ge=0, le=3)
+    reason: str = Field("", max_length=500)
+
+
+class KbApproveRequest(Strict):
+    supersedes: str | None = Field(None, max_length=64)
+
+
+class KbRejectRequest(Strict):
+    reason: str = Field(..., min_length=1, max_length=300)
+
+
+class KbDocumentMeta(Strict):
+    title: str | None = Field(None, max_length=300)
+    date: str | None = Field(None, pattern=r"^\d{4}-\d{2}(-\d{2})?$")
 
 
 class FeedbackRequest(Strict):

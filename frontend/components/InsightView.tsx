@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { Insight, Role } from "@/lib/types";
 import Chat from "./Chat";
 import BankPosition from "./insight/BankPosition";
@@ -27,9 +27,9 @@ const scrollToSource = (n: number) =>
   requestAnimationFrame(() => document.getElementById(`src-${n}`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
 
 export default function InsightView({ insight: ins, onRefresh, refreshing, upgrading = false, upgradeFailed = false,
-  perspective, ownRole, onPerspective }: {
+  perspective, ownRole, onPerspective, mentions }: {
   insight: Insight; onRefresh: () => void; refreshing: boolean; upgrading?: boolean; upgradeFailed?: boolean;
-  perspective?: Role; ownRole?: Role; onPerspective?: (role: Role) => void;
+  perspective?: Role; ownRole?: Role; onPerspective?: (role: Role) => void; mentions?: ReactNode;
 }) {
   const { groups, index } = groupSources(ins);
   const [showTrace, setShowTrace] = useState(false);
@@ -59,6 +59,7 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
         perspective={perspective} ownRole={ownRole} onPerspective={onPerspective} />
 
       {showTrace && <TraceView trace={ins.trace} checks={ins.quality.checks} />}
+      {mentions}
 
       <div className={styles.insightGrid}>
         <Card title="1. Что произошло" actions={fb("what_happened")}>

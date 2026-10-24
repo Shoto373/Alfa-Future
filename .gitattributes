@@ -1,2 +1,6 @@
 /deploy/*.sh text eol=lf
 /deploy/gitops/* text eol=lf
+# Файлы, которые монтируются в Linux-контейнеры: переводы строк LF и при checkout на Windows.
+/infra/**/*.sh text eol=lf
+/infra/**/*.yml text eol=lf
+/nginx/*.conf text eol=lf

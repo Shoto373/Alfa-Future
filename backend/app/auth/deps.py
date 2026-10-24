@@ -4,7 +4,7 @@ import ipaddress
 
 from fastapi import Cookie, Depends, Request
 
-from app import config
+from app import config, observability
 from app.errors import ApiError
 from app.auth import store
 
@@ -35,11 +35,14 @@ def current_user(session: str | None = Cookie(None)) -> dict:
     user = store.session_user(session)
     if user is None:
         raise ApiError("UNAUTHORIZED")
-    return store.user_view(user)
+    view = store.user_view(user)
+    observability.set_user(view["user_id"])  # в логе запроса — псевдоним пользователя
+    return view
 
 
 def member_of(user: dict, company_id: str) -> dict:
     """Членство пользователя в компании; чужая и несуществующая компании неразличимы (403)."""
+    observability.set_company(company_id)
     m = next((m for m in user["memberships"] if m["company_id"] == company_id), None)
     if m is None:
         raise ApiError("FORBIDDEN")

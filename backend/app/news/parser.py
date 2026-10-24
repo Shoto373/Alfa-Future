@@ -1,4 +1,4 @@
-"""Сбор новостей: RSS-ленты и загрузка статьи по URL.
+"""Загрузка из сети: RSS-ленты и статья по URL (сбор по источникам — news.sources.registry).
 
 Безопасность: только http/https, запрет адресов внутренних сетей (SSRF),
 ограничение размера ответа и тайм-аут. Текст из сети — недоверенные данные:
@@ -10,14 +10,13 @@ import ipaddress
 import re
 import socket
 import xml.etree.ElementTree as ET
-from concurrent.futures import ThreadPoolExecutor
 from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse
 
 import httpx
 
 from app import config
-from app.news import semantic, store
+from app.news import store
 
 MAX_BYTES = 2_000_000
 TIMEOUT = 10.0
@@ -157,35 +156,3 @@ def fetch_article(url: str) -> dict:
         raise FetchError("Не удалось извлечь текст статьи")
     host = urlparse(url).hostname or "web"
     return store.make_item(title, text, host, url, None, "user", llm=True)
-
-
-def refresh() -> dict:
-    """Опрашивает настроенные RSS-ленты. Ошибки источников не прерывают сбор."""
-    report = {"added": 0, "duplicates": 0, "skipped": 0, "full_text": 0, "sources": []}
-    for source in config.rss_sources():
-        entry = {"name": source["name"], "url": source["url"], "fetched": 0, "error": None}
-        try:
-            entries = rss_entries(_get(source["url"]))[: config.rss_max_items()]
-            entry["fetched"] = len(entries)
-            # Уже сохраненные новости не классифицируются заново (это самая дорогая часть опроса),
-            # а векторы новых считаются одной пачкой.
-            fresh = [e for e in entries if not store.known(e["title"], e["text"])]
-            report["duplicates"] += len(entries) - len(fresh)
-            # Полный текст статьи (параллельно): больше фактов, чисел и участников, чем в анонсе ленты.
-            with ThreadPoolExecutor(max_workers=6) as pool:
-                texts = list(pool.map(lambda e: full_text(e["url"], e["text"]), fresh))
-            for e, text in zip(fresh, texts):
-                report["full_text"] += text is not e["text"]
-                e["text"] = text
-            semantic.prime([store.clean(e["title"], e["text"]) for e in fresh])
-            for e in fresh:
-                item = store.make_item(e["title"], e["text"], source["name"], e["url"], e["published_at"], "rss", llm=True)
-                if not item["classification"]["topics"]:
-                    report["skipped"] += 1  # не относится к бизнес-темам таксономии
-                    continue
-                _, created = store.add(item)
-                report["added" if created else "duplicates"] += 1
-        except (FetchError, httpx.HTTPError, ET.ParseError) as exc:
-            entry["error"] = str(exc)[:200]
-        report["sources"].append(entry)
-    return report

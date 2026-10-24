@@ -5,11 +5,16 @@ app.embeddings) и бонусы за совпадение тем и отрасл
 сформулированный другими словами; без модели остается только BM25.
 Свежие материалы получают приоритет; устаревшие (stale) — штраф и пометку.
 Каждый результат несет doc_id и страницу, чтобы вывод можно было проверить.
+
+Тезисы — из bank_analytics.json (выписаны вручную) и опубликованные аналитиком из распознанных PDF
+(knowledge.ingest, SPR3-03). Публикация увеличивает ревизию knowledge_rev: все экземпляры API
+перечитывают базу не позже чем через REV_RECHECK_SECONDS. Черновики сюда не попадают.
 """
 
 import json
 import hashlib
 import math
+import time
 from collections import Counter
 from datetime import date
 from functools import lru_cache
@@ -23,6 +28,10 @@ from sqlalchemy import select, func
 from app.models import BankDocument, BankThesis, BankProduct
 
 KB_FILE = Path(__file__).with_name("bank_analytics.json")
+REV_KEY = "knowledge_rev"
+REV_RECHECK_SECONDS = 3.0
+KB_LOCK = 72810404
+_rev_memo: tuple[float, int] = (0.0, 0)
 
 
 _signature_memo: tuple[tuple[int, int], str] | None = None
@@ -38,21 +47,36 @@ def _signature() -> str:
     return _signature_memo[1]
 
 
+def _revision() -> int:
+    """Ревизия опубликованных тезисов (меняется при публикации из распознанных PDF)."""
+    global _rev_memo
+    if time.monotonic() - _rev_memo[0] > REV_RECHECK_SECONDS:
+        _rev_memo = (time.monotonic(), int(database.state(REV_KEY) or 0))
+    return _rev_memo[1]
+
+
+def _key() -> str:
+    return f"{_signature()}:{_revision()}"
+
+
 def _kb() -> dict:
-    return _index(config.database_url(), config.database_schema(), _signature())
+    return _index(config.database_url(), config.database_schema(), _signature(), _revision())
 
 
 @lru_cache(maxsize=2)
-def _index(url: str, schema: str, signature: str) -> dict:
+def _index(url: str, schema: str, signature: str, _rev: int) -> dict:
     source = json.loads(KB_FILE.read_text(encoding="utf-8"))
     with database.session() as db:
-        db.execute(select(func.pg_advisory_xact_lock(72810404)))
+        db.execute(select(func.pg_advisory_xact_lock(KB_LOCK)))
         if database.state("knowledge", db) != signature:
             for d in source["documents"]:
                 db.merge(BankDocument(doc_id=d["doc_id"], payload=d))
             db.flush()  # Documents precede thesis foreign keys.
+            # Замещение тезиса более новым (публикация аналитиком) хранится в базе и не теряется при обновлении файла.
+            replaced = {r.thesis_id: r.payload for r in db.scalars(select(BankThesis)) if r.payload.get("superseded_by")}
             for t in source["theses"]:
-                db.merge(BankThesis(thesis_id=t["id"], doc_id=t["doc_id"], page=t["page"], payload=t))
+                keep = {k: replaced[t["id"]][k] for k in ("stale", "stale_reason", "superseded_by")} if t["id"] in replaced else {}
+                db.merge(BankThesis(thesis_id=t["id"], doc_id=t["doc_id"], page=t["page"], payload={**t, **keep}))
             for p in source["products"]:
                 db.merge(BankProduct(product_id=p["id"], payload=p))
             db.flush()
@@ -84,6 +108,11 @@ def document(doc_id: str) -> dict | None:
 
 def thesis(thesis_id: str) -> dict | None:
     return next((_public(t) for t in _kb()["theses"] if t["id"] == thesis_id), None)
+
+
+def all_theses() -> list[dict]:
+    """Все опубликованные тезисы с датой документа и пометкой stale (проверки черновиков, дубли, замещение)."""
+    return [_public(t) for t in _kb()["theses"]]
 
 
 def products() -> list[dict]:
@@ -148,7 +177,7 @@ def _dense(query: str) -> dict[str, float] | None:
     model = embeddings.signature()
     if model == "emb:off":
         return None
-    index = _thesis_vectors(_signature(), model)
+    index = _thesis_vectors(_key(), model)
     qv = embeddings.embed([query[:600]]) if index else None
     if qv is None:
         return None
@@ -161,8 +190,34 @@ def warm() -> int:
     _kb()
     model = embeddings.signature()
     if model != "emb:off":
-        _thesis_vectors(_signature(), model)
+        _thesis_vectors(_key(), model)
     return len(_kb()["theses"])
+
+
+def publish(thesis: dict, document: dict, supersedes: str | None = None) -> dict:
+    """Опубликовать проверенный аналитиком тезис: документ (если новый), тезис и замещение прежнего.
+
+    Замещенный тезис помечается stale со ссылкой superseded_by: поиск понижает его, а агент видит пересмотр прогноза."""
+    with database.session() as db:
+        db.execute(select(func.pg_advisory_xact_lock(KB_LOCK)))
+        if db.get(BankDocument, document["doc_id"]) is None:
+            db.add(BankDocument(doc_id=document["doc_id"], payload=document))
+            db.flush()
+        db.merge(BankThesis(thesis_id=thesis["id"], doc_id=thesis["doc_id"], page=thesis["page"], payload=thesis))
+        if supersedes:
+            old = db.get(BankThesis, supersedes)
+            if old is not None:
+                old.payload = {**old.payload, "stale": True, "superseded_by": thesis["id"],
+                               "stale_reason": f"Пересмотрен в документе {document['title']} ({document['date']})"}
+        database.set_state(REV_KEY, int(database.state(REV_KEY, db) or 0) + 1, db)
+    reset_revision()
+    return thesis
+
+
+def reset_revision() -> None:
+    """Перечитать ревизию при следующем обращении (после публикации в этом процессе)."""
+    global _rev_memo
+    _rev_memo = (0.0, 0)
 
 
 def search(query: str = "", topics: list[str] | None = None, sectors: list[str] | None = None,

@@ -1,24 +1,47 @@
 """Глобальные обработчики ошибок, CORS, лимит тела и журналирование."""
 
+import json
 import logging
 import re
 import time
 import uuid
+from urllib.parse import parse_qs
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
-from app import config
+from app import config, observability
 from app.api.errors import error_response
 from app.errors import ApiError
+from app.schemas import API_VERSION
 
 logger = logging.getLogger("app.api")
 
 MAX_BODY_BYTES = 64 * 1024
-# Загрузка файла компании (CSV/PDF) — единственный адрес с большим телом запроса.
+# Адреса с большим телом запроса: файл компании (CSV/PDF, 5 МБ) и PDF аналитики банка на распознавание (20 МБ).
 UPLOAD_MAX_BYTES = 5 * 1024 * 1024 + 1024
 UPLOAD_PATH = re.compile(r"^/api/v1/companies/[^/]+/extra/files$")
+KB_UPLOAD_MAX_BYTES = 20 * 1024 * 1024 + 1024
+KB_UPLOAD_PATH = re.compile(r"^/api/v1/admin/kb/documents$")
+
+
+# Заголовки безопасности всех ответов API (SPR3-04). Ответы JSON дополнительно запрещают любую загрузку
+# ресурсов (CSP); документация /docs и PDF банка без CSP — им нужны свои скрипты и встроенный просмотр.
+SECURITY_HEADERS = [
+    (b"x-content-type-options", b"nosniff"),
+    (b"x-frame-options", b"DENY"),
+    (b"referrer-policy", b"strict-origin-when-cross-origin"),
+    (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
+]
+JSON_CSP = (b"content-security-policy", b"default-src 'none'; frame-ancestors 'none'")
+
+
+def _with_security_headers(headers: list) -> list:
+    out = [*headers, *SECURITY_HEADERS, (b"x-api-version", API_VERSION.encode())]
+    if any(k.lower() == b"content-type" and v.startswith(b"application/json") for k, v in headers):
+        out.append(JSON_CSP)
+    return out
 
 
 def new_request_id() -> str:
@@ -43,30 +66,37 @@ class RequestContextMiddleware:
 
         request_id = new_request_id()
         scope.setdefault("state", {})["request_id"] = request_id
+        ctx = observability.start_request(request_id)
+        query = parse_qs(scope.get("query_string", b"").decode("latin-1"))
+        observability.set_company((query.get("company_id") or [None])[0])
         started = time.perf_counter()
         status_holder = {"status": None}
 
         async def send_logged(message):
             if message["type"] == "http.response.start":
                 status_holder["status"] = message["status"]
+                # Версия контракта и заголовки безопасности — в каждом ответе.
+                message["headers"] = _with_security_headers(list(message.get("headers", [])))
             await send(message)
 
         try:
             await self._handle(scope, receive, send_logged, request_id)
         finally:
-            # Только метаданные: без тел запросов, профилей и заголовков.
-            logger.info(
-                "request_id=%s method=%s path=%s status=%s duration_ms=%.1f",
-                request_id,
-                scope.get("method"),
-                scope.get("path"),
-                status_holder["status"],
-                (time.perf_counter() - started) * 1000,
-            )
+            seconds = time.perf_counter() - started
+            # Шаблон маршрута (/api/v1/insights/{insight_id}), а не путь: метки метрик не растут без предела.
+            route = getattr(scope.get("route"), "path", None) or "unmatched"
+            status = status_holder["status"] or 500
+            observability.observe_request(scope.get("method", ""), route, status, seconds)
+            # Только метаданные: без тел запросов, профилей и заголовков; псевдоним пользователя и компания — из ctx.
+            logger.info("request", extra={"request_id": request_id, "method": scope.get("method"), "path": scope.get("path"), "route": route,
+                                          "status": status, "duration_ms": round(seconds * 1000, 1),
+                                          **{k: ctx[k] for k in ("user", "company_id", "trace_id") if k in ctx}})
 
     async def _handle(self, scope, receive, send, request_id):
         headers = dict(scope.get("headers") or [])
-        limit = UPLOAD_MAX_BYTES if UPLOAD_PATH.match(scope.get("path", "")) else self.max_bytes
+        path = scope.get("path", "")
+        limit = (UPLOAD_MAX_BYTES if UPLOAD_PATH.match(path) else KB_UPLOAD_MAX_BYTES if KB_UPLOAD_PATH.match(path)
+                 else self.max_bytes)
         length = headers.get(b"content-length")
         if length is not None and length.isdigit() and int(length) > limit:
             await error_response("REQUEST_TOO_LARGE", request_id)(scope, receive, send)
@@ -92,6 +122,7 @@ class RequestContextMiddleware:
             return
 
         body = b"".join(chunks)
+        _company_from_body(body, headers)
         replayed = False
 
         async def replay():
@@ -102,6 +133,18 @@ class RequestContextMiddleware:
             return await receive()
 
         await self.app(scope, replay, send)
+
+
+def _company_from_body(body: bytes, headers: dict) -> None:
+    """company_id из JSON-тела (разбор, вопросы) — в контекст запроса для логов."""
+    if b"json" not in headers.get(b"content-type", b"") or len(body) > 64 * 1024:
+        return
+    try:
+        data = json.loads(body)
+    except ValueError:
+        return
+    if isinstance(data, dict) and isinstance(data.get("company_id"), str):
+        observability.set_company(data["company_id"])
 
 
 def _openapi_without_422(app: FastAPI):
@@ -132,7 +175,7 @@ def configure_api(app: FastAPI) -> None:
 
     @app.exception_handler(ApiError)
     async def _api_error(request: Request, exc: ApiError):
-        return error_response(exc.code, request.state.request_id, exc.message)
+        return error_response(exc.code, request.state.request_id, exc.message, exc.headers)
 
     # Последний добавленный middleware — внешний. CORS снаружи,
     # чтобы ответ 413 из RequestContextMiddleware тоже получил CORS-заголовки.
@@ -143,4 +186,5 @@ def configure_api(app: FastAPI) -> None:
         allow_methods=["GET", "POST", "PATCH", "DELETE"],
         allow_credentials=True,
         allow_headers=["Content-Type"],
+        expose_headers=["X-API-Version"],
     )

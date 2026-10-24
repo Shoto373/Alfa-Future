@@ -1,5 +1,7 @@
 """Конфигурация из переменных окружения (читается при каждом обращении — удобно для тестов)."""
 
+import hashlib
+import json
 import os
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -9,11 +11,36 @@ from sqlalchemy.engine import URL
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+RATE_LIMIT_DEFAULTS = {"insights": (30, 120), "questions": (20, 60), "news": (10, 30)}  # в минуту: пользователь, адрес
+
+
+def rate_limits(scope: str) -> tuple[int, int]:
+    """Лимит запросов в минуту на пользователя и на адрес: RATE_LIMIT_<SCOPE>=user,ip; 0 — без лимита."""
+    raw = os.environ.get(f"RATE_LIMIT_{scope.upper()}")
+    if raw:
+        user, _, ip = raw.partition(",")
+        return int(user or 0), int(ip or 0)
+    return RATE_LIMIT_DEFAULTS[scope]
+
+
+def secret(name: str) -> str:
+    """Секрет из файла (Docker secrets: NAME_FILE=/run/secrets/…) или, для совместимости, из переменной NAME.
+
+    Файл предпочтительнее: значение не видно в `docker inspect`, окружении процесса и выводе compose config."""
+    path = os.environ.get(f"{name}_FILE")
+    if path:
+        try:
+            return Path(path).read_text(encoding="utf-8").strip()
+        except OSError:
+            return ""
+    return os.environ.get(name, "")
+
+
 def database_url() -> str:
     if not os.environ.get("DATABASE_URL") and os.environ.get("PGHOST"):
         return URL.create("postgresql+psycopg", host=os.environ["PGHOST"], port=int(os.environ.get("PGPORT", "5432")),
                           database=os.environ.get("PGDATABASE", "alfa"), username=os.environ.get("PGUSER", "alfa"),
-                          password=os.environ.get("PGPASSWORD", "")).render_as_string(hide_password=False)
+                          password=secret("PGPASSWORD")).render_as_string(hide_password=False)
     return _env("DATABASE_URL", "postgresql://alfa:alfa-local@127.0.0.1:5432/alfa")
 
 
@@ -81,6 +108,23 @@ def operator_emails() -> set[str]:
     Администратор компании — представитель клиента, а не банка: эти данные сводные по всем клиентам.
     Пусто — служебные адреса закрыты для всех."""
     return {e.strip().lower() for e in os.environ.get("OPERATOR_EMAILS", "").split(",") if e.strip()}
+
+
+def oidc_settings() -> dict:
+    """Вход через корпоративный IdP (app/auth/oidc.py); пустой OIDC_ISSUER — вход через IdP выключен."""
+    return {
+        "issuer": os.environ.get("OIDC_ISSUER", "").rstrip("/"),
+        "internal_issuer": os.environ.get("OIDC_INTERNAL_ISSUER", "").rstrip("/"),
+        "client_id": os.environ.get("OIDC_CLIENT_ID", "alfa-pulse"),
+        "client_secret": secret("OIDC_CLIENT_SECRET"),
+        "redirect_uri": os.environ.get("OIDC_REDIRECT_URI", "http://localhost:8000/api/v1/auth/oidc/callback"),
+        "companies_claim": os.environ.get("OIDC_COMPANIES_CLAIM", "alfa_companies"),
+    }
+
+
+def auth_password_enabled() -> bool:
+    """Вход по email и паролю (демо); в пилоте с IdP выключается: AUTH_PASSWORD_ENABLED=0."""
+    return _env("AUTH_PASSWORD_ENABLED", "1") != "0"
 
 
 def frontend_origin() -> str:
@@ -169,7 +213,7 @@ def llm_settings() -> dict:
     return {
         "base_url": os.environ.get("LLM_BASE_URL", "").rstrip("/"),
         "fallback_base_url": os.environ.get("LLM_FALLBACK_BASE_URL", "").rstrip("/"),
-        "api_key": os.environ.get("LLM_API_KEY", ""),
+        "api_key": secret("LLM_API_KEY"),
         # Модель на каждую роль агента. Выбор по сравнению всех моделей кейса на одной реальной задаче:
         # DeepSeek пишет самые конкретные выводы (≈26 с, 0,3 ₽), GLM быстрая и точная для плана и проверки
         # (≈13 с, 0,1 ₽), Kimi-K2.6 тратит >7000 токенов на рассуждения и не укладывается во время ответа.
@@ -181,6 +225,8 @@ def llm_settings() -> dict:
             "qa": _env("LLM_MODEL_QA", "deepseek/deepseek-v4.1-flash"),
             # Классификация неуверенных новостей — Gemma 4 (рекомендована кейсом для классификации).
             "classify": _env("LLM_MODEL_CLASSIFY", "google/gemma-4-26b-a4b-it"),
+            # Распознавание сканов аналитики банка (SPR3-03) — визуальная модель из списка кейса.
+            "vision": _env("LLM_MODEL_VISION", "qwen/qwen3-vl-30b-a3b-instruct"),
         },
         # GLM без ограничения тратит весь лимит на рассуждения; DeepSeek с ним, наоборот, рассуждает дольше.
         "reasoning_effort": os.environ.get("LLM_REASONING_EFFORT", "low"),
@@ -211,6 +257,23 @@ def llm_extra_queries() -> bool:
 def llm_company_share() -> float:
     """Доля общего дневного бюджета LLM, которую может израсходовать одна компания-клиент."""
     return float(_env("LLM_COMPANY_SHARE", "0.2"))
+
+
+# Статьи бюджета LLM помимо компаний-клиентов: учитываются в llm_usage_companies под ключом «budget:<статья>».
+BUDGET_LINE_PREFIX = "budget:"
+KB_INGEST_LINE = "budget:kb_ingest"
+
+
+def llm_line_share(line: str | None) -> float:
+    """Доля дневного бюджета для компании-клиента или отдельной статьи (распознавание аналитики — KB_INGEST_LLM_SHARE)."""
+    if line == KB_INGEST_LINE:
+        return float(_env("KB_INGEST_LLM_SHARE", "0.15"))
+    return llm_company_share()
+
+
+def kb_recorded_dir() -> Path:
+    """Записанные ответы модели распознавания по sha256 PDF: демо и тесты без вызова модели и трат бюджета."""
+    return Path(_env("KB_RECORDED_DIR", str(Path(__file__).parent / "knowledge" / "recorded")))
 
 
 def llm_user_limits() -> dict[str, int]:
@@ -277,7 +340,7 @@ def warm_feeds_on_start() -> bool:
 
 def telegram_settings() -> tuple[str, str]:
     """Бот для ежедневного отчета о качестве (тот же, что у мониторинга сервера)."""
-    return os.environ.get("TELEGRAM_BOT_TOKEN", ""), os.environ.get("TELEGRAM_CHAT_ID", "")
+    return secret("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID", "")
 
 
 def quality_report_hour() -> int:
@@ -296,3 +359,66 @@ def classify_llm_enabled() -> bool:
     ложные срабатывания (политика, иностранные компании) и не находила пропущенных деловых новостей
     (python -m app.eval_classify --llm). Включение — CLASSIFY_LLM=1."""
     return _env("CLASSIFY_LLM", "0").lower() in ("1", "true", "yes", "on")
+
+
+
+# Источники новостей (SPR3-02): вес доверия, лицензия и частота опроса — у каждого источника.
+# license: "full" — можно хранить полный текст; "lead" — только заголовок и лид (лицензированные ленты).
+SOURCE_TRUST = {"Банк России": 1.0, "Интерфакс": 0.95, "РБК": 0.85, "Коммерсантъ": 0.9, "Ведомости": 0.9,
+                "Frank Media": 0.75}
+LICENSED_FEEDS = [
+    {"name": "Интерфакс", "format": "interfax", "file": "interfax.xml", "trust": 0.95},
+    {"name": "ПРАЙМ", "format": "prime", "file": "prime.json", "trust": 0.9},
+]
+
+
+def _source(kind: str, name: str, url: str = "", **extra) -> dict:
+    sid = f"{kind}:{hashlib.sha1(f'{name}|{url}'.encode()).hexdigest()[:8]}"
+    # interval_minutes=0 — опрос в каждом цикле конвейера (RSS_REFRESH_MINUTES); больше — реже, для платных лент.
+    base = {"id": sid, "kind": kind, "name": name, "url": url, "trust": SOURCE_TRUST.get(name, 0.8),
+            "license": "full", "interval_minutes": 0}
+    return {**base, **extra}
+
+
+def news_sources() -> list[dict]:
+    """Реестр источников: RSS из RSS_SOURCES, лицензированные ленты (заглушка из LICENSED_FEED_DIR),
+    ручные материалы из MANUAL_NEWS_FILE. SOURCES_FILE (JSON-список) полностью заменяет реестр."""
+    path = os.environ.get("SOURCES_FILE")
+    if path:
+        return [_source(s["kind"], s["name"], s.get("url", ""), **{k: v for k, v in s.items() if k not in ("kind", "name", "url")})
+                for s in json.loads(Path(path).read_text(encoding="utf-8"))]
+    out = [_source("rss", s["name"], s["url"]) for s in rss_sources()]
+    feed_dir = licensed_feed_dir()
+    if feed_dir:
+        out += [_source("licensed", f["name"], str(feed_dir / f["file"]), format=f["format"], trust=f["trust"],
+                        license="lead") for f in LICENSED_FEEDS]
+    manual = os.environ.get("MANUAL_NEWS_FILE")
+    if manual:
+        out.append(_source("manual", "Редакция Альфа.Пульса", manual, trust=0.9))
+    return out
+
+
+def licensed_feed_dir() -> Path | None:
+    """Каталог заглушки лицензированных лент (формат Интерфакс/ПРАЙМ). Без договора реальные ленты не подключаются."""
+    value = os.environ.get("LICENSED_FEED_DIR", "").strip()
+    return Path(value) if value else None
+
+
+def otlp_endpoint() -> str:
+    """Локальный коллектор трасс OTLP/HTTP (Tempo из профиля monitoring); пусто — трассы не экспортируются."""
+    return os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip().rstrip("/")
+
+
+def metrics_token() -> str:
+    """Токен для /metrics и приемника алертов; пусто — /metrics открыт (в production nginx его не публикует)."""
+    return secret("METRICS_TOKEN")
+
+
+def ranking_weights_file() -> str:
+    """Другой файл весов ранжирования (кандидат калибровки); пусто — app/ranking_weights.json."""
+    return os.environ.get("RANKING_WEIGHTS_FILE", "").strip()
+
+
+def story_similarity() -> float:
+    """Порог смысловой близости заголовков для объединения новостей в сюжет."""
+    return float(_env("STORY_SIMILARITY", "0.78"))

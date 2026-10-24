@@ -10,12 +10,20 @@ score = важность × (совпадение тем с экспозиция
 компании с богатым профилем не получали 90+ за любую новость.
 Каждое слагаемое сохраняется как причина: пользователь видит, почему новость
 поднялась в ленте, а эксперт — как воспроизвести оценку.
+
+Веса слагаемых, масштаб оценки и период полураспада свежести — в ranking_weights.json с версией
+(SPR3-06): калибровка по экспертной разметке (scripts/fit_ranking.py) меняет файл, а не код.
+Подпись весов входит в ключ кэша ленты.
 """
 
 import hashlib
+import json
 import math
 import re
+import threading
 import time
+from functools import lru_cache
+from pathlib import Path
 from datetime import datetime, timezone
 
 import numpy as np
@@ -25,7 +33,7 @@ from app import cache, config, database, embeddings
 from app.companies import extra, profiles
 from app.companies.sectors import SECTOR_NAMES
 from app.models import Feedback, Insight
-from app.news import magnitude, store
+from app.news import entities, magnitude, store
 from app.news.classifier import _count_stem, tokenize
 from app.news.taxonomy import COUNTRY_STEMS, TOPICS
 
@@ -63,7 +71,8 @@ def _topic_confidence(t: dict) -> float:
     return max(TOPIC_CONF_FLOOR, min(1.0, (sim - TOPIC_CONF_LOW) / (TOPIC_CONF_HIGH - TOPIC_CONF_LOW)))
 
 
-HALF_LIFE_DAYS = 45
+WEIGHTS_FILE = Path(__file__).with_name("ranking_weights.json")
+FEATURES = ("exposure", "sector_mention", "group", "supply_chain", "country", "region", "mention")
 MAX_FEED_AGE_DAYS = 120
 MIN_FEED_SCORE = 10.0
 REGION_WEIGHT = 0.5
@@ -112,6 +121,23 @@ def _topic_feedback(company_id: str, role: str) -> dict[str, int]:
         return topic_feedback(company_id, role)
     except Exception:  # оценки — уточнение, а не условие ранжирования
         return {}
+
+
+def weights() -> dict:
+    """Веса признаков из ranking_weights.json (RANKING_WEIGHTS_FILE — другой файл, например кандидат калибровки)."""
+    path = Path(config.ranking_weights_file() or WEIGHTS_FILE)
+    st = path.stat()
+    return _weights(str(path), st.st_mtime_ns, st.st_size)
+
+
+@lru_cache(maxsize=4)
+def _weights(path: str, _mtime: int, _size: int) -> dict:
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    missing = set(FEATURES) - set(data["weights"])
+    if missing:
+        raise ValueError(f"В {path} нет весов: {sorted(missing)}")
+    return {**data, "signature": hashlib.sha256(json.dumps(
+        {k: data[k] for k in ("weights", "scale", "half_life_days")}, sort_keys=True).encode()).hexdigest()[:12]}
 
 
 def _age_days(published_at: str) -> float:
@@ -223,8 +249,28 @@ def _feedback_multiplier(company_id: str, role: str, shares: dict[str, float], r
     return feedback_mult
 
 
-def score(news: dict, company_id: str, role: str) -> dict:
-    """Релевантность новости для компании и роли (0–100) и причины отбора, самые весомые — первыми."""
+MENTION_TEXT = {"self": "Новость упоминает вашу компанию", "supplier": "Упоминается ваш поставщик",
+                "customer": "Упоминается ваш покупатель"}
+
+
+def _mention_signal(news: dict, company_id: str, reasons: list[dict]) -> float:
+    """Компания или ее контрагент названы в новости (организации в тексте, SPR3-02)."""
+    best = None
+    for m in entities.mentions(news, company_id):
+        if m["relation"] in MENTION_TEXT and (best is None or m["relation"] == "self"):
+            best = m
+    if best is None:
+        return 0.0
+    value = 1.0 if best["relation"] == "self" else 0.6
+    reasons.append({"kind": "mention", "feature": "mention", "origin": "news", "weight": value,
+                    "text": f"{MENTION_TEXT[best['relation']]} — {best['name']}"})
+    return value
+
+
+def features(news: dict, company_id: str, role: str) -> dict:
+    """Признаки пары «новость × компания × роль»: слагаемые (f), общий множитель и причины.
+
+    raw = multiplier × Σ weights[k] × f[k]. Отдельно от score — для оценки и калибровки весов по разметке."""
     c = profiles.get(company_id)
     cls = news["classification"]
     reasons: list[dict] = []
@@ -249,19 +295,29 @@ def score(news: dict, company_id: str, role: str) -> dict:
         reasons.append({"kind": "magnitude", "feature": "magnitude", "origin": "news", "weight": strength_mult,
                         "text": f"Сильное изменение: «{strength['evidence']}»"})
 
+    mention = _mention_signal(news, company_id, reasons)
     age = _age_days(news["published_at"])
-    freshness = 0.5 ** (age / HALF_LIFE_DAYS)
+    freshness = 0.5 ** (age / weights()["half_life_days"])
     importance = 0.5 + sum(share * TOPICS[t]["importance"] for t, share in shares.items() if t in TOPICS)
     # No permanent 40% freshness floor: old external events must leave the feed.
     topic_conf = sum(share * confidence.get(t, 1.0) for t, share in shares.items()) if shares else 1.0
-    raw = importance * (exposure_sum + direct + group_hit + supply_chain + country_hit + region_hit) * role_mult \
-        * strength_mult * freshness * feedback_mult * topic_conf
-    value = round(100 * (1 - math.exp(-raw / 2.5)), 1)
+    f = {"exposure": exposure_sum, "sector_mention": direct, "group": group_hit, "supply_chain": supply_chain,
+         "country": country_hit, "region": region_hit, "mention": mention}
+    multiplier = importance * role_mult * strength_mult * freshness * feedback_mult * topic_conf
+    return {"f": f, "multiplier": multiplier, "freshness": freshness, "age_days": age, "reasons": reasons}
 
+
+def score(news: dict, company_id: str, role: str) -> dict:
+    """Релевантность новости для компании и роли (0–100) и причины отбора, самые весомые — первыми."""
+    x = features(news, company_id, role)
+    w = weights()
+    raw = x["multiplier"] * sum(w["weights"][k] * v for k, v in x["f"].items())
+    value = round(100 * (1 - math.exp(-raw / w["scale"])), 1)
+    reasons = x["reasons"]
     # Роль — общий признак, а не связь с компанией: в конце списка причин.
     reasons.sort(key=lambda r: (r["kind"] == "role", -r["weight"]))
-    return {"score": value, "raw": round(raw, 3), "freshness": round(freshness, 3), "age_days": round(age, 1),
-            "reasons": reasons[:8]}
+    return {"score": value, "raw": round(raw, 3), "freshness": round(x["freshness"], 3),
+            "age_days": round(x["age_days"], 1), "reasons": reasons[:8]}
 
 
 def _collapse_stories(ranked: list[dict]) -> list[dict]:
@@ -312,7 +368,8 @@ def feed(items: list[dict], company_id: str, role: str, topic: str | None = None
         if topic and topic not in [t["topic"] for t in news["classification"]["topics"]]:
             continue
         relevance = score(news, company_id, role)
-        has_company_basis = any(r["kind"] in ("exposure", "sector_mention", "group", "country", "supply_chain", "region")
+        has_company_basis = any(r["kind"] in ("exposure", "sector_mention", "group", "country", "supply_chain", "region",
+                                              "mention")
                                 for r in relevance["reasons"])
         if not news["classification"]["topics"] or not has_company_basis or relevance["score"] < MIN_FEED_SCORE:
             continue
@@ -347,6 +404,21 @@ def _diversify(ranked: list[dict]) -> list[dict]:
     return out
 
 
+_building: dict[str, threading.Lock] = {}
+_building_guard = threading.Lock()
+
+
+def _cached_feed(key: str) -> list[dict] | None:
+    hit = cache.get(key)
+    if hit is None:
+        return None
+    rows = [(store.get(r["news_id"]), r) for r in hit]
+    if not all(n is not None for n, _ in rows):
+        return None
+    return [{"news": n, "relevance": r["relevance"], **{k: r[k] for k in ("story_size", "story_id") if k in r}}
+            for n, r in rows]
+
+
 def company_feed(company_id: str, role: str, limit: int = 500) -> list[dict]:
     """Лента компании по всем новостям с кэшем (память процесса + Redis).
 
@@ -360,15 +432,23 @@ def company_feed(company_id: str, role: str, limit: int = 500) -> list[dict]:
     # Оценки пользователей меняют ранжирование — их отпечаток входит в ключ.
     feedback = hashlib.sha1(repr(sorted(_topic_feedback(company_id, role).items())).encode()).hexdigest()[:10]
     key = (f"feed:v2:{company_id}:{role}:{limit}:{store.revision()}:{profiles.signature()}:{embeddings.signature()}"
-           f":fb{feedback}:x{extra.signature(company_id)}")
-    hit = cache.get(key)
-    if hit is not None:
-        rows = [(store.get(r["news_id"]), r) for r in hit]
-        if all(n is not None for n, _ in rows):
-            return [{"news": n, "relevance": r["relevance"], **{k: r[k] for k in ("story_size", "story_id") if k in r}}
-                    for n, r in rows]
-    result = feed(store.all_items(), company_id, role, None, limit)
-    cache.set(key, [{"news_id": r["news"]["news_id"], "relevance": r["relevance"],
-                     **({k: r[k] for k in ("story_size", "story_id") if k in r})} for r in result],
-              config.feed_cache_seconds())
+           f":fb{feedback}:x{extra.signature(company_id)}:w{weights()['signature']}")
+    found = _cached_feed(key)
+    if found is not None:
+        return found
+    # Ленту для ключа считает один поток процесса: когда кэш устарел (новая новость, TTL), десятки
+    # одновременных запросов иначе пересчитывали бы ее параллельно и делили одно ядро — хвост задержки.
+    with _building_guard:
+        lock = _building.setdefault(key, threading.Lock())
+    with lock:
+        found = _cached_feed(key)
+        if found is not None:
+            return found
+        result = feed(store.all_items(), company_id, role, None, limit)
+        cache.set(key, [{"news_id": r["news"]["news_id"], "relevance": r["relevance"],
+                         **({k: r[k] for k in ("story_size", "story_id") if k in r})} for r in result],
+                  config.feed_cache_seconds())
+    with _building_guard:
+        if _building.get(key) is lock and not lock.locked():
+            del _building[key]
     return result

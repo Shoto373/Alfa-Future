@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import AccessDenied from "@/components/AccessDenied";
+import FeedRail from "@/components/FeedRail";
 import InsightView from "@/components/InsightView";
+import Mentions from "@/components/insight/Mentions";
 import { ErrorState, Icon, Skeleton } from "@/components/ui";
 import { AbortedError, ApiError, api } from "@/lib/api";
 import { markRead } from "@/lib/notifications";
@@ -18,7 +21,12 @@ export default function InsightPage() {
   const { newsId } = useParams<{ newsId: string }>();
   const { session } = useSession();
   // Смена компании или новости — разбор с чистого листа; ответ на старый запрос игнорируется.
-  return <NewsInsight key={`${session!.companyId}:${session!.role}:${newsId}`} newsId={newsId} />;
+  return (
+    <div className={styles.split}>
+      <FeedRail activeId={decodeURIComponent(newsId)} />
+      <NewsInsight key={`${session!.companyId}:${session!.role}:${newsId}`} newsId={newsId} />
+    </div>
+  );
 }
 
 function NewsInsight({ newsId }: { newsId: string }) {
@@ -107,10 +115,11 @@ function NewsInsight({ newsId }: { newsId: string }) {
           <Skeleton lines={4} />
         </div>
       )}
-      {error && <ErrorState error={error} onRetry={() => load()} />}
+      {error && (error.code === "FORBIDDEN" ? <AccessDenied /> : <ErrorState error={error} onRetry={() => load()} />)}
       {insight && <InsightView insight={insight} onRefresh={() => load(true)} refreshing={loading}
         upgrading={upgrading} upgradeFailed={upgradeFailed}
-        perspective={perspective} ownRole={session!.role} onPerspective={setPerspective} />}
+        perspective={perspective} ownRole={session!.role} onPerspective={setPerspective}
+        mentions={<Mentions newsId={decodeURIComponent(newsId)} companyId={companyId} />} />}
     </div>
   );
 }

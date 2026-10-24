@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ErrorState, Icon, Loading } from "@/components/ui";
 import { api } from "@/lib/api";
-import { useLoad } from "@/lib/hooks";
+import { useQuery } from "@/lib/query";
 import { date } from "@/lib/format";
 import { ANALYTICS_SCOPE, markRead } from "@/lib/notifications";
 import { useSession } from "@/lib/session";
@@ -105,8 +105,9 @@ function DocDrawer({ d, onClose }: { d: BankDocument; onClose: () => void }) {
 }
 
 export default function AnalyticsPage() {
-  const { data: docs, error, reload } = useLoad(
-    () => api.analytics().then((r) => [...r.documents].sort((a, b) => b.date.localeCompare(a.date))), []);
+  // Материалы банка меняются редко: возврат на страницу — из кэша, без запроса.
+  const { data: docs, error, reload } = useQuery("analytics",
+    () => api.analytics().then((r) => [...r.documents].sort((a, b) => b.date.localeCompare(a.date))), { staleMs: 10 * 60_000 });
   const [activeId, setActiveId] = useState<string | null>(null);
   const desktop = useDesktop();
   const active = docs?.find((d) => d.doc_id === activeId) ?? null;

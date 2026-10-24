@@ -30,10 +30,11 @@ MESSAGES = {
     "LAST_ADMIN": "Нельзя убрать последнего администратора компании",
     "TOO_MANY_ATTEMPTS": "Слишком много неудачных попыток входа, повторите позже",
     "RATE_LIMITED": "Слишком много запросов к AI за час, повторите позже",
+    "TOO_MANY_REQUESTS": "Слишком много запросов, повторите через минуту",
 }
 
 
-def error_response(code: str, request_id: str, message: str | None = None) -> JSONResponse:
+def error_response(code: str, request_id: str, message: str | None = None, headers: dict[str, str] | None = None) -> JSONResponse:
     status = STATUS[code]
     body = ErrorResponse(
         error=ErrorDetail(
@@ -43,4 +44,4 @@ def error_response(code: str, request_id: str, message: str | None = None) -> JS
             retryable=status in (503, 504),
         )
     )
-    return JSONResponse(status_code=status, content=body.model_dump())
+    return JSONResponse(status_code=status, content=body.model_dump(), headers=headers)

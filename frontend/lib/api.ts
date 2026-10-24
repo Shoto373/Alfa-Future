@@ -1,5 +1,5 @@
 import type {
-  AISettings, Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, LookupCompany, Member, Membership, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
+  AISettings, Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, KbDocument, KbDraft, KbUploadItem, LabelingState, LookupCompany, Member, Membership, Mention, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
@@ -56,31 +56,12 @@ const json = (method: string, data: unknown): RequestInit => ({
 const cid = encodeURIComponent;
 export const FEED_LIMIT = 500;
 
-// Лента компании нужна сразу нескольким частям экрана (страница, уведомления в шапке): один и тот же
-// запрос за FEED_SHARE_MS не повторяется — все получают один ответ. Отмена одного потребителя не отменяет запрос.
-const FEED_SHARE_MS = 20_000;
-const feedShared = new Map<string, { at: number; promise: Promise<FeedPage> }>();
-
-function sharedFeed(path: string, signal?: AbortSignal, fresh = false): Promise<FeedPage> {
-  const now = Date.now();
-  let entry = feedShared.get(path);
-  if (fresh || !entry || now - entry.at > FEED_SHARE_MS) {
-    const promise = request<FeedPage>(path);
-    entry = { at: now, promise };
-    feedShared.set(path, entry);
-    promise.catch(() => { if (feedShared.get(path)?.promise === promise) feedShared.delete(path); });
-  }
-  if (!signal) return entry.promise;
-  if (signal.aborted) return Promise.reject(new AbortedError());
-  return new Promise((resolve, reject) => {
-    const onAbort = () => reject(new AbortedError());
-    signal.addEventListener("abort", onAbort, { once: true });
-    entry.promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
-  });
-}
 
 export const api = {
   me: (signal?: AbortSignal) => request<User>("/api/v1/auth/me", {}, { signal }),
+  // Способы входа: по паролю (демо) и через корпоративный IdP (Альфа-ID, OIDC).
+  authMethods: () => request<{ password: boolean; oidc: boolean }>("/api/v1/auth/methods"),
+  oidcLoginUrl: (next = "/") => `${API_BASE_URL}/api/v1/auth/oidc/login?next=${encodeURIComponent(next)}`,
   login: (email: string, password: string) => request<User>("/api/v1/auth/login", json("POST", { email, password })),
   register: (name: string, email: string, password: string) =>
     request<User>("/api/v1/auth/register", json("POST", { name, email, password })),
@@ -118,13 +99,16 @@ export const api = {
   deleteCompanyFile: (id: string, fileId: string) =>
     request<CompanyExtra>(`/api/v1/companies/${cid(id)}/extra/files/${cid(fileId)}`, { method: "DELETE" }),
   // Всегда вся лента компании (FEED_LIMIT): главная, лента и уведомления считают по одному списку.
-  // fresh — не брать общий недавний ответ («Повторить», добавленная новость).
-  feed: (companyId: string, topic?: string, signal?: AbortSignal, story?: string, fresh = false) =>
-    sharedFeed(
-      `/api/v1/feed?company_id=${encodeURIComponent(companyId)}&limit=${FEED_LIMIT}${topic ? `&topic=${encodeURIComponent(topic)}` : ""}` +
-      `${story ? `&story=${encodeURIComponent(story)}` : ""}`, signal, fresh),
+  // Общий ответ и кэш — lib/hooks.loadFeed (lib/query): один запрос на все части экрана.
+  feed: (companyId: string, topic?: string, story?: string) =>
+    request<FeedPage>(`/api/v1/feed?company_id=${encodeURIComponent(companyId)}&limit=${FEED_LIMIT}` +
+      `${topic ? `&topic=${encodeURIComponent(topic)}` : ""}${story ? `&story=${encodeURIComponent(story)}` : ""}`),
   // fast: готовая карточка или разбор на правилах без LLM за доли секунды; без fast — версия модели.
   // perspective — другой разрез: тот же разбор глазами другой роли (по умолчанию — своя роль).
+  // Новость с организациями в тексте и их отношением к компании (SPR3-02).
+  newsMentions: (newsId: string, companyId: string, signal?: AbortSignal) =>
+    request<{ entities: Omit<Mention, "relation">[]; mentions: Mention[]; mentions_company: boolean }>(
+      `/api/v1/news/${cid(newsId)}?company_id=${cid(companyId)}`, {}, { signal }),
   insight: (companyId: string, newsId: string, opts: { force?: boolean; fast?: boolean; perspective?: Role } = {}, signal?: AbortSignal) =>
     request<Insight>("/api/v1/insights", json("POST", {
       company_id: companyId, news_id: newsId, force_refresh: !!opts.force, fast: !!opts.fast,
@@ -145,5 +129,25 @@ export const api = {
   setLLMPaused: (paused: boolean) => request<LLMSwitch>("/api/v1/ops/llm", json("POST", { paused })),
   qualityOverview: (hours: number, signal?: AbortSignal) =>
     request<QualityOverview>(`/api/v1/metrics/overview?hours=${hours}`, {}, { signal }),
+  // Экран аналитика банка (SPR3-03): PDF на распознавание, черновики тезисов, публикация.
+  kbDocuments: (signal?: AbortSignal) => request<{ items: KbUploadItem[] }>("/api/v1/admin/kb/documents", {}, { signal }),
+  kbUpload: (file: File, meta: { title?: string; date?: string }) => {
+    const q = new URLSearchParams({ name: file.name, ...(meta.title ? { title: meta.title } : {}), ...(meta.date ? { date: meta.date } : {}) });
+    return request<{ doc_id: string; status: string; created: boolean }>(`/api/v1/admin/kb/documents?${q}`,
+      { method: "POST", headers: { "Content-Type": "application/pdf" }, body: file }, { timeoutMs: 120_000 });
+  },
+  kbUploadDemo: () => request<{ doc_id: string; status: string; created: boolean }>("/api/v1/admin/kb/demo", { method: "POST" }),
+  kbDocument: (docId: string, signal?: AbortSignal) => request<KbDocument>(`/api/v1/admin/kb/documents/${cid(docId)}`, {}, { signal }),
+  kbDocumentMeta: (docId: string, meta: { title?: string; date?: string }) =>
+    request<KbDocument>(`/api/v1/admin/kb/documents/${cid(docId)}`, json("PATCH", meta)),
+  kbPageImageUrl: (docId: string, page: number) => `${API_BASE_URL}/api/v1/admin/kb/documents/${cid(docId)}/pages/${page}/image`,
+  kbPdfUrl: (docId: string, page?: number) => `${API_BASE_URL}/api/v1/admin/kb/documents/${cid(docId)}/pdf${page ? `#page=${page}` : ""}`,
+  kbEditDraft: (draftId: string, patch: Partial<KbDraft>) => request<KbDraft>(`/api/v1/admin/kb/drafts/${cid(draftId)}`, json("PATCH", patch)),
+  kbApprove: (draftId: string, supersedes?: string | null) =>
+    request<{ thesis: { id: string } }>(`/api/v1/admin/kb/drafts/${cid(draftId)}/approve`, json("POST", { supersedes: supersedes ?? null })),
+  kbReject: (draftId: string, reason: string) => request<KbDraft>(`/api/v1/admin/kb/drafts/${cid(draftId)}/reject`, json("POST", { reason })),
+  labelingNext: (signal?: AbortSignal) => request<LabelingState>("/api/v1/admin/labeling/next", {}, { signal }),
+  labelingSave: (label: { news_id: string; company_id: string; role: Role; grade: number; reason: string }) =>
+    request<LabelingState>("/api/v1/admin/labeling/labels", json("POST", label)),
   pdfUrl: (docId: string, page?: number | null) => `${API_BASE_URL}/api/v1/analytics/${docId}/pdf${page ? `#page=${page}` : ""}`,
 };

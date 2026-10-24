@@ -19,7 +19,7 @@ import re
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -37,9 +37,9 @@ SEED_FILE = Path(__file__).with_name("seed_news.json")
 DUPLICATE_THRESHOLD = 0.55
 RECHECK_SECONDS = 2.0
 # Сюжет: одно событие из разных источников и его продолжения. Новость присоединяется к самой близкой
-# по смыслу новости за последние STORY_WINDOW_DAYS дней, если сходство не ниже STORY_SIMILARITY
-# (порог подобран на реальной ленте: «Brent выше $115» из Интерфакса, Коммерсанта и ТАСС — один сюжет).
-STORY_SIMILARITY = 0.78
+# по смыслу новости за последние STORY_WINDOW_DAYS дней, если сходство не ниже порога config.story_similarity()
+# (0,78 подобран на реальной ленте: «Brent выше $115» из Интерфакса, Коммерсанта и ТАСС — один сюжет).
+# Сюжет новости хранится в базе (news.story_id): перезапуск и повторный сбор не пересчитывают его.
 STORY_WINDOW_DAYS = 10
 # Одна и та же компания в заголовках за пару дней — один сюжет и при меньшей близости: «Выручка ФосАгро
 # в III квартале…» (Интерфакс) и «Чистая прибыль «Фосагро» за девять месяцев…» (Коммерсантъ) — 0,70.
@@ -50,6 +50,8 @@ _WORD = re.compile(r"[A-Za-zА-ЯЁа-яё][\w-]*")
 _ROMAN = re.compile(r"[IVXLC]+")  # «III квартал» — не компания
 STORY_LABELS_KEY = "story_labels"
 VERSION_KEY, REV_KEY = "news_seed", "news_rev"
+# Дельта кэша: записи, измененные после прошлой проверки, с запасом на транзакции, завершившиеся не по порядку.
+DELTA_OVERLAP = timedelta(seconds=30)
 NEWS_LOCK = 72810403
 
 _lock = threading.RLock()
@@ -59,6 +61,7 @@ _lock = threading.RLock()
 class _State:
     items: dict[str, dict]
     rev: int
+    seen: datetime | None = None  # самое позднее updated_at среди загруженных записей
     checked: float = field(default_factory=time.monotonic)
     ordered: list[dict] = field(default_factory=list)
     shingles: dict[str, set[str]] = field(default_factory=dict)
@@ -67,15 +70,23 @@ class _State:
 
     def __post_init__(self):
         self.reindex()
-        self.stories = _assign_stories(sorted(self.items.values(), key=lambda i: i["published_at"]))
+        # Сюжеты из базы; если у части новостей их еще нет (первый запуск, переклассификация) — расчет
+        # по всем, а сохраненные значения важнее расчетных. Воркер затем сохраняет недостающие (persist_stories).
+        saved = {k: v["story_id"] for k, v in self.items.items() if v.get("story_id")}
+        if len(saved) < len(self.items):
+            computed = _assign_stories(sorted(self.items.values(), key=lambda i: i["published_at"]))
+            saved = computed | {k: v for k, v in saved.items() if v in self.items or v == k}
+        self.stories = saved
         self.members = {}
         for news_id, story_id in sorted(self.stories.items(), key=lambda kv: self.items[kv[0]]["published_at"]):
             self.members.setdefault(story_id, []).append(news_id)
 
+    def nearest(self, item: dict) -> str:
+        """Сюжет для новой новости — без пересчета остальных."""
+        return _nearest_story(item, [self.items[i] for i in self.items if i != item["news_id"]], self.stories)
+
     def attach(self, item: dict) -> None:
-        """Новая новость — в сюжет без пересчета остальных."""
-        window = [self.items[i] for i in self.items if i != item["news_id"]]
-        story_id = _nearest_story(item, window, self.stories)
+        story_id = item.get("story_id") or self.nearest(item)
         self.stories[item["news_id"]] = story_id
         self.members.setdefault(story_id, []).append(item["news_id"])
         self.members[story_id].sort(key=lambda i: self.items[i]["published_at"])
@@ -170,7 +181,7 @@ def _companies(title: str) -> set[str]:
 
 
 def _same_story(sim: float, a: dict, b: dict) -> bool:
-    if sim >= STORY_SIMILARITY:
+    if sim >= config.story_similarity():
         return True
     return (sim >= ENTITY_STORY_SIMILARITY and abs(_time(a) - _time(b)) <= ENTITY_STORY_DAYS * 86400
             and bool(_companies(a["title"]) & _companies(b["title"])))
@@ -240,6 +251,8 @@ def _reclassify(db, version: str) -> None:
         previous = by_id.get(it["news_id"])
         if previous:
             it["duplicates"] = previous.payload.get("duplicates") or []
+            if previous.payload.get("story_id"):
+                it["story_id"] = previous.payload["story_id"]
             previous.payload = it
             previous.published_at = datetime.fromisoformat(it["published_at"])
         else:
@@ -254,6 +267,7 @@ def _reclassify(db, version: str) -> None:
                             previous["published_at"], previous["kind"], previous["news_id"],
                             hint=(previous.get("classification") or {}).get("llm_hint"))
         updated.update(added_at=previous["added_at"], duplicates=previous.get("duplicates") or [],
+                       **({"story_id": previous["story_id"]} if previous.get("story_id") else {}),
                        content_filtered=previous.get("content_filtered", False) or updated["content_filtered"])
         if previous.get("materiality"):  # ответ модели не запрашивается повторно
             updated["materiality"] = previous["materiality"]
@@ -264,8 +278,18 @@ def _reclassify(db, version: str) -> None:
     logger.info("news reclassified: seed=%d stored=%d", len(seed), len(records))
 
 
-def _read_all(db) -> dict[str, dict]:
-    return {p["news_id"]: p for p in db.scalars(select(News.payload))}
+def _read_all(db) -> tuple[dict[str, dict], datetime | None]:
+    rows = db.execute(select(News.payload, News.updated_at)).all()
+    return {p["news_id"]: p for p, _ in rows}, max((u for _, u in rows), default=None)
+
+
+def _read_changed(db, state: _State) -> tuple[dict[str, dict], datetime | None]:
+    """Новости, измененные после прошлой загрузки: API не перечитывает весь набор при каждом изменении."""
+    if state.seen is None:
+        return _read_all(db)
+    rows = db.execute(select(News.payload, News.updated_at).where(News.updated_at >= state.seen - DELTA_OVERLAP)).all()
+    items = dict(state.items) | {p["news_id"]: p for p, _ in rows}
+    return items, max([state.seen, *(u for _, u in rows)])
 
 
 def _state_now(db=None, force: bool = False) -> _State:
@@ -282,12 +306,14 @@ def _state_now(db=None, force: bool = False) -> _State:
         version = _version()
         if database.state(VERSION_KEY, db) != version:
             _reclassify(db, version)
-        _state = _State(_read_all(db), int(database.state(REV_KEY, db) or 0))
+        items, seen = _read_all(db)
+        _state = _State(items, int(database.state(REV_KEY, db) or 0), seen)
         return _state
     rev = int(database.state(REV_KEY, db) or 0)
     if rev != _state.rev:
         # Тексты записей не меняются (объединение дописывает только источники) — шинглы переиспользуются.
-        _state = _State(_read_all(db), rev, shingles=_state.shingles)
+        items, seen = _read_changed(db, _state)
+        _state = _State(items, rev, seen, shingles=_state.shingles)
     _state.checked = time.monotonic()
     return _state
 
@@ -299,8 +325,14 @@ def _news_vectors(items: list[dict]) -> None:
         for i in items])
 
 
+def load() -> int:
+    """Загрузка в память (API): переклассификацию при смене словарей обычно уже сделал воркер."""
+    with _lock:
+        return len(_state_now(force=True).items)
+
+
 def warm() -> int:
-    """Старт сервиса: переклассификация при необходимости, загрузка в память и векторы заголовков."""
+    """Воркер: переклассификация при необходимости, загрузка в память и векторы заголовков."""
     with _lock:
         state = _state_now(force=True)
         items = list(state.ordered)
@@ -329,7 +361,11 @@ def all_items() -> list[dict]:
 
 def get(news_id: str) -> dict | None:
     with _lock:
-        return _state_now().items.get(news_id)
+        item = _state_now().items.get(news_id)
+        if item is None:
+            # Новость могли только что добавить через другой экземпляр API: не ждать плановой перепроверки.
+            item = _state_now(force=True).items.get(news_id)
+        return item
 
 
 def story(news_id: str) -> dict | None:
@@ -401,6 +437,25 @@ def set_materiality(news_id: str, verdict: dict) -> None:
         state.reindex()
 
 
+def persist_stories() -> int:
+    """Воркер: сохранить в базе сюжеты, рассчитанные в памяти (у новых записей и после переклассификации)."""
+    with _lock:
+        with database.session() as db:
+            db.execute(select(func.pg_advisory_xact_lock(NEWS_LOCK)))
+            state = _state_now(db, force=True)
+            todo = {k: sid for k, sid in state.stories.items() if state.items[k].get("story_id") != sid}
+            if not todo:
+                return 0
+            for record in db.scalars(select(News).where(News.news_id.in_(list(todo)))):
+                record.story_id = todo[record.news_id]
+                record.payload = {**record.payload, "story_id": todo[record.news_id]}
+                state.items[record.news_id] = record.payload
+            state.rev = _bump(db)
+        state.reindex()
+    logger.info("news stories persisted: %d", len(todo))
+    return len(todo)
+
+
 def known(title: str, text: str) -> bool:
     """Новость уже есть (тот же id или почти тот же текст) — ее не нужно классифицировать заново."""
     title, text = clean(title, text)
@@ -428,9 +483,9 @@ def add(item: dict) -> tuple[dict, bool]:
                 db.get(News, saved["news_id"]).payload = saved
                 created = False
             else:
-                db.add(News(news_id=item["news_id"], published_at=datetime.fromisoformat(item["published_at"]),
-                            kind=item["kind"], payload=item))
-                saved, created = item, True
+                saved, created = {**item, "story_id": state.nearest(item)}, True
+                db.add(News(news_id=saved["news_id"], published_at=datetime.fromisoformat(saved["published_at"]),
+                            kind=saved["kind"], story_id=saved["story_id"], payload=saved))
             rev = _bump(db)
         # Транзакция зафиксирована: копия в памяти обновляется без перечитывания базы.
         state.items[saved["news_id"]] = saved

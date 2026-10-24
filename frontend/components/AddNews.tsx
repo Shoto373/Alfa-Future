@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ApiError, api } from "@/lib/api";
+import { invalidate } from "@/lib/query";
 import { Card, ErrorState } from "./ui";
 import styles from "@/components/AddNews.module.scss";
 import common from "@/styles/common.module.scss";
@@ -25,6 +26,7 @@ export default function AddNews({ onAdded, compact = false }: { onAdded: () => v
       const r = await api.addNews(mode === "url" ? { url } : { text });
       setText("");
       setUrl("");
+      invalidate("feed:");  // новая новость меняет все ленты компании
       onAdded();
       if (!r.created) setNote("Такая новость уже есть — источник добавлен к существующей записи.");
       router.push(`/pulse/n/${encodeURIComponent(r.news.news_id)}`);

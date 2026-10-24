@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { date } from "@/lib/format";
+import { date, RELATION_LABEL } from "@/lib/format";
 import type { FeedItem } from "@/lib/types";
 import { EffectBadge, Score } from "./ui";
 import styles from "@/components/NewsCard.module.scss";
@@ -13,6 +13,10 @@ const REASON_STYLES: Record<string, string | undefined> = {
 
 export default function NewsCard({ item, compact = false, read }: { item: FeedItem; compact?: boolean; read?: boolean }) {
   const { news, relevance } = item;
+  // «Упоминается ваша компания / ваш поставщик»: сначала сама компания, затем контрагенты.
+  const related = news.mentions_company
+    ? [...(news.mentions ?? [])].filter((m) => m.relation !== "other").sort((a) => (a.relation === "self" ? -1 : 1))[0]
+    : undefined;
   return (
     <article className={`${styles.newsCard} ${compact ? styles.compact : ""} ${read ? styles.isRead : ""}`} data-testid="news-card">
       <div className={styles.newsMeta}>
@@ -22,6 +26,7 @@ export default function NewsCard({ item, compact = false, read }: { item: FeedIt
         <span>{date(news.published_at)}</span>
         {news.kind === "user" && <span className={styles.kind}>Добавлено вами</span>}
         {news.duplicates > 0 && <span className={styles.kind}>+{news.duplicates} источн.</span>}
+        {related && <span className={styles.mention} title={related.name}>Упоминается {RELATION_LABEL[related.relation]}</span>}
         <EffectBadge effect={item.cached_effect} className={styles.effect} />
         {read && <span className={styles.kind}>Прочитано</span>}
       </div>

@@ -8,7 +8,8 @@ from decimal import Decimal
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import (BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Identity, Index, Integer, Numeric, Text,
+from sqlalchemy import (BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Identity, Index, Integer, LargeBinary,
+                        Numeric, Text,
                         UniqueConstraint, func)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -57,6 +58,48 @@ class BankThesis(Base, Payload):
     __table_args__ = (CheckConstraint("page > 0", name="bank_theses_page_check"),)
 
 
+class KbUpload(Base, Payload):
+    """PDF аналитики банка, загруженный на распознавание (SPR3-03): файл, статус и тексты страниц в payload."""
+    __tablename__ = "kb_uploads"
+    doc_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    filename: Mapped[str] = mapped_column(Text)
+    sha256: Mapped[str] = mapped_column(Text, unique=True)
+    content: Mapped[bytes] = mapped_column(LargeBinary)
+    status: Mapped[str] = mapped_column(Text, server_default="queued")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (CheckConstraint("status IN ('queued', 'processing', 'ready', 'failed')", name="kb_uploads_status_check"),)
+
+
+class ThesisDraft(Base, Payload):
+    """Черновик тезиса из распознанного PDF: в базу знаний попадает только после проверки аналитиком."""
+    __tablename__ = "thesis_drafts"
+    draft_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    doc_id: Mapped[str] = mapped_column(ForeignKey("kb_uploads.doc_id", ondelete="CASCADE"))
+    page: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(Text, server_default="draft")
+    thesis_id: Mapped[str | None] = mapped_column(Text, nullable=True)  # опубликованный тезис
+    reviewed_by: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (CheckConstraint("status IN ('draft', 'approved', 'rejected')", name="thesis_drafts_status_check"),
+                      Index("thesis_drafts_doc_idx", "doc_id", "page"))
+
+
+class RankingLabel(Base):
+    """Экспертная оценка релевантности пары «новость × компания × роль» (SPR3-06): 0–3 и причина."""
+    __tablename__ = "ranking_labels"
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=False), primary_key=True)
+    news_id: Mapped[str] = mapped_column(Text)
+    company_id: Mapped[str] = mapped_column(Text)
+    role: Mapped[str] = mapped_column(Text)
+    grade: Mapped[int] = mapped_column(Integer)
+    reason: Mapped[str] = mapped_column(Text, server_default="")
+    annotator: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (UniqueConstraint("news_id", "company_id", "role", "annotator", name="ranking_labels_pair_uq"),
+                      CheckConstraint("grade BETWEEN 0 AND 3", name="ranking_labels_grade_check"))
+
+
 class BankProduct(Base, Payload):
     __tablename__ = "bank_products"
     product_id: Mapped[str] = mapped_column(Text, primary_key=True)
@@ -67,7 +110,22 @@ class News(Base, Payload):
     news_id: Mapped[str] = mapped_column(Text, primary_key=True)
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     kind: Mapped[str] = mapped_column(Text)
-    __table_args__ = (Index("news_published_idx", published_at.desc()),)
+    # Время последнего изменения записи: API подгружает только изменившиеся новости (дельта), а не весь набор.
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    # Сюжет (SPR3-02): id самой ранней новости сюжета; хранится в базе, повторный сбор его не пересчитывает.
+    story_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    __table_args__ = (Index("news_published_idx", published_at.desc()), Index("news_updated_idx", "updated_at"),
+                      Index("news_story_idx", "story_id"))
+
+
+class NewsEntity(Base):
+    """Организация, упомянутая в новости (SPR3-02): company_id — если она есть в профилях."""
+    __tablename__ = "news_entities"
+    news_id: Mapped[str] = mapped_column(ForeignKey("news.news_id", ondelete="CASCADE"), primary_key=True)
+    name: Mapped[str] = mapped_column(Text, primary_key=True)
+    company_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    method: Mapped[str] = mapped_column(Text)
+    __table_args__ = (Index("news_entities_company_idx", "company_id"),)
 
 
 class Insight(Base, Payload):
@@ -226,3 +284,30 @@ class VectorItem(Base, Payload):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     __table_args__ = (Index("vector_items_embedding_idx", embedding, postgresql_using="hnsw",
                             postgresql_ops={"embedding": "vector_cosine_ops"}),)
+
+
+class Job(Base):
+    """Задача фонового воркера (app/worker): очередь в PostgreSQL без отдельного брокера.
+
+    Выборка — SELECT … FOR UPDATE SKIP LOCKED: два воркера не берут одну задачу. Упавшая задача
+    повторяется с экспоненциальной задержкой; после max_attempts — status=dead (dead-letter).
+    dedupe_key не дает поставить в очередь одну и ту же плановую задачу дважды.
+    """
+    __tablename__ = "jobs"
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    kind: Mapped[str] = mapped_column(Text)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default="{}")
+    status: Mapped[str] = mapped_column(Text, server_default="queued")
+    run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    attempts: Mapped[int] = mapped_column(Integer, server_default="0")
+    max_attempts: Mapped[int] = mapped_column(Integer, server_default="5")
+    locked_by: Mapped[str | None] = mapped_column(Text)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error: Mapped[str | None] = mapped_column(Text)
+    dedupe_key: Mapped[str | None] = mapped_column(Text, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        CheckConstraint("status IN ('queued', 'running', 'done', 'dead')", name="jobs_status_check"),
+        Index("jobs_ready_idx", "run_at", postgresql_where="status = 'queued'"),
+    )

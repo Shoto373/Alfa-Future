@@ -13,7 +13,7 @@ import time
 
 import redis
 
-from app import config
+from app import config, observability
 
 logger = logging.getLogger("app.cache")
 
@@ -51,15 +51,18 @@ def get(key: str):
     with _lock:
         hit = _local.get(key)
         if hit and hit[0] > now:
+            observability.cache_lookup(True)
             return hit[1]
     client = _redis()
     if client is None:
+        observability.cache_lookup(False)
         return None
     try:
         raw = client.get(PREFIX + key)
     except Exception as exc:  # redis.RedisError, OSError
         _failed(exc)
         return None
+    observability.cache_lookup(raw is not None)
     if raw is None:
         return None
     value = json.loads(raw)
@@ -85,6 +88,26 @@ def set(key: str, value, ttl: int) -> None:  # noqa: A001 - имя по смыс
         client.set(PREFIX + key, json.dumps(value, ensure_ascii=False, separators=(",", ":")), ex=ttl)
     except Exception as exc:
         _failed(exc)
+
+
+def incr(key: str, ttl: int) -> int:
+    """Счетчик с истечением (ограничение частоты): общий для процессов через Redis, без Redis — в памяти процесса."""
+    client = _redis()
+    if client is not None:
+        try:
+            pipe = client.pipeline()
+            pipe.incr(PREFIX + key)
+            pipe.expire(PREFIX + key, ttl, nx=True)
+            return int(pipe.execute()[0])
+        except Exception as exc:
+            _failed(exc)
+    now = time.monotonic()
+    with _lock:
+        expires, count = _local.get(key, (0.0, 0))
+        if expires <= now:
+            expires, count = now + ttl, 0
+        _local[key] = (expires, count + 1)
+        return count + 1
 
 
 def ping() -> bool | None:

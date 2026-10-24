@@ -113,9 +113,10 @@ def test_store_reads_from_memory_and_sees_other_process_writes(monkeypatch):
     with database.session() as db:  # запись «другого процесса» мимо store
         db.add(News(news_id=other["news_id"], published_at=other["published_at"], kind="rss", payload=other))
         database.set_state(store.REV_KEY, int(database.state(store.REV_KEY, db) or 0) + 1, db)
-    assert store.get(other["news_id"]) is None, "внутри интервала проверки чтение идет из памяти"
-    monkeypatch.setattr(store, "RECHECK_SECONDS", 0.0)
+    assert other["news_id"] not in {i["news_id"] for i in store.all_items()}, "внутри интервала проверки лента читается из памяти"
+    # Запрос конкретной новости по id — сразу сверка с базой: ее мог добавить другой экземпляр API.
     assert store.get(other["news_id"])["title"] == other["title"]
+    assert other["news_id"] in {i["news_id"] for i in store.all_items()}
 
 
 def test_feed_is_cached_per_news_revision(company, monkeypatch):

@@ -1,24 +1,29 @@
 import asyncio
 import logging
 import re
+from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 
-from app import cache, config, embeddings, llm, llm_usage, pipeline, quality, storage, vectors
+from app import cache, config, embeddings, llm, llm_usage, pipeline, quality, ratelimit, storage, vectors
 from app.agent import audit, orchestrator, qa
 from app.auth import store as auth_store
-from app.auth.deps import check_origin, current_user, member_of, require_operator
+from app.auth.deps import check_origin, client_ip, current_user, member_of, require_operator
 from app.companies import ai_settings as company_ai
 from app.companies import extra as company_extra
 from app.companies import profiles
 from app.companies.sectors import SECTOR_NAMES
 from app.errors import AnalysisUnavailable, ApiError, InvalidAnalysisResult
-from app.knowledge import kb
-from app.news import parser, store
+from app.knowledge import ingest, kb
+from app.news import entities, parser, store
+from app.news.sources import registry as sources
 from app.news.taxonomy import TOPICS
 from app.ranking import ROLES, company_feed
+from app.worker import queue as jobs
+from app.worker import runner as worker
 from app.schemas import (AISettingsRequest, Answer, CompanyExtraRequest, ErrorResponse, FeedbackRequest, Insight, InsightRequest,
                          LLMSwitchRequest,
                          NewsCreateRequest, QuestionRequest)
@@ -60,6 +65,14 @@ def _company(company_id: str) -> dict:
 company_or_404 = _company
 
 
+def limited(scope: str):
+    """Зависимость: вошедший пользователь и учет запроса в лимите частоты (пользователь и адрес)."""
+    def dependency(request: Request, user: dict = Depends(current_user)) -> dict:
+        ratelimit.check(scope, user["user_id"], client_ip(request))
+        return user
+    return dependency
+
+
 def _limit_llm(user: dict, action: str) -> None:
     """Частота запросов к модели на пользователя в час («Пересчитать», вопросы в чате).
 
@@ -91,6 +104,26 @@ def _news_brief(n: dict) -> dict:
             "duplicates": len(n["duplicates"])}
 
 
+def _mentions(n: dict, company_id: str, related_only: bool = False) -> dict:
+    """Организации в новости и признак «упоминается ваша компания или ее контрагент» (SPR3-02).
+    related_only — только своя компания и контрагенты (лента: ответ на сотни новостей не раздувается)."""
+    found = entities.mentions(n, company_id)
+    related = [m for m in found if m["relation"] != "other"]
+    return {"mentions": related if related_only else found, "mentions_company": bool(related)}
+
+
+def _worker_status() -> dict:
+    """Пульс фонового воркера и очередь задач: API отвечает и без воркера, но новости тогда не обновляются."""
+    beat = worker.status() or {}
+    try:
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(beat["at"])).total_seconds()
+    except (KeyError, TypeError, ValueError):
+        age = None
+    return {"alive": age is not None and age < 120, "workers": beat.get("workers", 0), "last_seen": beat.get("at"),
+            "last_job": beat.get("last_job"),
+            "queue": jobs.stats()}
+
+
 @router.get("/meta", responses=ERRORS)
 def meta() -> dict:
     try:
@@ -103,6 +136,7 @@ def meta() -> dict:
         "news": len(store.all_items()),
         "search": {"embeddings": embeddings.signature() != "emb:off", "vectors": vectors.stats(), "redis": cache.ping()},
         "pipeline": pipeline.status(),
+        "worker": _worker_status(),
         # Расходы банка на LLM — не публичные данные: только сотрудникам банка в /metrics.
         "llm": {"connected": llm.available(), "allowed_models": list(config.ALLOWED_MODELS)},
         "roles": [{"role": k, "name": v["name"]} for k, v in ROLES.items()],
@@ -237,24 +271,31 @@ def news_feed(company_id: str, topic: str | None = Query(None, max_length=40),
     storage.log_event("feed_view", company_id=company_id, role=role)
     cached = storage.cached_insight_refs(company_id, role, [r["news"]["news_id"] for r in ranked])
     # total и topic_counts — по всей ленте компании: главная и лента показывают одни и те же числа.
-    return {"company_id": company_id, "role": role, "total": len(everything),
+    # JSONResponse напрямую: ответ — уже простые типы, а jsonable_encoder на сотнях новостей — самая дорогая часть
+    # запроса под нагрузкой (≈14 мс процессора на ленту в 500 новостей).
+    return JSONResponse({"company_id": company_id, "role": role, "total": len(everything),
             "topic_counts": sorted(counts.values(), key=lambda c: (-c["count"], c["name"])), "stories": stories, "items": [
         # Склеенные похожие новости других источников добавляются к счетчику «+N источников».
         {"news": {**_news_brief(r["news"]), "duplicates": len(r["news"]["duplicates"]) + r.get("story_size", 0),
-                  "story_id": r.get("story_id")},
+                  "story_id": r.get("story_id"), **_mentions(r["news"], company_id, related_only=True)},
          "relevance": r["relevance"],
          # Знак эффекта — из готового разбора: метка «скорее риск / возможность» в карточке ленты.
          "cached_insight_id": cached.get(r["news"]["news_id"], (None, None))[0],
          "cached_effect": cached.get(r["news"]["news_id"], (None, None))[1]}
-        for r in ranked]}
+        for r in ranked]})
 
 
-@router.get("/news/{news_id}", responses=ERRORS, dependencies=[Depends(current_user)])
-def news(news_id: str) -> dict:
-    return _news(news_id)
+@router.get("/news/{news_id}", responses=ERRORS)
+def news(news_id: str, company_id: str | None = Query(None, max_length=64), user: dict = Depends(current_user)) -> dict:
+    """Новость с организациями в тексте; с company_id — и их отношение к компании (своя, поставщик, покупатель)."""
+    n = _news(news_id)
+    if company_id is None:
+        return {**n, "entities": entities.of_news(n)}
+    member_of(user, company_id)
+    return {**n, "entities": entities.of_news(n), **_mentions(n, company_id)}
 
 
-@router.post("/news", responses=ERRORS, dependencies=[Depends(current_user)])
+@router.post("/news", responses=ERRORS, dependencies=[Depends(limited("news"))])
 def add_news(payload: NewsCreateRequest) -> dict:
     if payload.url:
         try:
@@ -277,11 +318,11 @@ def add_news(payload: NewsCreateRequest) -> dict:
 
 @router.post("/news/refresh", responses=ERRORS, dependencies=[Depends(require_operator)])
 def refresh_news() -> dict:
-    return parser.refresh()
+    return sources.collect(force=True)
 
 
 @router.post("/insights", response_model=Insight, responses=ERRORS)
-async def create_insight(payload: InsightRequest, request: Request, user: dict = Depends(current_user)) -> dict:
+async def create_insight(payload: InsightRequest, request: Request, user: dict = Depends(limited("insights"))) -> dict:
     request_id: str = request.state.request_id
     # Роль — из членства; perspective лишь меняет угол зрения (доступ к компании проверяется так же).
     role = payload.perspective or member_of(user, payload.company_id)["role"]
@@ -346,7 +387,7 @@ def get_insight(insight_id: str, user: dict = Depends(current_user)) -> dict:
 
 
 @router.post("/insights/{insight_id}/questions", response_model=Answer, responses=ERRORS)
-def ask(insight_id: str, payload: QuestionRequest, user: dict = Depends(current_user)) -> dict:
+def ask(insight_id: str, payload: QuestionRequest, user: dict = Depends(limited("questions"))) -> dict:
     ins = storage.get_insight(insight_id)
     if ins is None:
         raise ApiError("INSIGHT_NOT_FOUND")
@@ -402,6 +443,12 @@ def analytics() -> dict:
 @router.get("/analytics/{doc_id}/pdf", responses=ERRORS, dependencies=[Depends(current_user)])
 def analytics_pdf(doc_id: str):
     doc = kb.document(doc_id)
+    if doc is not None and doc.get("ingested"):  # PDF, загруженный аналитиком, хранится в базе
+        found = ingest.pdf(doc_id)
+        if found is None:
+            raise ApiError("DOCUMENT_NOT_FOUND")
+        return Response(found[1], media_type="application/pdf",
+                        headers={"Content-Disposition": f"inline; filename*=UTF-8''{quote(found[0])}"})
     pdf_dir = config.bank_pdf_dir()
     if doc is None or pdf_dir is None:
         raise ApiError("DOCUMENT_NOT_FOUND")

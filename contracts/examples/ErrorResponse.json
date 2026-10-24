@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "Недостаточно прав",
+    "request_id": "req_example",
+    "retryable": false
+  }
+}

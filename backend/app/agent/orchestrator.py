@@ -5,8 +5,9 @@
 """
 
 import asyncio
+import time
 
-from app import llm_usage
+from app import llm_usage, observability
 from app.agent import stages
 from app.companies import extra as company_extra
 
@@ -58,8 +59,11 @@ async def run(company: dict, role: str, news: dict, request_id: str, use_llm: bo
 
     Вызовы модели учитываются в доле компании в общем дневном бюджете (llm_usage.for_company);
     charge_company=False — фоновый конвейер банка: у него своя доля, долю компании он не тратит."""
+    started = time.time()
     with llm_usage.for_company(company["company_id"] if charge_company else None):
-        return await _run(company, role, news, request_id, use_llm)
+        insight = await _run(company, role, news, request_id, use_llm)
+    observability.record_insight(insight, started, request_id)  # метрики этапов и спаны; trace_id — в Insight.trace
+    return insight
 
 
 async def _run(company: dict, role: str, news: dict, request_id: str, use_llm: bool | None = None) -> dict:

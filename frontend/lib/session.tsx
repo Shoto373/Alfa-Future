@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ApiError, api } from "./api";
+import { invalidate } from "./query";
 import type { Membership, Role, User } from "./types";
 
 export const ROLE_NAMES: Record<Role, string> = {
@@ -74,14 +75,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Смена пользователя сбрасывает кэш ответов: данные прежнего пользователя не показываются следующему.
   const login = useCallback(async (email: string, password: string) => {
     const u = await api.login(email, password);
+    invalidate();
     setUser(u);
     return u;
   }, []);
 
   const register = useCallback(async (name: string, email: string, password: string) => {
     const u = await api.register(name, email, password);
+    invalidate();
     setUser(u);
     return u;
   }, []);
@@ -92,6 +96,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } catch {
       /* cookie истечет сама; локально выходим в любом случае */
     }
+    invalidate();
     setUser(null);
   }, []);
 

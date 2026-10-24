@@ -1,12 +1,15 @@
 """Эндпойнты регистрации, входа и управления участниками компаний."""
 
 
-from fastapi import APIRouter, Depends, Request, Response
+from urllib.parse import quote
+
+from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi.responses import RedirectResponse
 
 from app import config
 from app.errors import ApiError
 from app.api.router import ERRORS, company_or_404
-from app.auth import security, store
+from app.auth import oidc, security, store
 from app.auth.deps import COOKIE, check_origin, client_ip, current_user, member_of, require_admin, require_member
 from app.auth.schemas import (ClaimRequest, LoginRequest, Member, MemberCreateRequest, MembersResponse,
                               MemberUpdateRequest, Membership, RegisterRequest, User)
@@ -22,8 +25,44 @@ def _set_cookie(response: Response, token: str) -> None:
                         secure=config.frontend_origin().startswith("https://"))
 
 
+def _password_login_allowed() -> None:
+    if not config.auth_password_enabled():
+        raise ApiError("FORBIDDEN", "Вход по паролю отключен — войдите через Альфа-ID")
+
+
+@router.get("/auth/methods", responses=ERRORS)
+def auth_methods() -> dict:
+    """Способы входа для экрана входа: по паролю (демо) и через корпоративный IdP (Альфа-ID)."""
+    return {"password": config.auth_password_enabled(), "oidc": oidc.enabled()}
+
+
+@router.get("/auth/oidc/login", responses=ERRORS)
+def oidc_login(next: str = Query("/", max_length=200)) -> RedirectResponse:
+    if not oidc.enabled():
+        raise ApiError("FORBIDDEN", "Вход через Альфа-ID не настроен")
+    return RedirectResponse(oidc.start(next), status_code=302)
+
+
+@router.get("/auth/oidc/callback", responses=ERRORS)
+def oidc_callback(code: str = Query("", max_length=4096), state: str = Query("", max_length=200),
+                  error: str = Query("", max_length=200)) -> RedirectResponse:
+    """Возврат из IdP: проверка кода и токена, пользователь и членство из claims, сессия — как при входе по паролю."""
+    front = config.frontend_origin().rstrip("/")
+    try:
+        if error or not code or not state:
+            raise oidc.OIDCError("Вход через Альфа-ID отменен")
+        claims, next_path = oidc.exchange(code, state)
+        user = oidc.sync_user(claims)
+    except oidc.OIDCError as exc:
+        return RedirectResponse(f"{front}/login?error={quote(str(exc))}", status_code=302)
+    response = RedirectResponse(front + next_path, status_code=302)
+    _set_cookie(response, store.create_session(user["user_id"]))
+    return response
+
+
 @router.post("/auth/register", status_code=201, response_model=User, responses=ERRORS)
 def register(payload: RegisterRequest, response: Response) -> dict:
+    _password_login_allowed()
     user = store.create_user(payload.name, payload.email, payload.password)
     _set_cookie(response, store.create_session(user["user_id"]))
     return store.user_view(user)
@@ -32,6 +71,7 @@ def register(payload: RegisterRequest, response: Response) -> dict:
 @router.post("/auth/login", response_model=User, responses=ERRORS)
 def login(payload: LoginRequest, request: Request, response: Response) -> dict:
     # 5 неудач с адреса на email за 15 минут (и 30 со всех адресов) — блокировка; счетчик в базе, общий для воркеров.
+    _password_login_allowed()
     ip = client_ip(request)
     if not store.login_attempt(payload.email, ip):
         raise ApiError("TOO_MANY_ATTEMPTS")

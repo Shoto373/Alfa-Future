@@ -5,7 +5,7 @@ const newsId = "новость%25 & курс";
 const claim: Claim = { text: "Ставка влияет на расходы компании.", origin: "ai", source_ids: ["source"], features: [] };
 const insight: Insight = {
   schema_version: "1.0.0", insight_id: "fast-insight", request_id: "request", company_id: "company", role: "cfo",
-  news_id: newsId, created_at: "2026-10-23T09:00:00Z", mode: "rules", model: null,
+  news_id: newsId, created_at: "2026-10-23T09:00:00Z", mode: "rules", model: null, fallback_reason: null, effect: null,
   title: "Банк России сохранил ставку", headline: "Быстрый разбор готов",
   what_happened: { summary: "Ставка сохранена", facts: [{ ...claim, origin: "fact" }], actors: [], dates: [], assumptions: [] },
   why_important: [claim], risks: [claim], opportunities: [], actions: [claim], questions: [],
@@ -48,7 +48,7 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844
 
     await page.goto(`/pulse/n/${encodeURIComponent(newsId)}`);
     await expect(page.getByRole("heading", { name: "Быстрый разбор готов", exact: true })).toBeVisible();
-    await expect(page.getByRole("status")).toContainText("AI-модель дополняет выводы");
+    await expect(page.getByRole("status").filter({ hasText: "AI-модель дополняет выводы" })).toBeVisible();
     await expect(page.getByText("Быстрый разбор", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Пересчитать", exact: true })).toBeDisabled();
     const sources = page.getByRole("button", { name: /6\. На чем основан вывод/ });
