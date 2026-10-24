@@ -1,0 +1,69 @@
+// Колонка ленты видна только на планшете (768–1100 px): на телефоне не помещается,
+// на ноутбуке лента и так в один клик через боковое меню.
+.rail {
+  display: none;
+}
+
+@media (min-width: 768px) and (max-width: 1100px) {
+  .rail {
+    display: block;
+    position: sticky;
+    top: 84px;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+    background: var(--card);
+    border-radius: 20px;
+    padding: 14px 10px;
+    box-shadow: var(--shadow);
+
+    h2 {
+      font-size: 15px;
+      margin: 0 6px 10px;
+    }
+
+    ol {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    a {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 8px;
+      border-radius: 12px;
+      text-decoration: none;
+      color: var(--ink);
+    }
+
+    a:hover {
+      background: rgba(11, 31, 53, .05);
+    }
+
+    .active a {
+      background: rgba(239, 49, 36, .08);
+    }
+  }
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.title {
+  font-size: 13px;
+  line-height: 1.35;
+  font-weight: 500;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

@@ -63,3 +63,13 @@
     transform: rotate(360deg);
   }
 }
+
+// Планшет: разбор и лента на одном экране (FeedRail виден только в этом диапазоне).
+@media (min-width: 768px) and (max-width: 1100px) {
+  .split {
+    display: grid;
+    grid-template-columns: 230px minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+  }
+}

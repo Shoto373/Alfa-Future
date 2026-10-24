@@ -299,3 +299,27 @@
     }
   }
 }
+
+// Планшет горизонтально (861–1100 px): боковое меню — только значки, место отдано ленте и разбору.
+@media (min-width: 861px) and (max-width: 1100px) {
+  .sidebar {
+    width: 76px;
+    padding: 18px 10px 16px;
+  }
+
+  .brandText,
+  .navLabel,
+  .navBadge,
+  .sidebarFoot {
+    display: none;
+  }
+
+  .navItem {
+    justify-content: center;
+    padding: 10px 0;
+  }
+
+  .navDivider {
+    margin: 10px 4px;
+  }
+}

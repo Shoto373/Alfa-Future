@@ -62,7 +62,7 @@ export default function Shell({ children }: { children: ReactNode }) {
       <aside className={`${styles.sidebar} ${menuOpen ? styles.open : ""}`}>
         <Link href="/" className={common.brand} aria-label="Альфа-Бизнес, главная">
           <AlfaMark size={34} />
-          <span className={common.brandText}>Альфа-Бизнес</span>
+          <span className={`${common.brandText} ${styles.brandText}`}>Альфа-Бизнес</span>
         </Link>
         <nav className={styles.nav}>
           {NAV.map((item, i) => {
@@ -75,9 +75,9 @@ export default function Shell({ children }: { children: ReactNode }) {
               </>
             );
             return item.disabled ? (
-              <span key={item.href} className={`${styles.navItem} ${styles.disabled}`} title="Раздел интернет-банка, не входит в прототип">{inner}</span>
+              <span key={item.href} className={`${styles.navItem} ${styles.disabled}`} title={`${item.label}: раздел интернет-банка, не входит в прототип`}>{inner}</span>
             ) : (
-              <Link key={item.href} href={item.href} className={`${styles.navItem} ${active(item.href) ? styles.active : ""} ${item.accent ? styles.accent : ""}`}>{inner}</Link>
+              <Link key={item.href} href={item.href} title={item.label} className={`${styles.navItem} ${active(item.href) ? styles.active : ""} ${item.accent ? styles.accent : ""}`}>{inner}</Link>
             );
           })}
         </nav>

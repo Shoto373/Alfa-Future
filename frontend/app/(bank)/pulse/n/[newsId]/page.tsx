@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import AccessDenied from "@/components/AccessDenied";
+import FeedRail from "@/components/FeedRail";
 import InsightView from "@/components/InsightView";
 import { ErrorState, Icon, Skeleton } from "@/components/ui";
 import { AbortedError, ApiError, api } from "@/lib/api";
@@ -19,7 +20,12 @@ export default function InsightPage() {
   const { newsId } = useParams<{ newsId: string }>();
   const { session } = useSession();
   // Смена компании или новости — разбор с чистого листа; ответ на старый запрос игнорируется.
-  return <NewsInsight key={`${session!.companyId}:${session!.role}:${newsId}`} newsId={newsId} />;
+  return (
+    <div className={styles.split}>
+      <FeedRail activeId={decodeURIComponent(newsId)} />
+      <NewsInsight key={`${session!.companyId}:${session!.role}:${newsId}`} newsId={newsId} />
+    </div>
+  );
 }
 
 function NewsInsight({ newsId }: { newsId: string }) {

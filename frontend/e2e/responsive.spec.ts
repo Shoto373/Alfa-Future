@@ -106,3 +106,35 @@ test("главная при прогретом API: LCP ≤ 2,5 с", async ({ pa
   console.log(`LCP главной: ${Math.round(lcp)} мс`);
   expect(lcp).toBeLessThanOrEqual(2500);
 });
+
+for (const width of [768, 1024]) {
+  test(`планшет ${width}px: лента рядом с разбором, переход к следующей новости`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width === 768 ? 1024 : 768 });
+    await login(page);
+    await page.goto("/pulse");
+    await page.getByTestId("news-card").first().getByRole("link").first().click();
+    const rail = page.getByRole("complementary", { name: "Лента рядом с разбором" });
+    await expect(rail).toBeVisible();
+    await expect(page.getByRole("heading", { name: "1. Что произошло" })).toBeVisible({ timeout: 30_000 });
+    const railBox = await rail.boundingBox();
+    const insightBox = await page.getByRole("heading", { name: "1. Что произошло" }).boundingBox();
+    expect(railBox!.x + railBox!.width).toBeLessThanOrEqual(insightBox!.x);  // рядом, а не друг под другом
+    await noHorizontalScroll(page);
+    await page.screenshot({ path: `test-results/tablet-split-${width}.png` });
+
+    const next = rail.getByRole("link").nth(1);
+    const href = (await next.getAttribute("href"))!;
+    await next.click();
+    await expect(page).toHaveURL((url) => url.pathname === href);
+    await expect(rail.locator("a[aria-current=page]")).toHaveAttribute("href", href);
+  });
+}
+
+test("ноутбук: колонки ленты рядом с разбором нет", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await login(page);
+  await page.goto("/pulse");
+  await page.getByTestId("news-card").first().getByRole("link").first().click();
+  await expect(page.getByRole("heading", { name: "1. Что произошло" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("complementary", { name: "Лента рядом с разбором" })).toBeHidden();
+});
