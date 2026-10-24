@@ -59,7 +59,11 @@ playwright-report/
 /app/
 /Dockerfile
 /requirements.txt
-/backend/scripts/
+/backend/scripts/*
+# Оценка и калибровка ранжирования (SPR3-06) — в репозитории; остальные локальные скрипты — нет.
+!/backend/scripts/_labels.py
+!/backend/scripts/eval_ranking.py
+!/backend/scripts/fit_ranking.py
 .idea/
 
 coverage/
