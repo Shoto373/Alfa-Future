@@ -19,6 +19,7 @@ const STEP: Record<string, string> = {
   get_story_coverage: "Другие источники",
   get_bank_products: "Продукты банка",
   llm_compose: "Черновик AI",
+  llm_retry: "Повтор черновика",
   rules_compose: "Быстрый разбор",
   llm_repair: "Исправление AI",
   safe_fallback: "Возврат к быстрому разбору",

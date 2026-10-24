@@ -171,8 +171,14 @@ async def draft(run: Run) -> None:
     run.ctx["rules_effect"] = run.effect
     if run.use_llm:
         try:
-            data, meta = await asyncio.to_thread(llm.chat_json, prompts.COMPOSE_SYSTEM,
-                                                 prompts.compose_user(run.ctx, context.sources(run.ctx)), "compose", 8000)
+            user = prompts.compose_user(run.ctx, context.sources(run.ctx))
+            try:
+                data, meta = await asyncio.to_thread(llm.chat_json, prompts.COMPOSE_SYSTEM, user, "compose", 8000)
+            except llm.TruncatedError:
+                # Модель израсходовала лимит ответа на рассуждения (шлюз не дает их ограничить) — один повтор
+                # без рассуждений вместо отката к быстрому разбору.
+                run.trace.add("compose", "llm_retry", "Модель израсходовала лимит ответа на рассуждения — повтор без них", "warning")
+                data, meta = await asyncio.to_thread(llm.chat_json, prompts.COMPOSE_SYSTEM, user, "compose", 8000, "off")
             rules_facts = run.draft["what_happened"]["facts"]
             run.draft = context.merge_llm(run.draft, data)
             notes = context.tidy_llm(run.draft, rules_facts, run.ctx)

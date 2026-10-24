@@ -169,3 +169,31 @@ def test_group_of_companies_adds_exposures_and_reason():
     assert profiles.group_mix(g) == "строительство 60%, металлургия 30%"
     assert profiles.group({**c, "group": {**c["group"], "usable": False}}) is None
     assert profiles.group({**c, "group": {**c["group"], "members": 1}}) is None
+
+
+def test_truncated_compose_retries_without_reasoning(client, company, monkeypatch):
+    """Модель израсходовала лимит ответа на рассуждения — повтор без них, а не откат к быстрому разбору."""
+    monkeypatch.setenv("LLM_BASE_URL", "http://llm.test/v1")
+    monkeypatch.setenv("LLM_API_KEY", "k")
+    monkeypatch.setattr(llm, "_down_until", 0.0)
+    calls = []
+
+    def fake_post(url, json, timeout, headers):
+        if "исследователь" in json["messages"][0]["content"]:
+            return httpx.Response(200, json={"choices": [{"message": {"content": '{"queries": []}'}}], "usage": {"total_tokens": 10}},
+                                  request=httpx.Request("POST", url))
+        compose = "интерпретацию новости" in json["messages"][0]["content"]
+        if compose:
+            calls.append(json.get("reasoning"))
+        if compose and json.get("reasoning") != {"enabled": False}:
+            return httpx.Response(200, json={"choices": [{"message": {"content": ""}, "finish_reason": "length"}],
+                                             "usage": {"total_tokens": 8000}}, request=httpx.Request("POST", url))
+        content = ('{"risks": [{"text": "Долг остается дорогим", "origin": "ai", "source_ids": ["news:seed-rate-hold"], '
+                   '"features": ["products.loans"]}]}')
+        return httpx.Response(200, json={"choices": [{"message": {"content": content}, "finish_reason": "stop"}],
+                                         "usage": {"total_tokens": 100}}, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(llm.httpx, "post", fake_post)
+    ins = run(company, "cfo", "seed-rate-hold")
+    assert calls[:2] == [None, {"enabled": False}], "повтор черновика — без рассуждений"
+    assert ins["mode"] == "llm" and any(s["name"] == "llm_retry" for s in ins["trace"])
