@@ -82,6 +82,10 @@ class LanguageDoc(Strict):
     foreign_direction: dict[Literal["up", "down"], list[str]]
     sanctions_direction: dict[Literal["up", "down"], list[str]]
     actors: list[str]
+    # Ставка иностранного регулятора — не ключевая ставка Банка России (ЦБ Турции, ФРС, ЕЦБ…).
+    foreign_central_banks: list[str] = Field(default_factory=list)
+    central_bank_words: list[str] = Field(default_factory=list)
+    bank_of_russia: list[str] = Field(default_factory=list)
 
 
 DOCS = {"topics": TopicsDoc, "sectors": SectorsDoc, "language": LanguageDoc}

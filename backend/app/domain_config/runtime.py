@@ -27,6 +27,9 @@ FOREIGN_CURRENCY: list[str] = []
 FOREIGN_DIRECTION: dict[str, list[str]] = {}
 SANCTIONS_DIRECTION: dict[str, list[str]] = {}
 ACTORS: list[str] = []
+FOREIGN_CENTRAL_BANKS: list[str] = []
+CENTRAL_BANK_WORDS: list[str] = []
+BANK_OF_RUSSIA: list[str] = []
 SECTOR_NAMES: dict[str, str] = {}
 OKVED_PREFIXES: dict[str, str] = {}
 SECTOR_SENSITIVITY: dict[str, dict[str, Sensitivity]] = {}
@@ -92,6 +95,8 @@ def build(docs: dict) -> dict:
                     "default": _actions(docs["topics"]["default_actions"])},
         "QUESTIONS": {k: t["question"] for k, t in topics.items() if t.get("question")},
         "FOREIGN_CURRENCY": list(lang["foreign_currency"]), "ACTORS": list(lang["actors"]),
+        "FOREIGN_CENTRAL_BANKS": list(lang["foreign_central_banks"]), "CENTRAL_BANK_WORDS": list(lang["central_bank_words"]),
+        "BANK_OF_RUSSIA": list(lang["bank_of_russia"]),
     }
 
 
