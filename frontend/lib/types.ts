@@ -17,6 +17,7 @@ export type TraceStep = Schemas["TraceStep"];
 export type Insight = Schemas["Insight"];
 export type Effect = NonNullable<Insight["effect"]>;
 export type Answer = Schemas["Answer"];
+export type DialogTurn = Answer & { rating: number | null };
 
 export interface LLMSwitch {
   paused: boolean;

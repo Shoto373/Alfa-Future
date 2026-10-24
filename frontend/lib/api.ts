@@ -1,5 +1,5 @@
 import type {
-  AISettings, Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, ConfigPreview, ConfigState, ConfigTexts, ConfigIssue, CounterpartiesView, Inbox, NotificationSettings, ScenarioKind, ScenarioResponse, KbDocument, KbDraft, KbUploadItem, LabelingState, LookupCompany, Member, Membership, Mention, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
+  AISettings, Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, ConfigPreview, ConfigState, ConfigTexts, ConfigIssue, CounterpartiesView, DialogTurn, Inbox, NotificationSettings, ScenarioKind, ScenarioResponse, KbDocument, KbDraft, KbUploadItem, LabelingState, LookupCompany, Member, Membership, Mention, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
@@ -131,6 +131,10 @@ export const api = {
   },
   ask: (insightId: string, question: string) =>
     request<Answer>(`/api/v1/insights/${insightId}/questions`, json("POST", { question }), { timeoutMs: 90_000 }),
+  // Диалог по разбору (SPR4-05): история реплик пользователя и оценка ответа.
+  dialog: (insightId: string) => request<DialogTurn[]>(`/api/v1/insights/${cid(insightId)}/questions`),
+  rateAnswer: (insightId: string, turnId: number, rating: 1 | -1) =>
+    request<{ ok: boolean }>(`/api/v1/insights/${cid(insightId)}/questions/${turnId}/rating`, json("POST", { rating })),
   feedback: (insightId: string, rating: 1 | -1, section: string, comment?: string) =>
     request<{ status: string }>("/api/v1/feedback", json("POST", { insight_id: insightId, rating, section, comment: comment || null })),
   addNews: (payload: { title?: string; text?: string; url?: string }) =>

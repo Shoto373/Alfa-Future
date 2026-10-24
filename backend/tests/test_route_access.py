@@ -41,6 +41,8 @@ ROUTES = {
     ("POST", "/api/v1/insights"): ({"fast": True}, {403}),
     ("GET", "/api/v1/insights/{insight_id}"): (None, {403, 404}),
     ("POST", "/api/v1/insights/{insight_id}/questions"): ({"question": "Что с долгом?"}, {403, 404}),
+    ("GET", "/api/v1/insights/{insight_id}/questions"): (None, {403, 404}),
+    ("POST", "/api/v1/insights/{insight_id}/questions/{turn_id}/rating"): ({"rating": 1}, {403, 404}),
     ("POST", "/api/v1/feedback"): ({"rating": 1}, {403, 404}),
     ("GET", "/api/v1/companies/{company_id}/members"): (None, {403}),
     ("POST", "/api/v1/companies/{company_id}/members"): ({"email": "spy@example.com", "role": "cfo"}, {403}),
@@ -95,7 +97,7 @@ def test_outsider_cannot_touch_other_company(victim, route):
     method, path = route
     body, expected = ROUTES[route]
     url = path.format(company_id=victim["company_id"], insight_id=victim["insight_id"],
-                      member_id=victim["member_id"], file_id="file-0", news_id=victim["news_id"])
+                      member_id=victim["member_id"], file_id="file-0", turn_id=1, news_id=victim["news_id"])
     params = {"company_id": victim["company_id"]} if path in QUERY_COMPANY else None
     if path == "/api/v1/insights/stream":
         params = {"company_id": victim["company_id"], "news_id": victim["news_id"]}

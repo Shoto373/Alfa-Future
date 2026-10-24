@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from app import cache, config, embeddings, llm, llm_usage, monitoring, pipeline, quality, ratelimit, storage, vectors
-from app.agent import audit, orchestrator, qa
+from app.agent import audit, dialog, orchestrator
 from app.auth import store as auth_store
 from app.auth.deps import check_origin, client_ip, current_user, member_of, require_operator
 from app.companies import ai_settings as company_ai
@@ -26,7 +26,7 @@ from app.scenarios import calc as scenarios
 from app.scenarios.corridor import corridor
 from app.worker import queue as jobs
 from app.worker import runner as worker
-from app.schemas import (AISettingsRequest, Answer, CompanyExtraRequest, ErrorResponse, FeedbackRequest, Insight, InsightRequest,
+from app.schemas import (AISettingsRequest, Answer, AnswerRatingRequest, DialogTurnView, CompanyExtraRequest, ErrorResponse, FeedbackRequest, Insight, InsightRequest,
                          LLMSwitchRequest,
                          NewsCreateRequest, QuestionRequest, ScenarioRequest)
 
@@ -423,12 +423,35 @@ def ask(insight_id: str, payload: QuestionRequest, user: dict = Depends(limited(
         raise ApiError("INSIGHT_NOT_FOUND")
     member_of(user, ins["company_id"])
     c = _company(ins["company_id"])
+    role = member_of(user, ins["company_id"])["role"]
     _limit_llm(user, "question")
     with llm_usage.for_company(c["company_id"]):  # ответ модели — в доле компании в общем бюджете
-        result = qa.answer(ins, c, payload.question.strip())
+        result = dialog.answer(ins, c, payload.question.strip(), user["user_id"], role)
     storage.save_answer(result)
-    storage.log_event("question", insight_id=insight_id, refused=result["refused"], mode=result["mode"])
+    storage.log_event("question", insight_id=insight_id, refused=result["refused"], mode=result["mode"],
+                      intent=result["intent"], with_sources=bool(result["claims"]) and not result["refused"])
     return result
+
+
+@router.get("/insights/{insight_id}/questions", response_model=list[DialogTurnView], responses=ERRORS)
+def dialog_history(insight_id: str, user: dict = Depends(current_user)) -> list[dict]:
+    """История диалога пользователя по разбору (SPR4-05): при возврате к разбору прежние ответы на месте."""
+    ins = storage.get_insight(insight_id)
+    if ins is None:
+        raise ApiError("INSIGHT_NOT_FOUND")
+    member_of(user, ins["company_id"])
+    return dialog.history(insight_id, user["user_id"])
+
+
+@router.post("/insights/{insight_id}/questions/{turn_id}/rating", responses=ERRORS)
+def dialog_rate(insight_id: str, turn_id: int, payload: AnswerRatingRequest, user: dict = Depends(current_user)) -> dict:
+    ins = storage.get_insight(insight_id)
+    if ins is None:
+        raise ApiError("INSIGHT_NOT_FOUND")
+    member_of(user, ins["company_id"])
+    ok = dialog.rate(insight_id, user["user_id"], turn_id, payload.rating)
+    storage.log_event("answer_rating", insight_id=insight_id, rating=payload.rating)
+    return {"ok": ok}
 
 
 @router.post("/feedback", responses=ERRORS)

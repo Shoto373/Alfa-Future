@@ -55,6 +55,11 @@ def mln(value: float) -> str:
     return (f"{m:.1f}" if m < 10 else f"{m:.0f}").replace(".", ",") + " млн ₽"
 
 
+def signed(value: float) -> str:
+    """Шок со знаком, как пишут по-русски: +0,5, −1, +10."""
+    return f"{value:+g}".replace(".", ",")
+
+
 def _pct(share: float) -> str:
     return f"{share * 100:g}%".replace(".", ",")
 
@@ -99,11 +104,11 @@ def key_rate(company_id: str, shock_pp: float, debt: float | None = None, floati
     inputs.append(Input("floating_share", "Доля долга с плавающей ставкой", floating_share, "доля", *origin))
     effect = -debt * floating_share * shock_pp / 100
     debt_text = f"долг ≈ {mln(debt)}"
-    formula = f"{debt_text} × {_pct(floating_share)} с плавающей ставкой × {shock_pp:+g} п.п."
+    formula = f"{debt_text} × {_pct(floating_share)} с плавающей ставкой × {signed(shock_pp)} п.п."
     caveats = ["Долг оценен по отраслевому коэффициенту: остатков долга в данных кейса нет"] if inputs[-2].origin == "estimate" else []
     caveats.append("Долг с фиксированной ставкой переоценивается при рефинансировании — в оценку за год не входит")
     sign = "вырастут" if effect < 0 else "снизятся"
-    text = f"При изменении ставки на {shock_pp:+g} п.п. процентные расходы {sign} ≈ на {mln(effect)} в год"
+    text = f"При изменении ставки на {signed(shock_pp)} п.п. процентные расходы {sign} ≈ на {mln(effect)} в год"
     return Result("key_rate", shock_pp, "п.п.", effect, text, formula, inputs, caveats)
 
 
@@ -131,9 +136,9 @@ def fx(company_id: str, shock_pct: float, fx_revenue_share: float | None = None,
                    Input("import_share", "Доля импорта в закупках", imp_share, "доля", *origin)]
         effect -= purchases * imp_share * shock_pct / 100
         parts.append(f"− закупки {mln(purchases)} × {_pct(imp_share)} импорта")
-    formula = f"({' '.join(parts)}) × {shock_pct:+g}% к курсу"
+    formula = f"({' '.join(parts)}) × {signed(shock_pct)}% к курсу"
     sign = "выигрывает" if effect > 0 else "теряет"
-    text = f"При изменении курса рубля на {shock_pct:+g}% (плюс — рубль слабее) компания {sign} ≈ {mln(effect)} в год"
+    text = f"При изменении курса рубля на {signed(shock_pct)}% (плюс — рубль слабее) компания {sign} ≈ {mln(effect)} в год"
     return Result("fx", shock_pct, "%", effect, text, formula, inputs, ["Без учета хеджирования и пересмотра цен в контрактах"])
 
 
@@ -149,9 +154,9 @@ def commodity(company_id: str, shock_pct: float, exposure: float | None = None) 
     origin = ("user", "user") if exposure is not None else ("estimate", "config:sectors")
     inputs = [revenue, Input("exposure", f"Доля выручки, зависящая от цены ({label})", share, "доля", *origin)]
     effect = revenue.value * share * shock_pct / 100
-    formula = f"выручка {mln(revenue.value)} × {_pct(share)} × {shock_pct:+g}% к цене ({label})"
+    formula = f"выручка {mln(revenue.value)} × {_pct(share)} × {signed(shock_pct)}% к цене ({label})"
     sign = "растет" if effect > 0 else "снижается"
-    text = f"При изменении цены ({label}) на {shock_pct:+g}% валовая маржа {sign} ≈ на {mln(effect)} в год"
+    text = f"При изменении цены ({label}) на {signed(shock_pct)}% валовая маржа {sign} ≈ на {mln(effect)} в год"
     return Result("commodity", shock_pct, "%", effect, text, formula, inputs,
                   ["Себестоимость считается неизменной: эффект ложится на маржу целиком"])
 

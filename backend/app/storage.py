@@ -191,6 +191,9 @@ def metrics() -> dict:
     usage = llm_usage.usage()
     feed_views = sum(1 for e in events if e["kind"] == "feed_view")
     opens = sum(1 for e in events if e["kind"] == "insight_open")
+    # Диалог (SPR4-05): ответы по существу (не отказы) и доля из них с источником у утверждений.
+    answered = [e for e in events if e["kind"] == "question" and not e.get("refused")]
+    answer_ratings = Counter(e["rating"] for e in events if e["kind"] == "answer_rating")
     n = len(insights) or 1
     return {
         "content": {
@@ -218,6 +221,13 @@ def metrics() -> dict:
             "llm_by_company": llm_usage.by_company(),
             "llm_paused": llm_usage.pause_state(),
             "fallback_rate": round(llm_fallback / llm_tried, 3) if llm_tried else None,
+        },
+        "dialog": {
+            "questions": sum(1 for e in events if e["kind"] == "question"),
+            "answered": len(answered),
+            "answers_with_sources": round(sum(1 for e in answered if e.get("with_sources")) / len(answered), 3) if answered else None,
+            "by_intent": dict(Counter(e.get("intent", "explain") for e in events if e["kind"] == "question")),
+            "ratings": {"up": answer_ratings[1], "down": answer_ratings[-1]},
         },
         "recent_feedback": [f for f in feedback[-10:] if f.get("comment")],
     }

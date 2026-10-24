@@ -292,6 +292,21 @@ class Answer(Strict):
     sources: list[Source]
     mode: Literal["llm", "rules"]
     refused: bool = False
+    # Диалог (SPR4-05): реплика в истории, намерение вопроса, следующие вопросы под роль, резюме старых реплик.
+    turn_id: int | None = None
+    intent: Literal["explain", "quantify", "counterparties", "bank", "off_topic"] = "explain"
+    suggestions: list[str] = []
+    history_summary: str = ""
+    scenario: Literal["key_rate", "fx", "commodity"] | None = None
+    shock: float | None = None
+
+
+class DialogTurnView(Answer):
+    rating: int | None = None
+
+
+class AnswerRatingRequest(Strict):
+    rating: Literal[-1, 1]
 
 
 class ErrorDetail(Strict):

@@ -168,6 +168,19 @@ class Delivery(Base, Payload):
                       CheckConstraint("status IN ('queued', 'sent', 'failed', 'skipped')", name="deliveries_status_check"))
 
 
+class DialogTurn(Base, Payload):
+    """Реплика диалога по разбору (SPR4-05): вопрос, намерение, ответ с источниками и оценка пользователя."""
+    __tablename__ = "dialog_turns"
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=False), primary_key=True)
+    insight_id: Mapped[str] = mapped_column(Text)
+    user_id: Mapped[str] = mapped_column(Text)
+    company_id: Mapped[str] = mapped_column(Text)
+    rating: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (Index("dialog_turns_insight_idx", "insight_id", "user_id", "id"),
+                      CheckConstraint("rating IN (-1, 1)", name="dialog_turns_rating_check"))
+
+
 class BankProduct(Base, Payload):
     __tablename__ = "bank_products"
     product_id: Mapped[str] = mapped_column(Text, primary_key=True)
