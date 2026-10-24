@@ -94,7 +94,7 @@ def usage(day: date | None = None) -> dict:
     return {"date": day.isoformat(), "tokens": get("tokens"), "cost": round(float(get("cost")), 3),
             "calls": get("calls"), "errors": get("errors"), "reserved_tokens": get("reserved_tokens"),
             "reserved_cost": round(float(get("reserved_cost")), 3), "rejected_by_budget": get("rejected"),
-            "limit": s["daily_token_limit"], "cost_limit": s["daily_cost_limit"]}
+            "limit": s["daily_token_limit"] or None, "cost_limit": s["daily_cost_limit"]}  # None — без лимита токенов
 
 
 def spent_share() -> float:
@@ -147,6 +147,8 @@ def reserve(model: str, prompt_chars: int, max_tokens: int) -> Reservation:
     tokens, cost = estimate(model, prompt_chars, max_tokens)
     day, company_id = budget_day(), _company.get()
     share = config.llm_company_share()
+    # Лимит токенов не задан (0) — ограничивают только рубли: условие по токенам всегда выполнено.
+    token_limit = s["daily_token_limit"] or 10 ** 15
     sweep()  # своей транзакцией: отказ ниже откатил бы и снятие зависших резервов
     try:
         with database.session() as db:
@@ -155,7 +157,7 @@ def reserve(model: str, prompt_chars: int, max_tokens: int) -> Reservation:
             # Порядок блокировок (строка дня, затем компании) тот же, что при списании и снятии резерва.
             fits = db.execute(update(LLMUsage)
                 .where(LLMUsage.day == day,
-                       LLMUsage.tokens + LLMUsage.reserved_tokens + tokens <= s["daily_token_limit"],
+                       LLMUsage.tokens + LLMUsage.reserved_tokens + tokens <= token_limit,
                        LLMUsage.cost + LLMUsage.reserved_cost + cost <= s["daily_cost_limit"])
                 .values(reserved_tokens=LLMUsage.reserved_tokens + tokens, reserved_cost=LLMUsage.reserved_cost + cost)
                 .returning(LLMUsage.day)).first()
@@ -165,7 +167,7 @@ def reserve(model: str, prompt_chars: int, max_tokens: int) -> Reservation:
                 _ensure_company(db, day, company_id)
                 fits = db.execute(update(LLMUsageCompany)
                     .where(LLMUsageCompany.day == day, LLMUsageCompany.company_id == company_id,
-                           LLMUsageCompany.tokens + LLMUsageCompany.reserved_tokens + tokens <= s["daily_token_limit"] * share,
+                           LLMUsageCompany.tokens + LLMUsageCompany.reserved_tokens + tokens <= token_limit * share,
                            LLMUsageCompany.cost + LLMUsageCompany.reserved_cost + cost <= s["daily_cost_limit"] * share)
                     .values(reserved_tokens=LLMUsageCompany.reserved_tokens + tokens,
                             reserved_cost=LLMUsageCompany.reserved_cost + cost)
@@ -180,7 +182,7 @@ def reserve(model: str, prompt_chars: int, max_tokens: int) -> Reservation:
             spent = usage(day)
             # «Исчерпан» — только если не помещается даже без идущих запросов: занятость резервами — не повод
             # тратить единственное за день оповещение 100%.
-            if spent["cost"] + cost > spent["cost_limit"] or spent["tokens"] + tokens > spent["limit"]:
+            if spent["cost"] + cost > spent["cost_limit"] or (spent["limit"] and spent["tokens"] + tokens > spent["limit"]):
                 _alert(day, 1.0, "дневной лимит исчерпан — вызовы модели отклоняются, разборы строятся правилами")
             raise BudgetExceeded(f"Бюджет LLM: вызов (~{cost:.2f} ₽) не помещается в дневной лимит с учетом идущих запросов")
         raise BudgetExceeded(f"Бюджет LLM: исчерпана дневная доля компании ({share:.0%} лимита)", "company")

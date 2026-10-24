@@ -11,7 +11,7 @@ from app import database
 
 KEY = "company_ai:"
 THRESHOLD_MIN, THRESHOLD_MAX = 40, 95
-DEFAULT = {"enabled": True, "threshold": 70}
+DEFAULT = {"enabled": True, "threshold": 85}  # только самые важные события
 
 
 def get(company_id: str) -> dict:

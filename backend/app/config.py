@@ -162,7 +162,7 @@ def pipeline_start_delay() -> float:
     return float(_env("PIPELINE_START_DELAY_SECONDS", "15"))
 
 
-REASONING_DEFAULTS = {"compose": "off"}
+REASONING_DEFAULTS: dict[str, str] = {}
 
 
 def llm_settings() -> dict:
@@ -186,11 +186,12 @@ def llm_settings() -> dict:
         "reasoning_effort": os.environ.get("LLM_REASONING_EFFORT", "low"),
         "reasoning_effort_models": [m.strip() for m in _env("LLM_REASONING_EFFORT_MODELS", "glm").split(",") if m.strip()],
         # Рассуждения по ролям: off — выключены, low|medium|high — бюджет рассуждений, пусто — как решит модель.
-        # Черновик — без рассуждений: на эталоне DeepSeek с ними 70 с и 0,64 ₽ на разбор и иногда упирается в лимит
-        # ответа, без них — 29 с и 0,27 ₽ при тех же темах и аналитике банка и чаще проходит проверки с первого раза.
+        # По умолчанию рассуждения решает модель (как раньше): без них черновик быстрее (на эталоне 29 с против 70 с),
+        # но выводы беднее. Включить быстрый режим — LLM_REASONING_COMPOSE=off.
         "reasoning": {kind: _env(f"LLM_REASONING_{kind.upper()}", REASONING_DEFAULTS.get(kind, "")).lower()
                       for kind in ("plan", "compose", "review", "qa", "classify")},
-        "daily_token_limit": int(_env("LLM_DAILY_TOKEN_LIMIT", "400000")),
+        # Лимит токенов в день — только если задан (> 0); основной ограничитель — рубли (daily_cost_limit).
+        "daily_token_limit": int(_env("LLM_DAILY_TOKEN_LIMIT", "0")),
         "timeout": float(_env("LLM_TIMEOUT_SECONDS", "75")),
         # Провайдер кейса возвращает usage.cost в рублях; бюджет — 500 ₽/день на команду.
         "daily_cost_limit": float(_env("LLM_DAILY_COST_LIMIT", "450")),

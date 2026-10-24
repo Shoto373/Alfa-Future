@@ -50,7 +50,7 @@ class CompanyExtraRequest(Strict):
 class AISettingsRequest(Strict):
     """Готовить AI-разборы важных новостей заранее и с какой оценки важности (40–95)."""
     enabled: bool
-    threshold: int = Field(70, ge=40, le=95)
+    threshold: int = Field(85, ge=40, le=95)
 
 
 class QuestionRequest(Strict):

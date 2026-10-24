@@ -112,8 +112,14 @@ def _failed(reservation: llm_usage.Reservation, committed: bool, exc: Exception 
         llm_usage.release(reservation)
 
 
-def chat_json(system: str, user: str, model_kind: str = "compose", max_tokens: int = 2000) -> tuple[dict, dict]:
-    """Вызов модели роли model_kind (plan | compose | review | qa) с ответом в JSON. Возвращает (json, meta)."""
+class TruncatedError(LLMError):
+    """Ответ обрезан по лимиту токенов — обычно модель израсходовала его на рассуждения."""
+
+
+def chat_json(system: str, user: str, model_kind: str = "compose", max_tokens: int = 2000,
+              reasoning: str | None = None) -> tuple[dict, dict]:
+    """Вызов модели роли model_kind (plan | compose | review | qa) с ответом в JSON. Возвращает (json, meta).
+    reasoning — переопределить рассуждения для этого вызова (off|low|medium|high), иначе — из настроек роли."""
     s = config.llm_settings()
     if not available():
         raise LLMError("LLM не подключена")
@@ -139,7 +145,7 @@ def chat_json(system: str, user: str, model_kind: str = "compose", max_tokens: i
         "max_tokens": max_tokens,
         "response_format": {"type": "json_object"},
     }
-    reasoning = s["reasoning"].get(model_kind, "")
+    reasoning = reasoning or s["reasoning"].get(model_kind, "")
     if reasoning == "off":
         payload["reasoning"] = {"enabled": False}
     elif reasoning in ("low", "medium", "high"):
@@ -165,7 +171,7 @@ def chat_json(system: str, user: str, model_kind: str = "compose", max_tokens: i
         if not isinstance(content, str):
             raise LLMError("Модель вернула ответ неподдерживаемого формата")
         if choice.get("finish_reason") == "length":
-            raise LLMError("Ответ модели обрезан по лимиту токенов")
+            raise TruncatedError("Ответ модели обрезан по лимиту токенов")
         data = _extract_json(content)
     except LLMError:
         _failed(reservation, committed)

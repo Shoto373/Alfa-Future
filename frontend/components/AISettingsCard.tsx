@@ -23,7 +23,7 @@ export default function AISettingsCard({ companyId, companyName, isAdmin }: { co
   const [draft, setDraft] = useState<{ for: AISettings; threshold: number } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const current = data && draft?.for === data ? draft.threshold : data?.threshold ?? 70;
+  const current = data && draft?.for === data ? draft.threshold : data?.threshold ?? 85;
 
   const save = async (enabled: boolean, threshold: number) => {
     setSaving(true);

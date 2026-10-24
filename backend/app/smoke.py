@@ -91,7 +91,7 @@ class Smoke:
             if not self.check("метрики открываются сотруднику", r.status_code == 200, f"HTTP {r.status_code}"):
                 return
             u = r.json()["ai"]["llm_usage"]
-            self.check("бюджет LLM не превышен", u["cost"] <= u["cost_limit"] and u["tokens"] <= u["limit"],
+            self.check("бюджет LLM не превышен", u["cost"] <= u["cost_limit"] and (not u["limit"] or u["tokens"] <= u["limit"]),
                        f"потрачено {u['cost']} из {u['cost_limit']} ₽, токенов {u['tokens']} из {u['limit']}")
             c.post(f"{self.api}/auth/logout")
 
