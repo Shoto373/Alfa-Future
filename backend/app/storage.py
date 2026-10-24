@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from app import config, database, llm, llm_usage, ranking
 from sqlalchemy import func, select
 from app.companies import extra as company_extra
+from app.domain_config import runtime
 from app.models import AppState, Insight, Feedback, Answer, Event
 
 # Меняется, когда правила меняют содержание карточек: старые перестают быть актуальным кэшем.
@@ -30,7 +31,8 @@ def cache_version() -> str:
         rows = dict(db.execute(select(AppState.key, AppState.payload)
                                .where(AppState.key.in_(("profiles", "knowledge", "news_seed")))).all())
     profiles, knowledge, news_version = rows.get("profiles") or {}, rows.get("knowledge") or "", rows.get("news_seed") or ""
-    version = hashlib.sha256(f"{CACHE_VERSION}:{profiles.get('signature')}:{knowledge}:{news_version}".encode()).hexdigest()
+    version = hashlib.sha256(f"{CACHE_VERSION}:{profiles.get('signature')}:{knowledge}:{news_version}"
+                             f":{runtime.signature()}".encode()).hexdigest()
     _version_memo = (now, scope, version)
     return version
 

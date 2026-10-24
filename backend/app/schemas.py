@@ -1,4 +1,4 @@
-"""Публичный контракт 1.1.0, формат разбора 1.0.0 (contracts/schemas/common.json генерируется из этих моделей).
+"""Публичный контракт 1.2.0, формат разбора 1.0.0 (contracts/schemas/common.json генерируется из этих моделей).
 
 Ключевой принцип — происхождение каждого утверждения (Claim.origin):
     fact        — подтверждено текстом новости;
@@ -13,9 +13,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # Формат разбора (Insight.schema_version): меняется, только если меняются поля разбора.
 SCHEMA_VERSION = "1.0.0"
-# Версия контракта API (openapi.json, заголовок X-API-Version): 1.1.0 — аддитивно добавлены адреса спринта 3
-# (экран аналитика, разметка ленты, организации в новости). Политика — docs/api-versioning.md.
-API_VERSION = "1.1.0"
+# Версия контракта API (openapi.json, заголовок X-API-Version); изменения только аддитивные.
+# История и политика — docs/api-versioning.md.
+API_VERSION = "1.2.0"
 
 Role = Literal["owner", "ceo", "cfo", "accountant", "treasurer", "clevel"]
 Origin = Literal["fact", "client_data", "bank", "ai"]
@@ -93,6 +93,22 @@ class LabelRequest(Strict):
     role: Literal["owner", "ceo", "cfo", "accountant", "treasurer", "clevel"]
     grade: int = Field(..., ge=0, le=3)
     reason: str = Field("", max_length=500)
+
+
+class DomainConfigTexts(Strict):
+    """YAML-тексты доменной конфигурации (SPR4-00): темы, отрасли, слова-маркеры."""
+    topics: str = Field(..., min_length=1, max_length=300_000)
+    sectors: str = Field(..., min_length=1, max_length=300_000)
+    language: str = Field(..., min_length=1, max_length=100_000)
+
+
+class DomainConfigPublish(DomainConfigTexts):
+    note: str = Field("", max_length=300)
+
+
+class DomainConfigPreviewRequest(DomainConfigTexts):
+    company_id: str = Field(..., min_length=1, max_length=64)
+    role: Literal["owner", "ceo", "cfo", "accountant", "treasurer", "clevel"] = "cfo"
 
 
 class KbApproveRequest(Strict):

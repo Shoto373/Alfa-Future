@@ -26,6 +26,7 @@ import numpy as np
 from sqlalchemy import func, select
 
 from app import config, database, embeddings, vector_store, vectors
+from app.domain_config import runtime
 from app.models import News
 from app.news import llm_classify, materiality, semantic
 from app.news.classifier import classify, tokenize
@@ -231,7 +232,8 @@ def _version() -> str:
     here = Path(__file__).parent
     parts = [SEED_FILE.read_bytes()] + [(here / f).read_bytes() for f in
                                         ("classifier.py", "taxonomy.py", "semantic.py", "magnitude.py")]
-    return hashlib.sha256(b"".join(parts) + embeddings.signature().encode()).hexdigest()
+    # Словари тем — данные (SPR4-00): подпись действующей конфигурации вместо текста taxonomy.py.
+    return hashlib.sha256(b"".join(parts) + embeddings.signature().encode() + runtime.signature().encode()).hexdigest()
 
 
 def _bump(db) -> int:

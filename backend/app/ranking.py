@@ -33,6 +33,7 @@ from app import cache, config, database, embeddings
 from app.companies import extra, profiles
 from app.companies.sectors import SECTOR_NAMES
 from app.models import Feedback, Insight
+from app.domain_config import runtime
 from app.news import entities, magnitude, store
 from app.news.classifier import _count_stem, tokenize
 from app.news.taxonomy import COUNTRY_STEMS, TOPICS
@@ -432,7 +433,7 @@ def company_feed(company_id: str, role: str, limit: int = 500) -> list[dict]:
     # Оценки пользователей меняют ранжирование — их отпечаток входит в ключ.
     feedback = hashlib.sha1(repr(sorted(_topic_feedback(company_id, role).items())).encode()).hexdigest()[:10]
     key = (f"feed:v2:{company_id}:{role}:{limit}:{store.revision()}:{profiles.signature()}:{embeddings.signature()}"
-           f":fb{feedback}:x{extra.signature(company_id)}:w{weights()['signature']}")
+           f":fb{feedback}:x{extra.signature(company_id)}:w{weights()['signature']}:d{runtime.signature()}")
     found = _cached_feed(key)
     if found is not None:
         return found

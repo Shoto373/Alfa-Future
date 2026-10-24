@@ -26,7 +26,7 @@ MAX_FUNCTION_LINES = 80
 LAYERS = [
     ("core", ["app.config", "app.database", "app.models", "app.cache", "app.vector_store", "app.embeddings", "app.vectors",
               "app.llm", "app.llm_usage", "app.notify", "app.errors", "app.schemas", "app.text", "app.ratelimit",
-              "app.observability"]),
+              "app.observability", "app.domain_config"]),
     ("domain", ["app.companies", "app.news", "app.knowledge", "app.auth.store", "app.auth.security", "app.auth.schemas",
                 "app.auth.oidc"]),
     ("ranking", ["app.ranking"]),

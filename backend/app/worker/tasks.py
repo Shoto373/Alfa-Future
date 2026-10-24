@@ -4,6 +4,8 @@ import logging
 from collections.abc import Callable
 
 from app import config, llm_usage, pipeline, ranking
+from app.domain_config import loader as domain_config
+from app.domain_config import preview as config_preview
 from app.knowledge import ingest
 from app.news import store
 from app.worker import queue
@@ -32,6 +34,21 @@ def kb_ingest(payload: dict) -> dict:
     return ingest.process(payload["doc_id"])
 
 
+def domain_config_apply(payload: dict) -> dict:
+    """Новая версия доменной конфигурации (SPR4-00): применить, переклассифицировать новости и обновить индекс."""
+    domain_config.refresh(force=True)
+    store.reset_cache()
+    news = store.warm()  # подпись словарей сменилась — новости классифицируются заново под блокировкой
+    return {"news": news, **pipeline.index_news()}
+
+
+def domain_config_preview(payload: dict) -> dict:
+    """Предпросмотр «как изменится лента компании» без публикации."""
+    result = config_preview.run(payload["texts"], payload["company_id"], payload["role"], store, ranking.feed)
+    config_preview.save(payload["id"], result)
+    return {"status": result["status"]}
+
+
 def warm_feeds(payload: dict) -> dict:
     """Ленты привязанных компаний — в общий кэш (Redis): первое открытие ленты в любом экземпляре API быстрое."""
     pairs = pipeline.audience()
@@ -54,6 +71,8 @@ HANDLERS: dict[str, Callable[[dict], dict]] = {
     "news_reclassify": news_reclassify,
     "news_index": news_index,
     "kb_ingest": kb_ingest,
+    "domain_config_apply": domain_config_apply,
+    "domain_config_preview": domain_config_preview,
     "warm_feeds": warm_feeds,
     "llm_sweep": llm_sweep,
     "jobs_cleanup": jobs_cleanup,

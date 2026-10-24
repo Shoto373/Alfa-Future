@@ -5,6 +5,7 @@ import logging
 from fastapi import FastAPI
 
 from app import database, demo_accounts, legacy_import, observability, warmup
+from app.api.admin_config import router as admin_config_router
 from app.api.admin_kb import router as admin_kb_router
 from app.api.admin_labeling import router as admin_labeling_router
 from app.api.prometheus import router as metrics_router
@@ -48,6 +49,7 @@ configure_api(app)
 app.include_router(router)
 app.include_router(auth_router)
 app.include_router(admin_kb_router)
+app.include_router(admin_config_router)
 app.include_router(admin_labeling_router)
 app.include_router(metrics_router)
 

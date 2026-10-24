@@ -1,5 +1,5 @@
 import type {
-  AISettings, Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, KbDocument, KbDraft, KbUploadItem, LabelingState, LookupCompany, Member, Membership, Mention, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
+  AISettings, Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, ConfigPreview, ConfigState, ConfigTexts, ConfigIssue, KbDocument, KbDraft, KbUploadItem, LabelingState, LookupCompany, Member, Membership, Mention, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
@@ -149,5 +149,15 @@ export const api = {
   labelingNext: (signal?: AbortSignal) => request<LabelingState>("/api/v1/admin/labeling/next", {}, { signal }),
   labelingSave: (label: { news_id: string; company_id: string; role: Role; grade: number; reason: string }) =>
     request<LabelingState>("/api/v1/admin/labeling/labels", json("POST", label)),
+  // Доменная конфигурация (SPR4-00): проверка, превью ленты, публикация и откат версии.
+  config: (signal?: AbortSignal) => request<ConfigState>("/api/v1/admin/config", {}, { signal }),
+  configValidate: (texts: ConfigTexts) =>
+    request<{ ok: boolean; issues: ConfigIssue[] }>("/api/v1/admin/config/validate", json("POST", texts)),
+  configPreview: (texts: ConfigTexts, companyId: string, role: Role) =>
+    request<{ id: string }>("/api/v1/admin/config/preview", json("POST", { ...texts, company_id: companyId, role })),
+  configPreviewResult: (id: string) => request<ConfigPreview>(`/api/v1/admin/config/preview/${cid(id)}`),
+  configPublish: (texts: ConfigTexts, note: string) =>
+    request<{ id: number; warnings: ConfigIssue[] }>("/api/v1/admin/config/publish", json("POST", { ...texts, note })),
+  configRollback: (id: number) => request<{ id: number }>(`/api/v1/admin/config/versions/${id}/rollback`, { method: "POST" }),
   pdfUrl: (docId: string, page?: number | null) => `${API_BASE_URL}/api/v1/analytics/${docId}/pdf${page ? `#page=${page}` : ""}`,
 };

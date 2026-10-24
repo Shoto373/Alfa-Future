@@ -24,6 +24,8 @@ ENV HF_HUB_OFFLINE=1
 COPY backend/alembic.ini /app/alembic.ini
 COPY backend/alembic /app/alembic
 COPY backend/app /app/app
+# Отрасли, темы и действия как данные (SPR4-00): исходная доменная конфигурация.
+COPY backend/config /app/config
 COPY data/synthetic /app/data/synthetic
 
 RUN mkdir -p /app/runtime

@@ -295,3 +295,48 @@ export interface LabelingState {
   stats: { planned: number; labeled_pairs: number; labels: number; overlap_planned: number; overlap_done: number;
            kappa: number | null; annotators: Record<string, number> };
 }
+
+// Доменная конфигурация (SPR4-00): темы, отрасли и слова-маркеры в YAML.
+export type ConfigDoc = "topics" | "sectors" | "language";
+export type ConfigTexts = Record<ConfigDoc, string>;
+
+export interface ConfigIssue {
+  level: "error" | "warning";
+  doc: ConfigDoc;
+  path: string;
+  message: string;
+}
+
+export interface ConfigVersion {
+  id: number;
+  status: "published" | "archived";
+  created_by: string;
+  note: string;
+  signature: string;
+  created_at: string;
+}
+
+export interface ConfigState {
+  version: number | null;
+  signature: string;
+  texts: ConfigTexts;
+  issues: ConfigIssue[];
+  versions: ConfigVersion[];
+}
+
+export interface ConfigPreviewRow {
+  news_id: string;
+  title: string;
+  score: number;
+  topics: string[];
+  rank?: number;
+  rank_before?: number | null;
+}
+
+export interface ConfigPreview {
+  status: "queued" | "ready" | "invalid";
+  before?: ConfigPreviewRow[];
+  after?: ConfigPreviewRow[];
+  gone?: ConfigPreviewRow[];
+  issues?: ConfigIssue[];
+}

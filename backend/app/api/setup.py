@@ -1,5 +1,6 @@
 """Глобальные обработчики ошибок, CORS, лимит тела и журналирование."""
 
+import asyncio
 import json
 import logging
 import re
@@ -12,6 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import config, observability
+from app.domain_config import loader as domain_config
 from app.api.errors import error_response
 from app.errors import ApiError
 from app.schemas import API_VERSION
@@ -67,6 +69,8 @@ class RequestContextMiddleware:
         request_id = new_request_id()
         scope.setdefault("state", {})["request_id"] = request_id
         ctx = observability.start_request(request_id)
+        if domain_config.due():  # версия словарей, опубликованная аналитиком в другом процессе (SPR4-00)
+            await asyncio.to_thread(_refresh_domain_config)
         query = parse_qs(scope.get("query_string", b"").decode("latin-1"))
         observability.set_company((query.get("company_id") or [None])[0])
         started = time.perf_counter()
@@ -133,6 +137,13 @@ class RequestContextMiddleware:
             return await receive()
 
         await self.app(scope, replay, send)
+
+
+def _refresh_domain_config() -> None:
+    try:
+        domain_config.refresh()
+    except Exception:  # база недоступна — работаем на текущей версии  # noqa: BLE001
+        logger.exception("domain config refresh failed")
 
 
 def _company_from_body(body: bytes, headers: dict) -> None:

@@ -100,6 +100,18 @@ class RankingLabel(Base):
                       CheckConstraint("grade BETWEEN 0 AND 3", name="ranking_labels_grade_check"))
 
 
+class DomainConfigVersion(Base, Payload):
+    """Опубликованная версия доменной конфигурации (SPR4-00): YAML-тексты тем, отраслей и слов-маркеров."""
+    __tablename__ = "domain_config_versions"
+    id: Mapped[int] = mapped_column(Integer, Identity(always=False), primary_key=True)
+    status: Mapped[str] = mapped_column(Text, server_default="published")
+    created_by: Mapped[str] = mapped_column(Text)
+    note: Mapped[str] = mapped_column(Text, server_default="")
+    signature: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (CheckConstraint("status IN ('published', 'archived')", name="domain_config_versions_status_check"),)
+
+
 class BankProduct(Base, Payload):
     __tablename__ = "bank_products"
     product_id: Mapped[str] = mapped_column(Text, primary_key=True)
