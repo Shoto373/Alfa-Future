@@ -18,6 +18,7 @@ from sqlalchemy.dialects.postgresql import insert
 from app.models import Company
 from app.companies import etl, extra, names
 from app.companies.sectors import SECTOR_NAMES, SECTOR_SENSITIVITY
+from app.domain_config import runtime
 
 logger = logging.getLogger("app.companies")
 _lock = threading.Lock()
@@ -188,6 +189,8 @@ def _clear_exposures() -> None:
 
 
 exposures.cache_clear = _clear_exposures  # type: ignore[attr-defined]
+# Признаки строятся по чувствительности отраслей: новая версия доменной конфигурации — пересчет (SPR4-00).
+runtime.on_change(_clear_exposures)
 
 
 @lru_cache(maxsize=2048)

@@ -1,4 +1,4 @@
-"""Публичный контракт 1.1.0, формат разбора 1.0.0 (contracts/schemas/common.json генерируется из этих моделей).
+"""Публичный контракт 1.2.0, формат разбора 1.0.0 (contracts/schemas/common.json генерируется из этих моделей).
 
 Ключевой принцип — происхождение каждого утверждения (Claim.origin):
     fact        — подтверждено текстом новости;
@@ -13,9 +13,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # Формат разбора (Insight.schema_version): меняется, только если меняются поля разбора.
 SCHEMA_VERSION = "1.0.0"
-# Версия контракта API (openapi.json, заголовок X-API-Version): 1.1.0 — аддитивно добавлены адреса спринта 3
-# (экран аналитика, разметка ленты, организации в новости). Политика — docs/api-versioning.md.
-API_VERSION = "1.1.0"
+# Версия контракта API (openapi.json, заголовок X-API-Version); изменения только аддитивные.
+# История и политика — docs/api-versioning.md.
+API_VERSION = "1.2.0"
 
 Role = Literal["owner", "ceo", "cfo", "accountant", "treasurer", "clevel"]
 Origin = Literal["fact", "client_data", "bank", "ai"]
@@ -93,6 +93,91 @@ class LabelRequest(Strict):
     role: Literal["owner", "ceo", "cfo", "accountant", "treasurer", "clevel"]
     grade: int = Field(..., ge=0, le=3)
     reason: str = Field("", max_length=500)
+
+
+class DomainConfigTexts(Strict):
+    """YAML-тексты доменной конфигурации (SPR4-00): темы, отрасли, слова-маркеры."""
+    topics: str = Field(..., min_length=1, max_length=300_000)
+    sectors: str = Field(..., min_length=1, max_length=300_000)
+    language: str = Field(..., min_length=1, max_length=100_000)
+
+
+class DomainConfigPublish(DomainConfigTexts):
+    note: str = Field("", max_length=300)
+
+
+class DomainConfigPreviewRequest(DomainConfigTexts):
+    company_id: str = Field(..., min_length=1, max_length=64)
+    role: Literal["owner", "ceo", "cfo", "accountant", "treasurer", "clevel"] = "cfo"
+
+
+class ScenarioRequest(Strict):
+    """Сценарий «что если» (SPR4-02): шок и необязательные собственные значения компании вместо оценок."""
+    company_id: str = Field(..., min_length=1, max_length=64)
+    scenario: Literal["key_rate", "fx", "commodity"]
+    shock: float = Field(..., ge=-60, le=60)  # п.п. для ставки, % для курса (плюс — рубль слабее) и цены сырья
+    debt: float | None = Field(None, ge=0, le=1e14)
+    floating_share: float | None = Field(None, ge=0, le=1)
+    fx_revenue_share: float | None = Field(None, ge=0, le=1)
+    import_share: float | None = Field(None, ge=0, le=1)
+    exposure: float | None = Field(None, ge=0, le=1)
+
+
+CLOCK = r"^([01]\d|2[0-3]):[0-5]\d$"
+
+
+class NotificationChannels(Strict):
+    inapp: bool = True
+    email: bool = True
+    telegram: bool = False
+
+
+class NotificationSettings(Strict):
+    """Подписка на компанию (SPR4-04). Поля необязательны в запросе: меняются только переданные."""
+    digest: bool | None = None
+    digest_time: str | None = Field(None, pattern=CLOCK)
+    timezone: str | None = Field(None, min_length=3, max_length=64)
+    threshold: int | None = Field(None, ge=50, le=100)
+    topics: list[str] | None = Field(None, max_length=40)
+    counterparties: bool | None = None
+    quiet_from: str | None = Field(None, pattern=CLOCK)
+    quiet_to: str | None = Field(None, pattern=CLOCK)
+    alerts_per_day: int | None = Field(None, ge=0, le=10)
+    channels: NotificationChannels | None = None
+
+
+class NotificationReadRequest(Strict):
+    company_id: str = Field(..., min_length=1, max_length=64)
+    ids: list[int] | None = Field(None, max_length=200)  # пусто — прочитать все
+
+
+class LeadRequest(Strict):
+    """«Обсудить с менеджером» (SPR4-06): заявка только с явного согласия (consent=true)."""
+    insight_id: str = Field(..., min_length=1, max_length=64)
+    offer_id: str = Field(..., min_length=1, max_length=64)
+    consent: Literal[True]
+    comment: str | None = Field(None, max_length=500)
+
+
+class LeadStatusRequest(Strict):
+    status: Literal["new", "in_progress", "done", "declined"]
+
+
+class ManagerAssignRequest(Strict):
+    email: str = Field(..., min_length=3, max_length=200, pattern=r"^[^@\s]+@[^@\s]+$")
+    company_id: str = Field(..., min_length=1, max_length=64)
+
+
+class ProductEventRequest(Strict):
+    """Событие воронки (SPR4-07): свойства — только коды-перечисления, проверяются по белому списку на сервере."""
+    kind: str = Field(..., min_length=3, max_length=40)
+    company_id: str | None = Field(None, max_length=64)
+    props: dict[str, str | int | bool] = Field(default_factory=dict, max_length=6)
+
+
+class FlagUpdateRequest(Strict):
+    percent: int | None = Field(None, ge=0, le=100)
+    companies: list[str] | None = Field(None, max_length=200)
 
 
 class KbApproveRequest(Strict):
@@ -236,6 +321,21 @@ class Answer(Strict):
     sources: list[Source]
     mode: Literal["llm", "rules"]
     refused: bool = False
+    # Диалог (SPR4-05): реплика в истории, намерение вопроса, следующие вопросы под роль, резюме старых реплик.
+    turn_id: int | None = None
+    intent: Literal["explain", "quantify", "counterparties", "bank", "off_topic"] = "explain"
+    suggestions: list[str] = []
+    history_summary: str = ""
+    scenario: Literal["key_rate", "fx", "commodity"] | None = None
+    shock: float | None = None
+
+
+class DialogTurnView(Answer):
+    rating: int | None = None
+
+
+class AnswerRatingRequest(Strict):
+    rating: Literal[-1, 1]
 
 
 class ErrorDetail(Strict):

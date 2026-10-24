@@ -50,7 +50,7 @@ def test_eval_on_draft_labels(client):
 def test_fit_recovers_better_order_on_synthetic_data():
     rng = np.random.default_rng(7)
     data = []
-    true = np.array([0.2, 3.0, 1.0, 1.0, 1.0, 1.0, 1.0])  # разметчики ценят упоминание отрасли сильнее
+    true = np.array([0.2, 3.0] + [1.0] * (len(ranking.FEATURES) - 2))  # разметчики ценят упоминание отрасли сильнее
     for q in range(8):
         for i in range(12):
             x = rng.random(len(ranking.FEATURES))

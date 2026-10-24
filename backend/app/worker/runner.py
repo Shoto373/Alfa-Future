@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 
 from app import database, warmup
+from app.domain_config import loader as domain_config
 from app.models import AppState
 from app.worker import queue, schedule
 from app.worker.tasks import HANDLERS
@@ -56,6 +57,7 @@ class Worker:
             return False
         started = time.perf_counter()
         handler = HANDLERS.get(job["kind"])
+        domain_config.refresh()  # опубликованная аналитиком версия словарей — до задачи (SPR4-00)
         try:
             if handler is None:
                 raise LookupError(f"нет обработчика задачи {job['kind']}")

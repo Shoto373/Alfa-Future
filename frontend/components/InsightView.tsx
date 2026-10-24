@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { Insight, Role } from "@/lib/types";
 import Chat from "./Chat";
+import BankOffers from "./insight/BankOffers";
 import BankPosition from "./insight/BankPosition";
 import ClaimList, { OpenSource, RulesMode } from "./insight/ClaimList";
 import Feedback from "./insight/Feedback";
@@ -11,6 +12,7 @@ import SourceList from "./insight/SourceList";
 import { groupSources } from "./insight/sources";
 import { chatSuggestions } from "./insight/suggestions";
 import TraceView from "./insight/TraceView";
+import { track, useFlags } from "@/lib/track";
 import { Card } from "./ui";
 import styles from "@/components/InsightView.module.scss";
 import common from "@/styles/common.module.scss";
@@ -26,9 +28,9 @@ const scrollToSource = (n: number) =>
   // Блок раскрывается в этом же кадре — прокрутка после отрисовки.
   requestAnimationFrame(() => document.getElementById(`src-${n}`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
 
-export default function InsightView({ insight: ins, onRefresh, refreshing, upgrading = false, upgradeFailed = false,
+export default function InsightView({ insight: ins, onRefresh, refreshing, upgrading = false, upgradeFailed = false, upgradeStage,
   perspective, ownRole, onPerspective, mentions }: {
-  insight: Insight; onRefresh: () => void; refreshing: boolean; upgrading?: boolean; upgradeFailed?: boolean;
+  insight: Insight; onRefresh: () => void; refreshing: boolean; upgrading?: boolean; upgradeFailed?: boolean; upgradeStage?: string;
   perspective?: Role; ownRole?: Role; onPerspective?: (role: Role) => void; mentions?: ReactNode;
 }) {
   const { groups, index } = groupSources(ins);
@@ -36,7 +38,12 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
   const [showSources, setShowSources] = useState(() => sourceFromHash() !== null);
   const [focused, setFocused] = useState<number | null>(sourceFromHash);
 
+  const flags = useFlags(ins.company_id);
+  // Эксперимент SPR4-07: вариант actions_first ставит «Что можно сделать» перед последствиями.
+  const actionsFirst = flags?.insight_section_order?.variant === "actions_first";
+
   const openSource = useCallback((n?: number) => {
+    track("source_click", { kind: n ? "claim" : "list" });
     setShowSources(true);
     if (!n) return;
     setFocused(n);
@@ -49,13 +56,29 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
     if (n) scrollToSource(n);
   }, [ins.insight_id]);
   const fb = (section: string) => <Feedback insightId={ins.insight_id} section={section} />;
+  const consequences = (
+    <Card title={`${actionsFirst ? 4 : 3}. Какие последствия возможны`} actions={fb("consequences")} className={styles.span2}>
+      <div className={styles.twoCol}>
+        <div><h4 className={styles.neg}>Риски</h4><ClaimList items={ins.risks} index={index} empty="Существенных рисков не выявлено" /></div>
+        <div><h4 className={styles.pos}>Возможности</h4><ClaimList items={ins.opportunities} index={index} empty="Явных возможностей не выявлено" /></div>
+      </div>
+    </Card>
+  );
+  const actionsCard = (
+    <Card title={`${actionsFirst ? 3 : 4}. Что можно сделать`} actions={fb("actions")} className={actionsFirst ? styles.span2 : ""}>
+      <ClaimList items={ins.actions} index={index} />
+      {ins.questions.length > 0 && (<><h4>Вопросы для дополнительного анализа</h4><ul className={common.plain}>{ins.questions.map((q) => <li key={q}>{q}</li>)}</ul></>)}
+      <BankOffers insightId={ins.insight_id} />
+    </Card>
+  );
 
   return (
     <RulesMode.Provider value={ins.mode === "rules"}>
     <OpenSource.Provider value={openSource}>
     <div className={styles.insight}>
       <InsightHeader ins={ins} onRefresh={onRefresh} refreshing={refreshing} upgrading={upgrading} upgradeFailed={upgradeFailed}
-        showTrace={showTrace} onToggleTrace={() => setShowTrace((v) => !v)}
+        upgradeStage={upgradeStage}
+        showTrace={showTrace} onToggleTrace={() => { if (!showTrace) track("section_expand", { section: "trace" }); setShowTrace((v) => !v); }}
         perspective={perspective} ownRole={ownRole} onPerspective={onPerspective} />
 
       {showTrace && <TraceView trace={ins.trace} checks={ins.quality.checks} />}
@@ -83,33 +106,15 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
           )}
         </Card>
 
-        <Card title="3. Какие последствия возможны" actions={fb("consequences")} className={styles.span2}>
-          <div className={styles.twoCol}>
-            <div><h4 className={styles.neg}>Риски</h4><ClaimList items={ins.risks} index={index} empty="Существенных рисков не выявлено" /></div>
-            <div><h4 className={styles.pos}>Возможности</h4><ClaimList items={ins.opportunities} index={index} empty="Явных возможностей не выявлено" /></div>
-          </div>
-        </Card>
-
-        <Card title="4. Что можно сделать" actions={fb("actions")}>
-          <ClaimList items={ins.actions} index={index} />
-          {ins.questions.length > 0 && (<><h4>Вопросы для дополнительного анализа</h4><ul className={common.plain}>{ins.questions.map((q) => <li key={q}>{q}</li>)}</ul></>)}
-          {ins.products.length > 0 && (
-            <div className={styles.offers}>
-              <span className={styles.offerLabel}>Предложение банка</span>
-              {ins.products.map((p) => (
-                <div className={styles.offer} key={p.product_id}><strong>{p.title}</strong><span>{p.text}</span></div>
-              ))}
-            </div>
-          )}
-        </Card>
+        {actionsFirst ? <>{actionsCard}{consequences}</> : <>{consequences}{actionsCard}</>}
 
         <BankPosition view={ins.bank_view} index={index} actions={fb("bank_view")} />
 
         <SourceList groups={groups} reasons={ins.relevance.reasons} open={showSources}
-          onToggle={() => setShowSources((v) => !v)} focused={focused} />
+          onToggle={() => { if (!showSources) track("section_expand", { section: "sources" }); setShowSources((v) => !v); }} focused={focused} />
       </div>
 
-      <Chat insightId={ins.insight_id} suggestions={chatSuggestions(ins)} />
+      {flags?.dialog?.enabled !== false && <Chat insightId={ins.insight_id} suggestions={chatSuggestions(ins)} />}
     </div>
     </OpenSource.Provider>
     </RulesMode.Provider>

@@ -1,5 +1,5 @@
 import type {
-  AISettings, Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, KbDocument, KbDraft, KbUploadItem, LabelingState, LookupCompany, Member, Membership, Mention, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
+  AISettings, Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, ConfigPreview, ConfigState, ConfigTexts, ConfigIssue, BankOffer, CounterpartiesView, DialogTurn, FlagSetting, ProductReport, Lead, ManagerClient, Inbox, NotificationSettings, ScenarioKind, ScenarioResponse, KbDocument, KbDraft, KbUploadItem, LabelingState, LookupCompany, Member, Membership, Mention, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
@@ -114,8 +114,27 @@ export const api = {
       company_id: companyId, news_id: newsId, force_refresh: !!opts.force, fast: !!opts.fast,
       ...(opts.perspective ? { perspective: opts.perspective } : {}),
     }), { signal, timeoutMs: opts.fast ? 30_000 : 180_000 }),
+  // Потоковый разбор (SSE, SPR4-03): проверенный разбор правил сразу, затем ход модели и итог. Возвращает «закрыть поток».
+  insightStream: (companyId: string, newsId: string, perspective: Role | undefined, on: {
+    insight: (ins: Insight) => void; stage: (stage: string) => void; done: (ins: Insight) => void; failed: () => void;
+  }) => {
+    const q = new URLSearchParams({ company_id: companyId, news_id: newsId, ...(perspective ? { perspective } : {}) });
+    const source = new EventSource(`${API_BASE_URL}/api/v1/insights/stream?${q}`, { withCredentials: true });
+    let finished = false;
+    const parse = (e: Event) => JSON.parse((e as MessageEvent).data);
+    source.addEventListener("insight", (e) => on.insight(parse(e)));
+    source.addEventListener("stage", (e) => on.stage(parse(e).stage));
+    source.addEventListener("done", (e) => { finished = true; source.close(); on.done(parse(e)); });
+    // Обрыв до итога (прокси без SSE, сеть): закрываем — интерфейс перейдет на обычный запрос.
+    source.onerror = () => { if (!finished) { source.close(); on.failed(); } };
+    return () => { finished = true; source.close(); };
+  },
   ask: (insightId: string, question: string) =>
     request<Answer>(`/api/v1/insights/${insightId}/questions`, json("POST", { question }), { timeoutMs: 90_000 }),
+  // Диалог по разбору (SPR4-05): история реплик пользователя и оценка ответа.
+  dialog: (insightId: string) => request<DialogTurn[]>(`/api/v1/insights/${cid(insightId)}/questions`),
+  rateAnswer: (insightId: string, turnId: number, rating: 1 | -1) =>
+    request<{ ok: boolean }>(`/api/v1/insights/${cid(insightId)}/questions/${turnId}/rating`, json("POST", { rating })),
   feedback: (insightId: string, rating: 1 | -1, section: string, comment?: string) =>
     request<{ status: string }>("/api/v1/feedback", json("POST", { insight_id: insightId, rating, section, comment: comment || null })),
   addNews: (payload: { title?: string; text?: string; url?: string }) =>
@@ -149,5 +168,49 @@ export const api = {
   labelingNext: (signal?: AbortSignal) => request<LabelingState>("/api/v1/admin/labeling/next", {}, { signal }),
   labelingSave: (label: { news_id: string; company_id: string; role: Role; grade: number; reason: string }) =>
     request<LabelingState>("/api/v1/admin/labeling/labels", json("POST", label)),
+  // Доменная конфигурация (SPR4-00): проверка, превью ленты, публикация и откат версии.
+  config: (signal?: AbortSignal) => request<ConfigState>("/api/v1/admin/config", {}, { signal }),
+  configValidate: (texts: ConfigTexts) =>
+    request<{ ok: boolean; issues: ConfigIssue[] }>("/api/v1/admin/config/validate", json("POST", texts)),
+  configPreview: (texts: ConfigTexts, companyId: string, role: Role) =>
+    request<{ id: string }>("/api/v1/admin/config/preview", json("POST", { ...texts, company_id: companyId, role })),
+  configPreviewResult: (id: string) => request<ConfigPreview>(`/api/v1/admin/config/preview/${cid(id)}`),
+  configPublish: (texts: ConfigTexts, note: string) =>
+    request<{ id: number; warnings: ConfigIssue[] }>("/api/v1/admin/config/publish", json("POST", { ...texts, note })),
+  configRollback: (id: number) => request<{ id: number }>(`/api/v1/admin/config/versions/${id}/rollback`, { method: "POST" }),
+  counterparties: (companyId: string, signal?: AbortSignal) =>
+    request<CounterpartiesView>(`/api/v1/companies/${cid(companyId)}/counterparties`, {}, { signal }),
+  scenario: (body: { company_id: string; scenario: ScenarioKind; shock: number; debt?: number; floating_share?: number;
+    fx_revenue_share?: number; import_share?: number; exposure?: number }) =>
+    request<ScenarioResponse>("/api/v1/scenarios", json("POST", body)),
+  // Продуктовая аналитика (SPR4-07): флаги пользователя, отчет пилота и настройка флагов (оператор).
+  flags: (companyId: string | null) =>
+    request<{ flags: Record<string, { enabled: boolean; variant: string | null }> }>(`/api/v1/flags${companyId ? `?company_id=${cid(companyId)}` : ""}`),
+  productReport: (days: number, signal?: AbortSignal) => request<ProductReport>(`/api/v1/admin/product?days=${days}`, {}, { signal }),
+  flagSettings: (signal?: AbortSignal) => request<{ flags: Record<string, FlagSetting> }>("/api/v1/admin/flags", {}, { signal }),
+  saveFlag: (key: string, body: { percent?: number; companies?: string[] }) =>
+    request<FlagSetting>(`/api/v1/admin/flags/${cid(key)}`, json("PUT", body)),
+  // Связь с банком (SPR4-06): предложения по потребности, заявка с согласия, кабинет менеджера.
+  insightOffers: (insightId: string, signal?: AbortSignal) =>
+    request<{ offers: BankOffer[]; leads: Lead[]; consent_text: string }>(`/api/v1/insights/${cid(insightId)}/offers`, {}, { signal }),
+  createLead: (body: { insight_id: string; offer_id: string; consent: true; comment: string | null }) =>
+    request<Lead & { created: boolean; managers: number }>("/api/v1/leads", json("POST", body)),
+  managerClients: (hours: number, signal?: AbortSignal) =>
+    request<{ hours: number; priority_formula: string; clients: ManagerClient[] }>(`/api/v1/manager/clients?hours=${hours}`, {}, { signal }),
+  managerLeads: (signal?: AbortSignal) => request<{ items: Lead[] }>("/api/v1/manager/leads", {}, { signal }),
+  managerLeadStatus: (id: number, status: Lead["status"]) => request<Lead>(`/api/v1/manager/leads/${id}`, json("PATCH", { status })),
+  managerLeadsCsv: () => `${API_BASE_URL}/api/v1/manager/leads.csv`,
+  // Сводки и алерты (SPR4-04).
+  notificationSettings: (companyId: string, signal?: AbortSignal) =>
+    request<NotificationSettings>(`/api/v1/notifications/settings?company_id=${cid(companyId)}`, {}, { signal }),
+  saveNotificationSettings: (companyId: string, changes: Partial<Omit<NotificationSettings, "company_id">>) =>
+    request<NotificationSettings>(`/api/v1/notifications/settings?company_id=${cid(companyId)}`, json("PUT", changes)),
+  inbox: (companyId: string, signal?: AbortSignal) =>
+    request<Inbox>(`/api/v1/notifications?company_id=${cid(companyId)}`, {}, { signal }),
+  inboxRead: (companyId: string, ids?: number[]) =>
+    request<{ updated: number }>("/api/v1/notifications/read", json("POST", { company_id: companyId, ids: ids ?? null })),
+  notificationOpened: (id: number) => request<{ ok: boolean }>(`/api/v1/notifications/${id}/opened`, { method: "POST" }),
+  testDigest: (companyId: string) =>
+    request<{ created: number; channels: string[] }>(`/api/v1/notifications/test-digest?company_id=${cid(companyId)}`, { method: "POST" }),
   pdfUrl: (docId: string, page?: number | null) => `${API_BASE_URL}/api/v1/analytics/${docId}/pdf${page ? `#page=${page}` : ""}`,
 };

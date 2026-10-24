@@ -5,15 +5,17 @@
 Инструменты не меняют данные и не обращаются в сеть.
 """
 
+import threading
 from dataclasses import dataclass
 from typing import Callable
 
 from app import embeddings, vector_store, vectors
 from app.agent import audit
-from app.companies import profiles
+from app.companies import graph, profiles
 from app.companies.sectors import SECTOR_NAMES
 from app.knowledge import kb
-from app.news import store
+from app.scenarios import calc as scenarios
+from app.news import entities, store
 
 # Обычный разбор — 7 обязательных вызовов + до 3 поисков, предложенных моделью, + 1 расширенный поиск
 # при коррекции. Бюджет защищает от зацикливания плана, а не экономит деньги.
@@ -160,6 +162,28 @@ def _forecasts(topics: list[str]) -> list[dict]:
     return out
 
 
+MAX_CHAINS = 3
+
+
+def _counterparty_chain(company_id: str, news_id: str) -> list[dict]:
+    """counterparty.lookup (SPR4-01): организации из новости в графе компании до второго уровня — с цепочкой."""
+    news = store.get(news_id)
+    if news is None:
+        raise ToolError("Новость не найдена")
+    chains = [graph.chain_to(company_id, e["company_id"]) for e in entities.of_news(news)
+              if e["company_id"] and e["company_id"] != company_id]
+    found = sorted((c for c in chains if c), key=lambda c: -c["weight"])[:MAX_CHAINS]
+    return [{k: c[k] for k in ("company_id", "name", "relation", "level", "weight", "text")} for c in found]
+
+
+def _scenario(company_id: str, scenario: str, shock: float) -> dict:
+    """scenario.simulate (SPR4-02): чувствительность по формуле; нет данных — отказ с причиной (не ноль)."""
+    try:
+        return {"ok": True, **scenarios.simulate(company_id, scenario, shock).as_dict()}
+    except scenarios.ScenarioError as exc:
+        return {"ok": False, "scenario": scenario, "message": str(exc), "missing": exc.missing}
+
+
 REGISTRY: dict[str, Tool] = {t.name: t for t in [
     Tool("get_company_profile", "Профиль компании: отрасль, масштаб, продукты банка, ВЭД, группа, качество данных",
          {"company_id": str}, _profile),
@@ -173,6 +197,10 @@ REGISTRY: dict[str, Tool] = {t.name: t for t in [
     Tool("get_bank_products", "Подходящие продукты банка для темы и профиля", {"company_id": str, "topics": list}, _products),
     Tool("check_forecast_conflicts", "Прогнозы банка по теме из разных документов — проверка противоречий",
          {"topics": list}, _forecasts),
+    Tool("lookup_counterparty_chain", "Контрагенты компании (до второго уровня), названные в новости, с цепочкой связи",
+         {"company_id": str, "news_id": str}, _counterparty_chain),
+    Tool("scenario_simulate", "Сценарий «что если»: изменение ставки, курса или цены сырья → рубли в год по формуле",
+         {"company_id": str, "scenario": str, "shock": float}, _scenario),
 ]}
 
 
@@ -182,13 +210,14 @@ class ToolRunner:
     def __init__(self, request_id: str):
         self.request_id = request_id
         self.calls = 0
+        self._lock = threading.Lock()  # инструменты одного разбора вызываются параллельно (SPR4-03)
 
     def call(self, name: str, **args):
         tool = REGISTRY.get(name)
         if tool is None:
             audit.log(self.request_id, name, args, "denied", 0, "unknown tool")
             raise ToolError(f"Инструмент {name} не разрешен")
-        if self.calls >= MAX_CALLS_PER_RUN:
+        if self.calls >= MAX_CALLS_PER_RUN:  # проверка без блокировки: параллельных вызовов не больше TOOL_THREADS
             audit.log(self.request_id, name, args, "denied", 0, "call budget exceeded")
             raise ToolError("Превышен бюджет вызовов инструментов")
         clean = {}
@@ -202,7 +231,8 @@ class ToolRunner:
         if unknown:
             audit.log(self.request_id, name, args, "denied", 0, f"unknown args {sorted(unknown)}")
             raise ToolError(f"Лишние аргументы инструмента {name}: {sorted(unknown)}")
-        self.calls += 1
+        with self._lock:
+            self.calls += 1
         with audit.Timer() as t:
             try:
                 result = tool.fn(**clean)

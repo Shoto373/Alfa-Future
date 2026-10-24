@@ -1,0 +1,116 @@
+"""Схема конфигурации доменных знаний (SPR4-00): темы, отрасли и слова-маркеры классификатора.
+
+Конвенция знаков одна для всех тем: direction_value.up > 0 означает «темы стало больше» (ставка выше,
+рубль слабее, кредит доступнее — смысл «up» записан словами в up_means). Чувствительность отрасли sign:
++1 — отрасль выигрывает при росте темы, -1 — проигрывает, 0 — неоднозначно. Эффект события для отрасли =
+sign × direction_value[направление]: отрицательный — риск, положительный — возможность.
+"""
+
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+Direction = Literal["up", "down", "hold"]
+ROLES = ("owner", "ceo", "cfo", "accountant", "treasurer", "clevel")
+Expectation = Literal["risk", "opportunity", "neutral"]
+
+
+class Strict(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class Action(Strict):
+    text: str = Field(..., min_length=10, max_length=400)
+    needs: str | None = None  # продукт компании, без которого действие не предлагается (loans, leasing, deposits…)
+
+
+class Effect(Strict):
+    risk: str = Field(..., min_length=5)
+    opportunity: str = Field(..., min_length=5)
+
+
+class Topic(Strict):
+    name: str = Field(..., min_length=2)
+    importance: float = Field(..., ge=0, le=2)
+    stems: list[str] = Field(..., min_length=1)
+    meanings: list[str] = Field(default_factory=list)
+    up_means: str | None = None
+    direction_value: dict[Direction, float] | None = None
+    effect: Effect | None = None
+    effect_down: Effect | None = None
+    actions: dict[str, list[Action]] = Field(default_factory=dict)
+    question: str | None = None
+
+
+class Sensitivity(Strict):
+    sign: Literal[-1, 0, 1]
+    why: str = Field(..., min_length=5)
+
+
+class Commodity(Strict):
+    """Сырье, от цены которого зависит выручка отрасли (сценарий «цена сырья → маржа», SPR4-02)."""
+    label: str = Field(..., min_length=2)
+    revenue_exposure: float = Field(..., gt=0, le=1)  # доля выручки, которая меняется вместе с ценой сырья
+
+
+class FinanceModel(Strict):
+    """Отраслевые параметры сценариев (оценки, а не данные компании): долг/выручка и сырье."""
+    debt_to_revenue: float | None = Field(None, ge=0, le=5)
+    commodity: Commodity | None = None
+
+
+class Sector(Strict):
+    name: str = Field(..., min_length=2)
+    okved: list[str] = Field(default_factory=list)
+    stems: list[str] = Field(default_factory=list)
+    sensitivity: dict[str, Sensitivity] = Field(default_factory=dict)
+    finance: FinanceModel = Field(default_factory=FinanceModel)
+
+
+class ControlCase(Strict):
+    """Эталон знака: «рост ставки — риск для стройки». Перевернутый знак в конфигурации ломает эталон."""
+    topic: str
+    sector: str
+    direction: Direction
+    expect: Expectation
+    why: str = ""
+
+
+class OfferRule(Strict):
+    """Предложение банка при выявленной потребности (SPR4-06): тема + знак события + признак компании."""
+    title: str = Field(..., min_length=2)
+    text: str = Field(..., min_length=10)
+    need: str = Field(..., min_length=5)
+    topics: list[str] = Field(..., min_length=1)
+    effect: Literal["risk", "opportunity", "any"]
+    exposure: Literal["customers_concentration", "fx_operations", "new_countries", "loans"]
+    min_share: float = Field(0.5, gt=0, le=1)  # для customers_concentration: доля крупнейшего покупателя
+
+
+class TopicsDoc(Strict):
+    topics: dict[str, Topic]
+    default_actions: dict[str, list[Action]]
+    offers: dict[str, OfferRule] = Field(default_factory=dict)
+
+
+class SectorsDoc(Strict):
+    topic_order: list[str]
+    sectors: dict[str, Sector]
+    control_cases: list[ControlCase] = Field(default_factory=list)
+
+
+class LanguageDoc(Strict):
+    countries: dict[str, list[str]]
+    direction_stems: dict[Literal["up", "down", "hold"], list[str]]
+    ruble_direction: dict[Literal["up", "down"], list[str]]
+    foreign_currency: list[str]
+    foreign_direction: dict[Literal["up", "down"], list[str]]
+    sanctions_direction: dict[Literal["up", "down"], list[str]]
+    actors: list[str]
+    # Ставка иностранного регулятора — не ключевая ставка Банка России (ЦБ Турции, ФРС, ЕЦБ…).
+    foreign_central_banks: list[str] = Field(default_factory=list)
+    central_bank_words: list[str] = Field(default_factory=list)
+    bank_of_russia: list[str] = Field(default_factory=list)
+
+
+DOCS = {"topics": TopicsDoc, "sectors": SectorsDoc, "language": LanguageDoc}

@@ -3,13 +3,18 @@
 Режим правил распознает намерение вопроса и собирает ответ из карточки,
 профиля компании и базы знаний. С LLM — ответ модели проходит ту же
 проверку источников. Вопросы вне назначения сервиса отклоняются.
+
+Поиск в аналитике банка идет через ToolRunner (инструмент search_bank_analytics): тот же бюджет вызовов
+и журнал инструментов, что у разбора и диалога (SPR4-05), — второго пути к данным в обход аудита нет.
 """
 
 import re
+import uuid
 
 from app import llm
 
 from app.agent import prompts
+from app.agent.tools import ToolRunner
 from app.agent.validators import claim_errors
 from app.companies.sectors import SECTOR_NAMES
 from app.knowledge import kb
@@ -34,12 +39,19 @@ def _claim(text: str, origin: str, sources: list[str]) -> dict:
     return {"text": text, "origin": origin, "source_ids": sources, "features": []}
 
 
-def _source(t: dict) -> dict:
+def source_of(t: dict) -> dict:
     return {"source_id": f"bank:{t['id']}", "kind": "bank_analytics", "title": t["doc_title"], "doc_id": t["doc_id"],
             "page": t["page"], "date": t["doc_date"], "excerpt": t["text"][:300], "url": None}
 
 
-def _rules_answer(insight: dict, company: dict, question: str) -> dict:
+def _search(runner: ToolRunner, question: str, company: dict, limit: int) -> list[dict]:
+    cls = classify(question, question)
+    found, _ = runner.call("search_bank_analytics", query=question, topics=[t["topic"] for t in cls.topics],
+                           sectors=[company["sector"]])
+    return found[:limit]
+
+
+def rules_answer(insight: dict, company: dict, question: str, runner: ToolRunner | None = None) -> dict:
     intent = next((name for name, rx in INTENTS if rx.search(question)), "general")
     claims: list[dict] = []
     extra_sources: list[dict] = []
@@ -77,10 +89,9 @@ def _rules_answer(insight: dict, company: dict, question: str) -> dict:
         answer = {"risks": "Основные риски для компании:", "opportunities": "Возможности для компании:",
                   "actions": "Что можно сделать:"}[intent]
     else:
-        cls = classify(question, question)
-        found = kb.search(question, [t["topic"] for t in cls.topics], [company["sector"]], limit=3)
+        found = _search(runner or ToolRunner(f"qa_{uuid.uuid4().hex[:12]}"), question, company, 3)
         claims = [_claim(t["text"], "bank", [f"bank:{t['id']}"]) for t in found]
-        extra_sources = [_source(t) for t in found]
+        extra_sources = [source_of(t) for t in found]
         if intent == "scenario":
             answer = "Сценарий зависит от прогнозов банка по теме вопроса:" if found else \
                 "Для сценарного ответа не хватает материалов банка по этой теме."
@@ -90,7 +101,7 @@ def _rules_answer(insight: dict, company: dict, question: str) -> dict:
     return {"answer": answer, "claims": claims, "extra_sources": extra_sources}
 
 
-def answer(insight: dict, company: dict, question: str) -> dict:
+def answer(insight: dict, company: dict, question: str, runner: ToolRunner | None = None) -> dict:
     base = {"insight_id": insight["insight_id"], "question": question}
     if OFF_TOPIC.search(question):
         return base | {"answer": "Сервис объясняет влияние событий на бизнес и не дает индивидуальных инвестиционных "
@@ -98,13 +109,13 @@ def answer(insight: dict, company: dict, question: str) -> dict:
                        "mode": "rules", "refused": True}
 
     sources = {s["source_id"]: s for s in insight["sources"]}
+    runner = runner or ToolRunner(f"qa_{uuid.uuid4().hex[:12]}")
     if llm.available():
         try:
-            cls = classify(question, question)
-            theses = kb.search(question, [t["topic"] for t in cls.topics], [company["sector"]], limit=4)
+            theses = _search(runner, question, company, 4)
             data, _ = llm.chat_json(prompts.QA_SYSTEM, prompts.qa_user(insight, company, theses, question), "qa", 4000)
             for t in theses:
-                sources.setdefault(f"bank:{t['id']}", _source(t))
+                sources.setdefault(f"bank:{t['id']}", source_of(t))
             claims = []
             raw_claims = data.get("claims")
             if not isinstance(raw_claims, list):
@@ -134,7 +145,7 @@ def answer(insight: dict, company: dict, question: str) -> dict:
         except llm.LLMError:
             pass
 
-    result = _rules_answer(insight, company, question)
+    result = rules_answer(insight, company, question, runner)
     for s in result["extra_sources"]:
         sources.setdefault(s["source_id"], s)
     used = {i for c in result["claims"] for i in c["source_ids"]}

@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from app import config, database, llm, llm_usage, ranking
 from sqlalchemy import func, select
 from app.companies import extra as company_extra
+from app.domain_config import runtime
 from app.models import AppState, Insight, Feedback, Answer, Event
 
 # Меняется, когда правила меняют содержание карточек: старые перестают быть актуальным кэшем.
@@ -30,7 +31,8 @@ def cache_version() -> str:
         rows = dict(db.execute(select(AppState.key, AppState.payload)
                                .where(AppState.key.in_(("profiles", "knowledge", "news_seed")))).all())
     profiles, knowledge, news_version = rows.get("profiles") or {}, rows.get("knowledge") or "", rows.get("news_seed") or ""
-    version = hashlib.sha256(f"{CACHE_VERSION}:{profiles.get('signature')}:{knowledge}:{news_version}".encode()).hexdigest()
+    version = hashlib.sha256(f"{CACHE_VERSION}:{profiles.get('signature')}:{knowledge}:{news_version}"
+                             f":{runtime.signature()}".encode()).hexdigest()
     _version_memo = (now, scope, version)
     return version
 
@@ -189,6 +191,9 @@ def metrics() -> dict:
     usage = llm_usage.usage()
     feed_views = sum(1 for e in events if e["kind"] == "feed_view")
     opens = sum(1 for e in events if e["kind"] == "insight_open")
+    # Диалог (SPR4-05): ответы по существу (не отказы) и доля из них с источником у утверждений.
+    answered = [e for e in events if e["kind"] == "question" and not e.get("refused")]
+    answer_ratings = Counter(e["rating"] for e in events if e["kind"] == "answer_rating")
     n = len(insights) or 1
     return {
         "content": {
@@ -216,6 +221,13 @@ def metrics() -> dict:
             "llm_by_company": llm_usage.by_company(),
             "llm_paused": llm_usage.pause_state(),
             "fallback_rate": round(llm_fallback / llm_tried, 3) if llm_tried else None,
+        },
+        "dialog": {
+            "questions": sum(1 for e in events if e["kind"] == "question"),
+            "answered": len(answered),
+            "answers_with_sources": round(sum(1 for e in answered if e.get("with_sources")) / len(answered), 3) if answered else None,
+            "by_intent": dict(Counter(e.get("intent", "explain") for e in events if e["kind"] == "question")),
+            "ratings": {"up": answer_ratings[1], "down": answer_ratings[-1]},
         },
         "recent_feedback": [f for f in feedback[-10:] if f.get("comment")],
     }

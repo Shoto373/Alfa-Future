@@ -124,3 +124,18 @@ def test_same_company_in_titles_joins_story():
     assert store._same_story(0.70, a, b)
     assert not store._same_story(0.70, c, d), "фамилия — не компания"
     assert not store._same_story(0.60, a, b), "слишком далеко по смыслу"
+
+
+@pytest.mark.parametrize("title,key_rate", [
+    ("ЦБ Турции снизил ключевую ставку до 36%", False),
+    ("Национальный банк Казахстана повысил базовую ставку", False),
+    ("ФРС сохранила ставку без изменений", False),
+    ("Банк России сохранил ключевую ставку на уровне 16%", True),
+    ("ЦБ повысил ключевую ставку до 17%", True),
+    ("Курс юаня и ключевая ставка ЦБ", True),
+    ("Набиуллина: ЦБ Турции и Банк России по-разному реагируют на инфляцию", True),
+])
+def test_foreign_central_bank_rate_is_not_bank_of_russia_key_rate(title, key_rate):
+    """Ставка иностранного регулятора не становится темой «ключевая ставка» (она — про Банк России)."""
+    cls = classify(title, f"{title}. Решение регулятора по ключевой ставке.")
+    assert ("key_rate" in {t["topic"] for t in cls.topics}) is key_rate

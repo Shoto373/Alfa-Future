@@ -10,8 +10,9 @@ from bisect import bisect_left
 from dataclasses import dataclass, field
 
 from app.news import magnitude, semantic
-from app.news.taxonomy import (ACTORS, COUNTRY_STEMS, DIRECTION_STEMS, FOREIGN_CURRENCY, FOREIGN_DIRECTION,
-                               RUBLE_DIRECTION, SANCTIONS_DIRECTION, SECTOR_STEMS, TOPICS)
+from app.news.taxonomy import (ACTORS, BANK_OF_RUSSIA, CENTRAL_BANK_WORDS, COUNTRY_STEMS, DIRECTION_STEMS,
+                               FOREIGN_CENTRAL_BANKS, FOREIGN_CURRENCY, FOREIGN_DIRECTION, RUBLE_DIRECTION,
+                               SANCTIONS_DIRECTION, SECTOR_STEMS, TOPICS)
 
 # «Санкции» засчитываются только рядом с деловым контекстом — и по словарю, и по смыслу.
 SANCTIONS_BUSINESS_STEMS = ["санкц", "swift", "эмбарго", "экспорт", "импорт", "платеж", "банков", "компани", "торгов",
@@ -249,6 +250,22 @@ def _key_sentences(text: str, topics: list[dict]) -> list[str]:
     return [s for s in sentences if s in ranked[:3]]
 
 
+def _foreign_monetary_policy(title_tokens: list[str]) -> bool:
+    """Заголовок о ставке иностранного регулятора (ЦБ Турции, ФРС, ЕЦБ), без упоминания Банка России.
+    Ключевая ставка в таксономии — ставка Банка России: чужая ставка напрямую стоимость рублевого долга не меняет."""
+    if any(_count_stem(title_tokens, s) for s in BANK_OF_RUSSIA):
+        return False
+    if any(_count_stem(title_tokens, s) for s in FOREIGN_CENTRAL_BANKS):
+        return True
+    # «ЦБ Турции», «Нацбанк Казахстана»: страна — сразу после слова о центробанке («курс юаня и ставка ЦБ» — не то).
+    countries = [s for stems in COUNTRY_STEMS.values() for s in stems]
+    for words in (w.split() for w in CENTRAL_BANK_WORDS):
+        for i in range(len(title_tokens) - len(words)):
+            if all(title_tokens[i + k].startswith(w) for k, w in enumerate(words))                     and any(title_tokens[i + len(words)].startswith(c) for c in countries):
+                return True
+    return False
+
+
 def classify(title: str, text: str, hint: dict | None = None) -> Classification:
     """hint — ответ модели-классификатора (app.news.llm_classify) для неуверенных случаев."""
     full = f"{title}. {text}"
@@ -261,6 +278,8 @@ def classify(title: str, text: str, hint: dict | None = None) -> Classification:
     uncertain = (not topics and (meaning is None or meaning["non_business"] - best_meaning < NON_BUSINESS_MARGIN)) \
         or (len(topics) == 1 and topics[0]["score"] <= WEAK_TOPIC_SCORE)
     topics = _with_hint(topics, hint)
+    if _foreign_monetary_policy(title_tokens):
+        topics = [t for t in topics if t["topic"] != "key_rate"]
     topics.sort(key=lambda t: t["score"], reverse=True)
     if topics:
         top = topics[0]["score"]

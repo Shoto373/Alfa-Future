@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "@/lib/api";
 import { loadFeed } from "@/lib/hooks";
 import { IMPORTANT_SCORE as IMPORTANT } from "@/lib/format";
 import { useRead } from "@/lib/notifications";
 import { useSession } from "@/lib/session";
-import type { FeedItem } from "@/lib/types";
+import type { FeedItem, InboxMessage } from "@/lib/types";
 import { Icon, Score } from "./ui";
 import styles from "@/components/Notifications.module.scss";
 import common from "@/styles/common.module.scss";
@@ -15,7 +16,7 @@ const REFRESH_MS = 60_000;
 const SHOWN = 10;
 
 /**
- * Колокольчик шапки: важные для компании события (оценка релевантности не ниже порога).
+ * Колокольчик шапки: сводки и алерты сервера (SPR4-04) и важные для компании события ленты.
  * Счётчик показывает только непрочитанные. Прочитанным считается событие, которое открыли
  * (из списка или из ленты); оно остаётся в списке как история, но уже не горит.
  * Список обновляется раз в минуту и при открытии.
@@ -27,6 +28,8 @@ export default function Notifications() {
   // Список привязан к компании: при переключении прежний не показывается.
   const [loaded, setLoaded] = useState<{ companyId: string; items: FeedItem[] } | null>(null);
   const items = loaded?.companyId === companyId ? loaded.items : null;
+  const [inbox, setInbox] = useState<{ companyId: string; items: InboxMessage[] } | null>(null);
+  const messages = inbox?.companyId === companyId ? inbox.items : [];
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
 
@@ -34,6 +37,7 @@ export default function Notifications() {
     loadFeed(companyId, { signal })
       .then((r) => setLoaded({ companyId, items: r.items.filter((i) => i.relevance.score >= IMPORTANT) }))
       .catch(() => { /* оставляем прежний список, повторим при следующем обновлении */ });
+    api.inbox(companyId, signal).then((r) => setInbox({ companyId, items: r.items })).catch(() => { /* то же */ });
   }, [companyId]);
 
   useEffect(() => {
@@ -55,23 +59,43 @@ export default function Notifications() {
   const unread = all.filter((i) => !read.has(i.news.news_id));
   const history = all.filter((i) => read.has(i.news.news_id));
   const shown = [...unread, ...history].slice(0, SHOWN);
+  const newMessages = messages.filter((m) => !m.read);
+  const total = unread.length + newMessages.length;
+  const readMessages = (ids?: number[]) => {
+    setInbox((v) => v && { ...v, items: v.items.map((m) => (!ids || ids.includes(m.id) ? { ...m, read: true } : m)) });
+    api.inboxRead(companyId, ids).catch(() => { /* отметка повторится при следующем открытии */ });
+  };
 
   return (
     <div className={styles.notif} ref={box}>
       <button className={styles.iconBtn} onClick={() => { setOpen((v) => !v); if (!open) refresh(); }} aria-expanded={open}
-        aria-label={`Уведомления Альфа.Пульс: ${unread.length ? `непрочитанных ${unread.length}` : "нет новых"}`} title="Уведомления">
+        aria-label={`Уведомления Альфа.Пульс: ${total ? `непрочитанных ${total}` : "нет новых"}`} title="Уведомления">
         <Icon name="bell" size={20} />
-        {unread.length > 0 && <span className={styles.notifDot}>{unread.length}</span>}
+        {total > 0 && <span className={styles.notifDot}>{total}</span>}
       </button>
       {open && (
         <div className={styles.notifPop} role="dialog" aria-label="Важные события">
           <div className={styles.notifHead}>
             <p className={common.popTitle}>Важно для {session!.companyName}</p>
-            {unread.length > 0 && (
-              <button type="button" className={styles.notifReadall} onClick={() => mark(unread.map((i) => i.news.news_id))}>Прочитать все</button>
+            {total > 0 && (
+              <button type="button" className={styles.notifReadall}
+                onClick={() => { mark(unread.map((i) => i.news.news_id)); if (newMessages.length) readMessages(); }}>Прочитать все</button>
             )}
           </div>
           <div className={styles.notifBody} role="region" aria-label="Список уведомлений" tabIndex={0}>
+            {messages.length > 0 && (
+              <ul aria-label="Сводки и алерты" data-testid="inbox">
+                {messages.slice(0, 3).map((m) => (
+                  <li key={m.id} className={m.read ? styles.isRead : ""}>
+                    <Link href={m.items[0]?.href ?? "/pulse"} onClick={() => { readMessages([m.id]); setOpen(false); }}>
+                      <Icon name={m.kind === "digest" ? "list" : "bell"} size={16} />
+                      <span className={styles.notifTitle}>{m.title}</span>
+                      {!m.read && <span className={styles.notifNew} aria-label="Не прочитано" />}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
             {items === null && <p className={`${common.muted} ${common.small}`} role="status">Загружаем…</p>}
             {items !== null && all.length === 0 && <p className={`${common.muted} ${common.small}`}>Сейчас нет событий с высокой релевантностью.</p>}
             {items !== null && all.length > 0 && unread.length === 0 && <p className={`${common.muted} ${common.small}`}>Новых событий нет. Ниже история.</p>}
@@ -91,7 +115,10 @@ export default function Notifications() {
               })}
             </ul>
           </div>
-          <Link href="/pulse" className={styles.notifFooter} onClick={() => setOpen(false)}>Вся лента</Link>
+          <div className={styles.notifFoot}>
+            <Link href="/pulse" className={styles.notifFooter} onClick={() => setOpen(false)}>Вся лента</Link>
+            <Link href="/settings/notifications" className={styles.notifFooter} onClick={() => setOpen(false)}>Настроить</Link>
+          </div>
         </div>
       )}
     </div>

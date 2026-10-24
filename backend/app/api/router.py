@@ -8,13 +8,13 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 
-from app import cache, config, embeddings, llm, llm_usage, pipeline, quality, ratelimit, storage, vectors
-from app.agent import audit, orchestrator, qa
+from app import cache, config, embeddings, llm, llm_usage, monitoring, pipeline, quality, ratelimit, storage, vectors
+from app.agent import audit, dialog, orchestrator
 from app.auth import store as auth_store
 from app.auth.deps import check_origin, client_ip, current_user, member_of, require_operator
 from app.companies import ai_settings as company_ai
 from app.companies import extra as company_extra
-from app.companies import profiles
+from app.companies import graph, profiles
 from app.companies.sectors import SECTOR_NAMES
 from app.errors import AnalysisUnavailable, ApiError, InvalidAnalysisResult
 from app.knowledge import ingest, kb
@@ -22,11 +22,13 @@ from app.news import entities, parser, store
 from app.news.sources import registry as sources
 from app.news.taxonomy import TOPICS
 from app.ranking import ROLES, company_feed
+from app.scenarios import calc as scenarios
+from app.scenarios.corridor import corridor
 from app.worker import queue as jobs
 from app.worker import runner as worker
-from app.schemas import (AISettingsRequest, Answer, CompanyExtraRequest, ErrorResponse, FeedbackRequest, Insight, InsightRequest,
+from app.schemas import (AISettingsRequest, Answer, AnswerRatingRequest, DialogTurnView, CompanyExtraRequest, ErrorResponse, FeedbackRequest, Insight, InsightRequest,
                          LLMSwitchRequest,
-                         NewsCreateRequest, QuestionRequest)
+                         NewsCreateRequest, QuestionRequest, ScenarioRequest)
 
 logger = logging.getLogger("app.api")
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(check_origin)])
@@ -251,6 +253,34 @@ def delete_company_file(company_id: str, file_id: str, user: dict = Depends(curr
     return _extra_view(company_id)
 
 
+@router.get("/companies/{company_id}/counterparties", responses=ERRORS)
+def company_counterparties(company_id: str, user: dict = Depends(current_user)) -> dict:
+    """Контрагенты (SPR4-01): топ по платежам, второй уровень с цепочкой, возможные связи и события у них."""
+    member_of(user, company_id)
+    _company(company_id)
+    found = graph.neighbors(company_id)
+    first = [n for n in found if n["level"] == 1 and n["relation"] != "person"]
+    return {"company_id": company_id,
+            "top": sorted(first, key=lambda n: -n.get("amount", 0))[:graph.TOP],
+            "second_level": [n for n in found if n["level"] == 2][:graph.TOP],
+            "possible_links": [n for n in found if n["relation"] == "person"][:graph.TOP],
+            "events": monitoring.alerts(company_id)}
+
+
+@router.post("/scenarios", responses=ERRORS)
+def run_scenario(payload: ScenarioRequest, user: dict = Depends(current_user)) -> dict:
+    """Чувствительность компании (SPR4-02): каждое число — с формулой и происхождением входов. Модель не участвует.
+    Не хватает данных — ok=false и список недостающих входов (а не ноль)."""
+    member_of(user, payload.company_id)
+    overrides = payload.model_dump(exclude={"company_id", "scenario", "shock"})
+    try:
+        result = scenarios.simulate(payload.company_id, payload.scenario, payload.shock, **overrides).as_dict()
+        return {"ok": True, "result": result, "refusal": None, "corridor": corridor(payload.scenario)}
+    except scenarios.ScenarioError as exc:
+        return {"ok": False, "result": None, "refusal": {"message": str(exc), "missing": exc.missing},
+                "corridor": corridor(payload.scenario)}
+
+
 @router.get("/feed", responses=ERRORS)
 def news_feed(company_id: str, topic: str | None = Query(None, max_length=40),
               story: str | None = Query(None, max_length=64),
@@ -393,12 +423,35 @@ def ask(insight_id: str, payload: QuestionRequest, user: dict = Depends(limited(
         raise ApiError("INSIGHT_NOT_FOUND")
     member_of(user, ins["company_id"])
     c = _company(ins["company_id"])
+    role = member_of(user, ins["company_id"])["role"]
     _limit_llm(user, "question")
     with llm_usage.for_company(c["company_id"]):  # ответ модели — в доле компании в общем бюджете
-        result = qa.answer(ins, c, payload.question.strip())
+        result = dialog.answer(ins, c, payload.question.strip(), user["user_id"], role)
     storage.save_answer(result)
-    storage.log_event("question", insight_id=insight_id, refused=result["refused"], mode=result["mode"])
+    storage.log_event("question", insight_id=insight_id, refused=result["refused"], mode=result["mode"],
+                      intent=result["intent"], with_sources=bool(result["claims"]) and not result["refused"])
     return result
+
+
+@router.get("/insights/{insight_id}/questions", response_model=list[DialogTurnView], responses=ERRORS)
+def dialog_history(insight_id: str, user: dict = Depends(current_user)) -> list[dict]:
+    """История диалога пользователя по разбору (SPR4-05): при возврате к разбору прежние ответы на месте."""
+    ins = storage.get_insight(insight_id)
+    if ins is None:
+        raise ApiError("INSIGHT_NOT_FOUND")
+    member_of(user, ins["company_id"])
+    return dialog.history(insight_id, user["user_id"])
+
+
+@router.post("/insights/{insight_id}/questions/{turn_id}/rating", responses=ERRORS)
+def dialog_rate(insight_id: str, turn_id: int, payload: AnswerRatingRequest, user: dict = Depends(current_user)) -> dict:
+    ins = storage.get_insight(insight_id)
+    if ins is None:
+        raise ApiError("INSIGHT_NOT_FOUND")
+    member_of(user, ins["company_id"])
+    ok = dialog.rate(insight_id, user["user_id"], turn_id, payload.rating)
+    storage.log_event("answer_rating", insight_id=insight_id, rating=payload.rating)
+    return {"ok": ok}
 
 
 @router.post("/feedback", responses=ERRORS)

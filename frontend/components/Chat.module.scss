@@ -194,3 +194,24 @@
     height: calc(100dvh - 148px - env(safe-area-inset-bottom));
   }
 }
+
+.rate {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+
+  button {
+    border: 1px solid var(--line);
+    background: none;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 12px;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  button[aria-pressed="true"] {
+    border-color: var(--blue);
+    color: var(--blue);
+  }
+}

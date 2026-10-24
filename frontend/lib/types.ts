@@ -17,6 +17,7 @@ export type TraceStep = Schemas["TraceStep"];
 export type Insight = Schemas["Insight"];
 export type Effect = NonNullable<Insight["effect"]>;
 export type Answer = Schemas["Answer"];
+export type DialogTurn = Answer & { rating: number | null };
 
 export interface LLMSwitch {
   paused: boolean;
@@ -294,4 +295,165 @@ export interface LabelingState {
   pair: LabelPair | null;
   stats: { planned: number; labeled_pairs: number; labels: number; overlap_planned: number; overlap_done: number;
            kappa: number | null; annotators: Record<string, number> };
+}
+
+// Доменная конфигурация (SPR4-00): темы, отрасли и слова-маркеры в YAML.
+export type ConfigDoc = "topics" | "sectors" | "language";
+export type ConfigTexts = Record<ConfigDoc, string>;
+
+export interface ConfigIssue {
+  level: "error" | "warning";
+  doc: ConfigDoc;
+  path: string;
+  message: string;
+}
+
+export interface ConfigVersion {
+  id: number;
+  status: "published" | "archived";
+  created_by: string;
+  note: string;
+  signature: string;
+  created_at: string;
+}
+
+export interface ConfigState {
+  version: number | null;
+  signature: string;
+  texts: ConfigTexts;
+  issues: ConfigIssue[];
+  versions: ConfigVersion[];
+}
+
+export interface ConfigPreviewRow {
+  news_id: string;
+  title: string;
+  score: number;
+  topics: string[];
+  rank?: number;
+  rank_before?: number | null;
+}
+
+export interface ConfigPreview {
+  status: "queued" | "ready" | "invalid";
+  before?: ConfigPreviewRow[];
+  after?: ConfigPreviewRow[];
+  gone?: ConfigPreviewRow[];
+  issues?: ConfigIssue[];
+}
+
+// Граф контрагентов (SPR4-01).
+export interface Counterparty {
+  company_id: string;
+  name: string;
+  sector: string | null;
+  relation: "supplier" | "customer" | "person";
+  level: 1 | 2;
+  weight: number;
+  amount?: number;
+  count?: number;
+  text: string;
+}
+
+export interface CounterpartyEvent {
+  news_id: string;
+  counterparty_id: string;
+  counterparty_name: string;
+  level: number;
+  relation: string;
+  chain: string;
+  title: string;
+  published_at: string;
+  strength: number;
+  created_at: string;
+}
+
+export interface CounterpartiesView {
+  company_id: string;
+  top: Counterparty[];
+  second_level: Counterparty[];
+  possible_links: Counterparty[];
+  events: CounterpartyEvent[];
+}
+
+// Продуктовая аналитика (SPR4-07).
+export interface Interval { rate: number | null; low: number | null; high: number | null; n: number }
+
+export interface ProductReport {
+  days: number;
+  wau: number;
+  wau_by_role: Record<string, number>;
+  wau_weeks: { week_end: string; users: number }[];
+  useful: Interval;
+  retention_d7: Interval;
+  funnel: { step: string; label: string; users: number }[];
+  events: Record<string, number>;
+  experiments: { key: string; description: string; variants: { variant: string; users: number; opens: number; useful: Interval }[] }[];
+}
+
+export interface FlagSetting { description: string; percent: number; companies: string[]; variants?: string[] }
+
+// Связь с банком (SPR4-06).
+export interface BankOffer { offer_id: string; title: string; text: string; need: string; reason: string; label: string }
+
+export interface Lead {
+  id: number; company_id: string; insight_id: string; offer_id: string; status: "new" | "in_progress" | "done" | "declined";
+  created_at: string; updated_at: string; company_name: string | null; contact_name: string | null; contact_email?: string;
+  role: string | null; news_title: string | null; headline: string | null; offer_title: string | null; need: string | null;
+  reason: string | null; comment: string | null;
+}
+
+export interface ManagerClient {
+  company_id: string; name: string; sector: string; revenue: number | null; priority: number; new_leads: number;
+  events: { news_id: string; title: string; score: number; published_at: string }[];
+}
+
+// Сводки и алерты (SPR4-04).
+export interface NotificationSettings {
+  company_id: string;
+  digest: boolean;
+  digest_time: string;
+  timezone: string;
+  threshold: number;
+  topics: string[];
+  counterparties: boolean;
+  quiet_from: string;
+  quiet_to: string;
+  alerts_per_day: number;
+  channels: { inapp: boolean; email: boolean; telegram: boolean };
+}
+
+export interface InboxMessage {
+  id: number;
+  kind: "digest" | "alert";
+  title: string;
+  created_at: string;
+  read: boolean;
+  items: { news_id: string; headline: string; score: number; href: string }[];
+}
+
+export interface Inbox {
+  items: InboxMessage[];
+  unread: number;
+}
+
+// Сценарии «что если» (SPR4-02).
+export type ScenarioKind = "key_rate" | "fx" | "commodity";
+
+export interface ScenarioResult {
+  scenario: ScenarioKind;
+  shock: number;
+  shock_unit: string;
+  effect_rub: number;
+  text: string;
+  formula: string;
+  inputs: { name: string; label: string; value: number; unit: string; origin: string; source: string }[];
+  caveats: string[];
+}
+
+export interface ScenarioResponse {
+  ok: boolean;
+  result: ScenarioResult | null;
+  refusal: { message: string; missing: string[] } | null;
+  corridor: { label: string; horizon: string; unit: string; low: number; high: number; sources: string[] } | null;
 }

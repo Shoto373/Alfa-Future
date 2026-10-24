@@ -1,0 +1,254 @@
+# Отрасли (SPR4-00): название, префиксы ОКВЭД, слова в новостях и чувствительность к темам.
+# sign: +1 — отрасль выигрывает при росте темы (up), -1 — проигрывает, 0 — неоднозначно.
+# finance (SPR4-02): отраслевые оценки для сценариев «что если» — долг/выручка (средний уровень отрасли, не данные
+# компании) и сырье, от цены которого зависит выручка. В расчетах такие входы подписаны как «оценка».
+# topic_order — порядок, в котором чувствительность отрасли превращается в признаки профиля компании.
+# control_cases — эталоны знака: перевернутый знак ломает эталон, такая версия не публикуется.
+topic_order: [key_rate, inflation, fx, fuel_oil, consumer_demand, credit_market, construction_realestate, gold, metals_steel, energy, imports_exports, sanctions_geopolitics, labor, budget, gdp_industry, bonds, corporate_finance, deposits, taxes_regulation, logistics]
+sectors:
+  agriculture_food:
+    name: Сельское хозяйство и пищевая промышленность
+    okved: ['01', '02', '03', '10', '11', '12', '46.2', '46.3']
+    stems: [сельск хозяйств, агро, урожа, зерн, продовольств, пищев, мяс, молоч]
+    sensitivity:
+      inflation: {sign: 0, why: 'цены реализации растут, но дорожают корма, топливо и логистика'}
+      fuel_oil: {sign: -1, why: дорожают топливо для техники и доставка}
+      consumer_demand: {sign: 1, why: спрос на продукты питания}
+      imports_exports: {sign: 0, why: экспорт урожая и импорт оборудования}
+      taxes_regulation: {sign: -1, why: 'маркировка, экспортные пошлины и квоты'}
+      logistics: {sign: -1, why: вывоз урожая и экспорт зависят от тарифов и пропускной способности}
+    finance:
+      debt_to_revenue: 0.45
+      commodity: {label: зерно и продовольствие, revenue_exposure: 0.4}
+  mining_oil_gas:
+    name: Добыча нефти и газа
+    okved: ['05', '06', '09.1']
+    stems: [нефтедобыч, добыч нефт, добыч газ, газодобыч, природн газ, газов месторожд, нефтегаз, спг]
+    sensitivity:
+      fx: {sign: 1, why: экспортная выручка в валюте растет в рублях при ослаблении рубля}
+      fuel_oil: {sign: 1, why: цена нефти определяет выручку добывающих компаний}
+      imports_exports: {sign: 0, why: экспортная логистика и расчеты}
+      sanctions_geopolitics: {sign: -1, why: ограничения на экспорт и расчеты}
+      taxes_regulation: {sign: -1, why: НДПИ и налог на дополнительный доход — крупная часть расходов}
+    finance:
+      debt_to_revenue: 0.6
+      commodity: {label: нефть Brent, revenue_exposure: 0.9}
+  mining_metals:
+    name: Добыча металлических руд и драгметаллов
+    okved: ['07', 08, 09]
+    stems: [золотодобы, горнодобы, добыч золот, рудник, рудн, железн руд, добыч угл, угольщик]
+    sensitivity:
+      fx: {sign: 1, why: экспортная выручка в валюте растет в рублях при ослаблении рубля}
+      gold: {sign: 1, why: цена золота определяет выручку золотодобытчиков}
+      taxes_regulation: {sign: -1, why: НДПИ и экспортные платежи напрямую влияют на маржу}
+      logistics: {sign: -1, why: руда и уголь — грузы РЖД и портов}
+    finance:
+      debt_to_revenue: 0.7
+      commodity: {label: металлы и золото, revenue_exposure: 0.8}
+  oil_refining:
+    name: Нефтепереработка
+    okved: ['19']
+    stems: [нефтеперераб, нпз, нефтепродукт]
+    sensitivity:
+      fuel_oil: {sign: 0, why: маржа зависит от соотношения цен нефти и нефтепродуктов}
+      taxes_regulation: {sign: -1, why: акцизы и демпфер определяют экономику переработки}
+    finance:
+      debt_to_revenue: 0.4
+      commodity: {label: нефтепродукты, revenue_exposure: 0.6}
+  chemicals:
+    name: Химическая промышленность
+    okved: ['20', '22']
+    stems: [химическ, химпром, нефтехими, удобрени]
+    sensitivity:
+      fx: {sign: 1, why: экспортная часть выручки выигрывает от слабого рубля}
+      energy: {sign: -1, why: энергоемкое производство}
+      logistics: {sign: -1, why: экспорт удобрений и химии зависит от портов и тарифов}
+    finance:
+      debt_to_revenue: 0.5
+      commodity: {label: удобрения и химия, revenue_exposure: 0.5}
+  pharma:
+    name: Фармацевтика
+    okved: ['21', '46.46', '47.73']
+    stems: [фарм, лекарств, препарат]
+    sensitivity:
+      fx: {sign: -1, why: импортные субстанции и препараты дорожают}
+      taxes_regulation: {sign: -1, why: 'регистрация, маркировка и регулирование цен на лекарства'}
+    finance: {debt_to_revenue: 0.3}
+  metallurgy:
+    name: Металлургия
+    okved: ['24', '25']
+    stems: [металлург, сталь, стальн, цен на стал, экспорт стал, импорт стал, поставк стал, металлопрокат, горячекатан, холоднокатан]
+    sensitivity:
+      fx: {sign: 1, why: экспортеры выигрывают от слабого рубля}
+      construction_realestate: {sign: 1, why: строительство — крупный потребитель металлопроката}
+      metals_steel: {sign: 1, why: цены на металлы определяют выручку}
+      energy: {sign: -1, why: энергоемкое производство}
+      imports_exports: {sign: 0, why: экспортная логистика и расчеты}
+      sanctions_geopolitics: {sign: -1, why: ограничения на экспорт}
+      gdp_industry: {sign: 1, why: событие описывает динамику промышленности}
+      logistics: {sign: -1, why: металлопродукция возится по железной дороге и через порты}
+    finance:
+      debt_to_revenue: 0.5
+      commodity: {label: сталь и металлопрокат, revenue_exposure: 0.7}
+  manufacturing:
+    name: Машиностроение и обрабатывающие производства
+    okved: ['26', '27', '28', '30', '33', '13', '14', '15', '16', '17', '18', '23', '31', '32']
+    stems: [машиностро, обрабатывающ, производител оборудован, промышленност]
+    sensitivity:
+      key_rate: {sign: -1, why: инвестпроекты и модернизация откладываются при дорогом кредите}
+      construction_realestate: {sign: 1, why: спрос на стройматериалы и технику}
+      metals_steel: {sign: -1, why: металл — сырье для машиностроения}
+      labor: {sign: -1, why: дефицит рабочих специальностей}
+      budget: {sign: 1, why: госзаказ поддерживает промпроизводство}
+      gdp_industry: {sign: 1, why: событие описывает динамику промышленности}
+    finance: {debt_to_revenue: 0.4}
+  auto:
+    name: Автомобильная отрасль
+    okved: ['29', '45']
+    stems: [автомобил, автодилер, автопром, автокредит]
+    sensitivity:
+      key_rate: {sign: -1, why: продажи автомобилей зависят от автокредитования}
+      fx: {sign: -1, why: импорт автомобилей и комплектующих дорожает}
+      consumer_demand: {sign: 1, why: спрос на автомобили — часть потребительских расходов}
+      credit_market: {sign: 1, why: продажи автомобилей зависят от доступности автокредитов}
+      metals_steel: {sign: -1, why: металл — сырье для автопрома}
+      imports_exports: {sign: 0, why: импорт автомобилей и комплектующих}
+    finance: {debt_to_revenue: 0.35}
+  energy_utilities:
+    name: Энергетика и ЖКХ
+    okved: ['35', '36', '37', '38', '39']
+    stems: [энергетик, электроэнерги, жкх, генераци]
+    sensitivity:
+      key_rate: {sign: -1, why: капиталоемкие инвестпрограммы финансируются долгом}
+      energy: {sign: 1, why: тарифы и регулирование определяют выручку}
+      budget: {sign: 0, why: тарифное регулирование и субсидии}
+      bonds: {sign: -1, why: крупные заемщики на облигационном рынке}
+    finance: {debt_to_revenue: 0.8}
+  construction:
+    name: Строительство
+    okved: ['41', '42', '43', 71.12.2]
+    stems: [строител, застройщик, девелопер, стройк]
+    sensitivity:
+      key_rate: {sign: -1, why: проектное финансирование и спрос на ипотеку зависят от стоимости денег}
+      inflation: {sign: -1, why: растет стоимость материалов и работ по фиксированным контрактам}
+      credit_market: {sign: 1, why: продажи и проекты зависят от доступности проектного финансирования и ипотеки}
+      construction_realestate: {sign: 1, why: событие напрямую касается рынка строительства}
+      metals_steel: {sign: -1, why: металл — существенная часть себестоимости}
+      labor: {sign: -1, why: дефицит рабочих специальностей}
+      budget: {sign: 1, why: госзаказ и инфраструктурные проекты}
+      logistics: {sign: -1, why: доставка стройматериалов дорожает}
+    finance: {debt_to_revenue: 0.6}
+  trade_wholesale:
+    name: Оптовая торговля
+    okved: ['46']
+    stems: [оптов, дистрибуц, импортер]
+    sensitivity:
+      key_rate: {sign: -1, why: оборотный капитал оптовиков часто финансируется кредитами}
+      fx: {sign: -1, why: импортные закупки дорожают при ослаблении рубля}
+      credit_market: {sign: 1, why: оборотный капитал зависит от доступности кредита}
+      imports_exports: {sign: 0, why: меняются условия поставок и расчетов с иностранными контрагентами}
+      sanctions_geopolitics: {sign: -1, why: цепочки поставок и платежи с иностранными партнерами}
+      logistics: {sign: -1, why: стоимость и сроки доставки товаров — часть себестоимости}
+    finance: {debt_to_revenue: 0.25}
+  fuel_trade:
+    name: Торговля топливом
+    okved: ['46.71', '47.3']
+    stems: [бензин, топлив, азс]
+    sensitivity:
+      fuel_oil: {sign: 0, why: 'растет выручка, но регулирование цен на топливо ограничивает маржу'}
+      taxes_regulation: {sign: -1, why: акцизы и регулирование цен на топливо}
+    finance: {debt_to_revenue: 0.2}
+  retail:
+    name: Розничная торговля
+    okved: ['47']
+    stems: [ритейл, розничн, торгов сет, магазин]
+    sensitivity:
+      key_rate: {sign: -1, why: дорогой кредит сдерживает потребительский спрос и финансирование запасов}
+      inflation: {sign: 0, why: 'выручка растет вместе с ценами, но реальный спрос и маржа под давлением'}
+      fx: {sign: -1, why: 'импортные товары дорожают, растет давление на цены'}
+      fuel_oil: {sign: -1, why: растут логистические издержки}
+      consumer_demand: {sign: 1, why: выручка напрямую зависит от потребительского спроса}
+      credit_market: {sign: 1, why: часть покупок финансируется потребкредитами}
+      labor: {sign: -1, why: 'трудоемкая отрасль, рост зарплат давит на маржу'}
+      taxes_regulation: {sign: -1, why: маркировка товаров и требования к торговле}
+      logistics: {sign: -1, why: логистика определяет запасы и стоимость доставки}
+    finance: {debt_to_revenue: 0.25}
+  transport:
+    name: Транспорт и логистика
+    okved: ['49', '50', '51', '52', '53']
+    stems: [логистик, транспортн компани, перевозчик, перевозк, грузоперевоз, грузооборот, складск, автоперевоз, железнодорожн, авиакомпани]
+    sensitivity:
+      key_rate: {sign: -1, why: лизинг подвижного состава и техники дорожает}
+      fuel_oil: {sign: -1, why: топливо — одна из главных статей затрат}
+      labor: {sign: -1, why: дефицит водителей и рабочих}
+      gdp_industry: {sign: 1, why: грузооборот следует за промышленностью}
+      logistics: {sign: 1, why: тарифы и спрос на перевозки определяют выручку}
+    finance: {debt_to_revenue: 0.6}
+  hospitality:
+    name: Гостиницы и общепит
+    okved: ['55', '56']
+    stems: [ресторан, общепит, гостиниц, туризм, туристическ]
+    sensitivity:
+      inflation: {sign: -1, why: рост издержек на продукты и персонал сложно переложить на клиента}
+      consumer_demand: {sign: 1, why: выручка напрямую зависит от потребительского спроса}
+      labor: {sign: -1, why: 'трудоемкая отрасль, рост зарплат давит на маржу'}
+    finance: {debt_to_revenue: 0.5}
+  it_telecom:
+    name: ИТ и телекоммуникации
+    okved: ['58', '59', '60', '61', '62', '63']
+    stems: [ит-, софт, программн обеспечени, телеком]
+    sensitivity:
+      fx: {sign: -1, why: импортное оборудование дорожает}
+      labor: {sign: -1, why: конкуренция за специалистов}
+    finance: {debt_to_revenue: 0.4}
+  finance:
+    name: Финансы и страхование
+    okved: ['64', '65', '66']
+    stems: [банки, банковск сектор, коммерческ банк, кредитн организац, страхов, финансов сектор]
+    sensitivity:
+      key_rate: {sign: 0, why: процентная маржа и стоимость фондирования меняются одновременно}
+      credit_market: {sign: 1, why: объем кредитования формирует доходы}
+      gold: {sign: 0, why: влияет на спрос на инвестиционные продукты}
+      sanctions_geopolitics: {sign: -1, why: ограничения на трансграничные операции}
+      bonds: {sign: 0, why: переоценка портфелей ценных бумаг}
+      deposits: {sign: 0, why: стоимость фондирования}
+      taxes_regulation: {sign: -1, why: регуляторные требования ЦБ к капиталу и резервам}
+  real_estate:
+    name: Операции с недвижимостью
+    okved: ['68']
+    stems: [аренд, коммерческ недвижимост, офисн]
+    sensitivity:
+      key_rate: {sign: -1, why: оценка объектов и стоимость обслуживания долга чувствительны к ставке}
+      consumer_demand: {sign: 1, why: арендаторы-ритейлеры зависят от трафика}
+      credit_market: {sign: 1, why: спрос на объекты зависит от доступности ипотеки}
+      construction_realestate: {sign: 1, why: событие напрямую касается рынка недвижимости}
+    finance: {debt_to_revenue: 1.2}
+  services:
+    name: Профессиональные и прочие услуги
+    okved: ['69', '70', '71', '72', '73', '74', '75', '77', '78', '79', '80', '81', '82', '85', '86', '87', '88', '90', '93', '95', '96']
+    stems: []
+    sensitivity:
+      inflation: {sign: -1, why: зарплатные издержки растут быстрее выручки}
+    finance: {debt_to_revenue: 0.3}
+  other:
+    name: Прочие виды деятельности
+    okved: []
+    stems: []
+    sensitivity: {}
+    finance: {debt_to_revenue: 0.3}
+control_cases:
+- {topic: key_rate, sector: construction, direction: up, expect: risk, why: рост ставки удорожает проектное финансирование}
+- {topic: key_rate, sector: construction, direction: down, expect: opportunity, why: снижение ставки удешевляет финансирование стройки}
+- {topic: key_rate, sector: auto, direction: up, expect: risk, why: дорогие автокредиты снижают продажи}
+- {topic: fx, sector: mining_oil_gas, direction: up, expect: opportunity, why: слабый рубль — больше рублевой выручки экспортера}
+- {topic: fx, sector: retail, direction: up, expect: risk, why: слабый рубль удорожает импортные товары}
+- {topic: fx, sector: metallurgy, direction: down, expect: risk, why: крепкий рубль снижает рублевую выручку экспортера}
+- {topic: fuel_oil, sector: transport, direction: up, expect: risk, why: топливо — главная статья затрат перевозчика}
+- {topic: fuel_oil, sector: mining_oil_gas, direction: up, expect: opportunity, why: дорогая нефть — выручка добытчика}
+- {topic: consumer_demand, sector: retail, direction: up, expect: opportunity, why: рост спроса — выручка ритейла}
+- {topic: credit_market, sector: construction, direction: down, expect: risk, why: ужесточение кредита бьет по продажам стройки}
+- {topic: labor, sector: hospitality, direction: up, expect: risk, why: рост зарплат давит на маржу трудоемкой отрасли}
+- {topic: sanctions_geopolitics, sector: trade_wholesale, direction: up, expect: risk, why: новые ограничения ломают цепочки поставок}
+- {topic: taxes_regulation, sector: mining_oil_gas, direction: up, expect: risk, why: рост НДПИ снижает маржу}
+- {topic: metals_steel, sector: construction, direction: up, expect: risk, why: дорогой металл — рост себестоимости стройки}
+- {topic: budget, sector: construction, direction: up, expect: opportunity, why: госрасходы — госзаказ для стройки}

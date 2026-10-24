@@ -68,6 +68,7 @@ class User(Strict):
     email: str
     memberships: list[Membership]
     is_operator: bool = False  # сотрудник банка (OPERATOR_EMAILS): блок «Сервис банка» в профиле
+    is_manager: bool = False  # менеджер банка с закрепленными клиентами: кабинет менеджера (SPR4-06)
 
 
 class Member(Strict):

@@ -11,6 +11,7 @@ from functools import lru_cache
 import numpy as np
 
 from app import embeddings
+from app.domain_config import runtime
 from app.news.taxonomy import TOPIC_MEANINGS
 
 # Примеры новостей «не про бизнес»: если новость ближе к ним, темы по смыслу не добавляются.
@@ -55,7 +56,12 @@ def _prototypes(signature: str):
 
 def warm() -> bool:
     """Старт сервиса: векторы описаний тем и примеров «не про бизнес»."""
-    return _prototypes(embeddings.signature()) is not None
+    return _prototypes(_key()) is not None
+
+
+def _key() -> str:
+    """Векторы описаний тем зависят от модели и от действующей доменной конфигурации (SPR4-00)."""
+    return f"{embeddings.signature()}:{runtime.signature()}"
 
 
 def text_for(title: str, text: str) -> str:
@@ -65,13 +71,13 @@ def text_for(title: str, text: str) -> str:
 
 def prime(pairs: list[tuple[str, str]]) -> None:
     """Считает векторы пачкой заранее (быстрее, чем по одной новости при классификации)."""
-    if pairs and _prototypes(embeddings.signature()) is not None:
+    if pairs and _prototypes(_key()) is not None:
         embeddings.embed([text_for(t, x) for t, x in pairs])
 
 
 def analyze(title: str, text: str, keyword_topics: set[str]) -> dict | None:
     """Смысловые оценки тем и предложенные новые темы; None — модель недоступна."""
-    protos = _prototypes(embeddings.signature())
+    protos = _prototypes(_key())
     if protos is None:
         return None
     vec = embeddings.embed([text_for(title, text)])

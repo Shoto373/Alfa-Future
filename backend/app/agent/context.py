@@ -5,6 +5,7 @@ from app import llm
 from app.agent import composer, evidence, prompts, validators
 from app.companies import extra as company_extra
 from app.companies.sectors import SECTOR_NAMES
+from app.news import entities
 from app.text import INSTRUCTION
 
 
@@ -21,6 +22,23 @@ FEATURE_LABELS = {
 
 
 MAX_EXTRA_QUERIES = 3
+
+
+def _rate_scenario(news: dict, company: dict) -> list[dict]:
+    """Расчет ставки (SPR4-02) — только если у компании есть долг, и в направлении события: снижение ставки — −1 п.п.
+
+    Без кредитов (по данным кейса или со слов компании) процентных расходов от ставки нет: отраслевая оценка долга
+    дала бы риск там, где у компании скорее возможность (депозиты)."""
+    cls = news["classification"]
+    if "key_rate" not in [t["topic"] for t in cls["topics"]][:2]:
+        return []
+    shares = ((company_extra.get(company["company_id"]) or {}).get("shares") or {})
+    if not company["products"].get("loans") and not shares.get("floating_debt_share"):
+        return []
+    direction = (cls.get("topic_directions") or {}).get("key_rate") or cls.get("direction")
+    shock = -1.0 if direction == "down" else 1.0
+    return [{"tool": "scenario_simulate", "args": {"company_id": company["company_id"], "scenario": "key_rate", "shock": shock},
+             "why": "во что обходится компании каждый процентный пункт ставки"}]
 
 
 def rules_plan(news: dict, company: dict) -> list[dict]:
@@ -40,7 +58,9 @@ def rules_plan(news: dict, company: dict) -> list[dict]:
         {"tool": "get_story_history", "args": {"news_id": news["news_id"]}, "why": "тренд или разовое событие"},
         {"tool": "get_story_coverage", "args": {"news_id": news["news_id"]}, "why": "сверить факты с другими источниками"},
         {"tool": "get_bank_products", "args": {"company_id": cid, "topics": topics}, "why": "релевантные решения банка"},
-    ]
+    ] + ([{"tool": "lookup_counterparty_chain", "args": {"company_id": cid, "news_id": news["news_id"]},
+           "why": "в новости названы организации — проверить, не контрагенты ли это (до второго уровня)"}]
+         if any(e["company_id"] for e in entities.of_news(news)) else []) + _rate_scenario(news, company)
 
 
 def llm_queries(news: dict, company: dict, role: str) -> tuple[list[dict], dict]:
@@ -84,6 +104,14 @@ def sources(ctx: dict) -> list[dict]:
     out.append({"source_id": "client:payments", "kind": "client_data", "title": "Платежи компании (данные кейса)",
                 "excerpt": f"Поставщиков: {c['suppliers']['counterparties']}, покупателей: {c['customers']['counterparties']}",
                 "url": None, "doc_id": None, "page": None, "date": None})
+    for sc in ctx.get("scenarios") or []:
+        out.append({"source_id": f"client:scenario:{sc['scenario']}", "kind": "client_data",
+                    "title": "Расчет чувствительности по формуле (оценка)", "excerpt": f"{sc['text']}: {sc['formula']}"[:300],
+                    "url": None, "doc_id": None, "page": None, "date": None})
+    if ctx.get("counterparty_chains"):
+        out.append({"source_id": "client:graph", "kind": "client_data", "title": "Граф платежей компании (данные кейса)",
+                    "excerpt": "; ".join(ch["text"] for ch in ctx["counterparty_chains"])[:300], "url": None, "doc_id": None,
+                    "page": None, "date": None})
     if c.get("extra"):
         out.append({"source_id": "client:extra", "kind": "client_data", "title": "Сведения от компании",
                     "excerpt": company_extra.text(c["extra"])[:300], "url": None, "doc_id": None, "page": None,

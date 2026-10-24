@@ -5,7 +5,8 @@
 
     demo@alfa.test      — финансовый директор и основатель крупнейшей свободной металлургической компании набора;
     demo-ceo@alfa.test  — генеральный директор той же компании: сравнение персонализации по ролям;
-    operator@alfa.test  — сотрудник банка (OPERATOR_EMAILS): метрики, расходы, аудит, выключатель AI.
+    operator@alfa.test  — сотрудник банка (OPERATOR_EMAILS): метрики, расходы, аудит, выключатель AI;
+    manager@alfa.test   — менеджер банка, за которым закреплена демо-компания: кабинет менеджера и заявки.
 
 Пароль у всех — DEMO_PASSWORD. Идемпотентно: существующие записи и привязки не меняются,
 поэтому пароль, уже измененный вручную, сохраняется. Разборы для них строит фоновый конвейер.
@@ -19,6 +20,7 @@ from app import config, database
 from app.errors import ApiError
 from app.auth import store
 from app.companies import profiles
+from app.offers import leads
 
 logger = logging.getLogger("app.demo_accounts")
 
@@ -28,7 +30,9 @@ ACCOUNTS = (
     ("demo@alfa.test", "Демо — финансовый директор", "cfo"),
     ("demo-ceo@alfa.test", "Демо — генеральный директор", "ceo"),
     ("operator@alfa.test", "Демо — сотрудник банка", None),
+    ("manager@alfa.test", "Демо — менеджер банка", None),
 )
+MANAGER = "manager@alfa.test"
 
 
 def candidates() -> list[dict]:
@@ -70,4 +74,5 @@ def ensure() -> dict | None:
                     store.add_member(cid, email, role, is_admin=False)
                 except ApiError as exc:
                     logger.warning("demo member not added: %s", exc)
+            leads.assign(MANAGER, cid)
     return {"created": created, "company_id": company["company_id"] if company else None}

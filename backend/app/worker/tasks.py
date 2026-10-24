@@ -3,9 +3,14 @@
 import logging
 from collections.abc import Callable
 
-from app import config, llm_usage, pipeline, ranking
+from app import config, llm_usage, monitoring, pipeline, ranking
+from app.companies import graph
+from app.domain_config import loader as domain_config
+from app.domain_config import preview as config_preview
 from app.knowledge import ingest
 from app.news import store
+from app.notifications import delivery, service
+from app.offers import leads
 from app.worker import queue
 
 logger = logging.getLogger("app.worker")
@@ -32,6 +37,41 @@ def kb_ingest(payload: dict) -> dict:
     return ingest.process(payload["doc_id"])
 
 
+def domain_config_apply(payload: dict) -> dict:
+    """Новая версия доменной конфигурации (SPR4-00): применить, переклассифицировать новости и обновить индекс."""
+    domain_config.refresh(force=True)
+    store.reset_cache()
+    news = store.warm()  # подпись словарей сменилась — новости классифицируются заново под блокировкой
+    return {"news": news, **pipeline.index_news()}
+
+
+def domain_config_preview(payload: dict) -> dict:
+    """Предпросмотр «как изменится лента компании» без публикации."""
+    result = config_preview.run(payload["texts"], payload["company_id"], payload["role"], store, ranking.feed)
+    config_preview.save(payload["id"], result)
+    return {"status": result["status"]}
+
+
+def counterparty_monitor(payload: dict) -> dict:
+    """Граф контрагентов — в company_edges (при смене данных) и алерты о событиях у контрагентов (SPR4-01)."""
+    return {"edges": graph.sync(), "alerts": monitoring.scan()}
+
+
+def notify_tick(payload: dict) -> dict:
+    """Сводки и алерты подписчикам (SPR4-04): кому пора — запись в журнал и задачи доставки."""
+    return service.tick()
+
+
+def notify_deliver(payload: dict) -> dict:
+    """Одно письмо из журнала; сбой почты — исключение, очередь повторит с задержкой."""
+    return {"status": delivery.deliver(payload["id"])}
+
+
+def lead_crm(payload: dict) -> dict:
+    """Заявка «обсудить с менеджером» — в CRM банка (SPR4-06). Пока заглушка: наружу ничего не отправляется."""
+    return {"status": leads.crm_stub(payload["id"])}
+
+
 def warm_feeds(payload: dict) -> dict:
     """Ленты привязанных компаний — в общий кэш (Redis): первое открытие ленты в любом экземпляре API быстрое."""
     pairs = pipeline.audience()
@@ -54,6 +94,12 @@ HANDLERS: dict[str, Callable[[dict], dict]] = {
     "news_reclassify": news_reclassify,
     "news_index": news_index,
     "kb_ingest": kb_ingest,
+    "domain_config_apply": domain_config_apply,
+    "counterparty_monitor": counterparty_monitor,
+    "notify_tick": notify_tick,
+    "notify_deliver": notify_deliver,
+    "lead_crm": lead_crm,
+    "domain_config_preview": domain_config_preview,
     "warm_feeds": warm_feeds,
     "llm_sweep": llm_sweep,
     "jobs_cleanup": jobs_cleanup,

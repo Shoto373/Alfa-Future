@@ -13,3 +13,6 @@ numpy==2.4.6
 pgvector==0.3.6
 redis==5.2.1
 pypdf==6.20.1
+# YAML доменной конфигурации (SPR4-00); та же версия уже стояла как зависимость fastembed (constraints.txt).
+PyYAML==6.0.3
+tzdata==2026.5

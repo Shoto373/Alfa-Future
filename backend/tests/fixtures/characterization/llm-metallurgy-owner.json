@@ -72,26 +72,7 @@
     "text": "Компания может пересмотреть условия финансирования."
    }
   ],
-  "products": [
-   {
-    "product_id": "prod-deposit",
-    "reason": "Связано с темой «Ключевая ставка»",
-    "text": "Сравнить сроки и доходность размещения свободной ликвидности с учетом текущих условий и потребности в средствах.",
-    "title": "Депозит и неснижаемый остаток"
-   },
-   {
-    "product_id": "prod-hedge-rate",
-    "reason": "Связано с темой «Ключевая ставка»",
-    "text": "Зафиксировать стоимость части плавающего долга при сохранении высокой ставки.",
-    "title": "Процентный своп (IRS)"
-   },
-   {
-    "product_id": "prod-leasing",
-    "reason": "Связано с темой «Ключевая ставка»",
-    "text": "Обновление фондов без единовременной нагрузки на ликвидность.",
-    "title": "Лизинг оборудования и транспорта"
-   }
-  ],
+  "products": [],
   "quality": {
    "attempts": 2,
    "checks": [
@@ -270,42 +251,12 @@
     "source_id": "client:payments",
     "title": "Платежи компании (данные кейса)",
     "url": null
-   },
-   {
-    "date": null,
-    "doc_id": null,
-    "excerpt": "Сравнить сроки и доходность размещения свободной ликвидности с учетом текущих условий и потребности в средствах.",
-    "kind": "bank_product",
-    "page": null,
-    "source_id": "product:prod-deposit",
-    "title": "Депозит и неснижаемый остаток",
-    "url": null
-   },
-   {
-    "date": null,
-    "doc_id": null,
-    "excerpt": "Зафиксировать стоимость части плавающего долга при сохранении высокой ставки.",
-    "kind": "bank_product",
-    "page": null,
-    "source_id": "product:prod-hedge-rate",
-    "title": "Процентный своп (IRS)",
-    "url": null
-   },
-   {
-    "date": null,
-    "doc_id": null,
-    "excerpt": "Обновление фондов без единовременной нагрузки на ликвидность.",
-    "kind": "bank_product",
-    "page": null,
-    "source_id": "product:prod-leasing",
-    "title": "Лизинг оборудования и транспорта",
-    "url": null
    }
   ],
   "title": "Банк России сохранил ключевую ставку на уровне 14% годовых",
   "trace": [
    {
-    "detail": "Обязательные шаги: get_company_profile → get_exposures → get_counterparties → search_bank_analytics → check_forecast_conflicts → get_story_history → get_story_coverage → get_bank_products",
+    "detail": "Обязательные шаги: get_company_profile → get_exposures → get_counterparties → search_bank_analytics → check_forecast_conflicts → get_story_history → get_story_coverage → get_bank_products → scenario_simulate",
     "name": "plan",
     "output": {
      "steps": [
@@ -340,6 +291,10 @@
       {
        "tool": "get_bank_products",
        "why": "релевантные решения банка"
+      },
+      {
+       "tool": "scenario_simulate",
+       "why": "во что обходится компании каждый процентный пункт ставки"
       }
      ]
     },
@@ -456,6 +411,19 @@
     "step": 9
    },
    {
+    "detail": "во что обходится компании каждый процентный пункт ставки: При изменении ставки на +1 п.п. процентные расходы вырастут ≈ на 265 млн ₽ в год (долг ≈ 53002 млн ₽ × 50% с плавающей ставкой × +1 п.п.)",
+    "name": "scenario_simulate",
+    "output": {
+     "args": {
+      "scenario": "key_rate",
+      "shock": 1.0
+     }
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 10
+   },
+   {
     "detail": "Модель recorded/plan предложила уточняющих запросов: 1",
     "name": "llm_queries",
     "output": {
@@ -468,7 +436,7 @@
     },
     "stage": "plan",
     "status": "ok",
-    "step": 10
+    "step": 11
    },
    {
     "detail": "уточнить прогноз банка: найдено тезисов: 2, из них новых 0",
@@ -491,7 +459,7 @@
     },
     "stage": "tool",
     "status": "ok",
-    "step": 11
+    "step": 12
    },
    {
     "detail": "Черновик модели recorded/compose, токенов 100",
@@ -499,7 +467,7 @@
     "output": null,
     "stage": "compose",
     "status": "ok",
-    "step": 12
+    "step": 13
    },
    {
     "detail": "Не пройдено: numbers_grounded, evidence_boundaries",
@@ -553,7 +521,7 @@
     },
     "stage": "check",
     "status": "warning",
-    "step": 13
+    "step": 14
    },
    {
     "detail": "Модель recorded/review исправила утверждений: 1, убрала: 0 (из 1 с ошибками)",
@@ -561,7 +529,7 @@
     "output": null,
     "stage": "adapt",
     "status": "ok",
-    "step": 14
+    "step": 15
    },
    {
     "detail": "Модель recorded/review исправила утверждений: 1, убрала: 0 (из 1 с ошибками)",
@@ -569,7 +537,7 @@
     "output": null,
     "stage": "adapt",
     "status": "ok",
-    "step": 15
+    "step": 16
    },
    {
     "detail": "Все проверки пройдены",
@@ -621,7 +589,7 @@
     },
     "stage": "check",
     "status": "ok",
-    "step": 16
+    "step": 17
    },
    {
     "detail": "Проверено выводов AI: 4; подтверждено 3, частично 0, убрано 1: Событие касается компании через ее профиль и операции. — нет опоры в источниках",
@@ -629,15 +597,15 @@
     "output": null,
     "stage": "check",
     "status": "ok",
-    "step": 17
+    "step": 18
    },
    {
-    "detail": "AI-разбор готов, источников: 10",
+    "detail": "AI-разбор готов, источников: 7",
     "name": "finalize",
     "output": {},
     "stage": "finalize",
     "status": "ok",
-    "step": 18
+    "step": 19
    }
   ],
   "what_happened": {

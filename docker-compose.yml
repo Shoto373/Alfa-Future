@@ -64,6 +64,8 @@ services:
       RUNTIME_DIR: /app/runtime
       BANK_PDF_DIR: /data/bank_pdf
       FRONTEND_ORIGIN: ${PUBLIC_ORIGIN:-https://pointers-team.online}
+      # Ссылка отписки в письмах сводок (SPR4-04). Без SMTP_HOST в .env сервера письма не отправляются.
+      PUBLIC_API_URL: ${PUBLIC_ORIGIN:-https://pointers-team.online}
       ANALYSIS_TIMEOUT_SECONDS: "150"
       # Конвейер на проде включается в SPR2-06 (RSS_REFRESH_MINUTES=15 в .env сервера); до этого — выключен.
       RSS_REFRESH_MINUTES: ${RSS_REFRESH_MINUTES:-0}

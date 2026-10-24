@@ -19,6 +19,7 @@ from app.errors import ApiError
 from app.auth import security
 from app.companies import profiles
 from app.models import AuthMembership, AuthSession, AuthUser, LoginFailure
+from app.offers import leads
 
 MAX_COMPANIES_PER_USER = 5
 MAX_MEMBERS_PER_COMPANY = 100
@@ -135,7 +136,8 @@ def user_view(user: dict) -> dict:
                                                        .where(AuthMembership.company_id.in_(companies)))] if companies else []
     return {"user_id": user["user_id"], "name": user["name"], "email": user["email"],
             "memberships": [membership_view(m, members) for m in mine],
-            "is_operator": user["email"].lower() in config.operator_emails()}
+            "is_operator": user["email"].lower() in config.operator_emails(),
+            "is_manager": bool(leads.companies_of(user["email"]))}  # менеджер банка с закрепленными клиентами (SPR4-06)
 
 
 # ---- вход: блокировка после неудач (общая для всех воркеров) ----

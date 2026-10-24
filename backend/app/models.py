@@ -100,6 +100,113 @@ class RankingLabel(Base):
                       CheckConstraint("grade BETWEEN 0 AND 3", name="ranking_labels_grade_check"))
 
 
+class DomainConfigVersion(Base, Payload):
+    """Опубликованная версия доменной конфигурации (SPR4-00): YAML-тексты тем, отраслей и слов-маркеров."""
+    __tablename__ = "domain_config_versions"
+    id: Mapped[int] = mapped_column(Integer, Identity(always=False), primary_key=True)
+    status: Mapped[str] = mapped_column(Text, server_default="published")
+    created_by: Mapped[str] = mapped_column(Text)
+    note: Mapped[str] = mapped_column(Text, server_default="")
+    signature: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (CheckConstraint("status IN ('published', 'archived')", name="domain_config_versions_status_check"),)
+
+
+class CompanyEdge(Base):
+    """Ребро графа контрагентов (SPR4-01): платеж «плательщик → получатель» или возможная связь через физлиц."""
+    __tablename__ = "company_edges"
+    src: Mapped[str] = mapped_column(Text, primary_key=True)
+    dst: Mapped[str] = mapped_column(Text, primary_key=True)
+    kind: Mapped[str] = mapped_column(Text, primary_key=True)  # payment | person
+    share_out: Mapped[float] = mapped_column(Numeric)  # доля в исходящих платежах src (для person — вес связи)
+    share_in: Mapped[float | None] = mapped_column(Numeric, nullable=True)  # доля во входящих платежах dst
+    amount: Mapped[float] = mapped_column(Numeric, server_default="0")
+    count: Mapped[int] = mapped_column(Integer, server_default="0")
+    __table_args__ = (Index("company_edges_dst_idx", "dst"),)
+
+
+class CounterpartyAlert(Base, Payload):
+    """Событие у контрагента компании (SPR4-01): новость о нем, цепочка до компании и сила события."""
+    __tablename__ = "counterparty_alerts"
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=False), primary_key=True)
+    company_id: Mapped[str] = mapped_column(Text)
+    news_id: Mapped[str] = mapped_column(Text)
+    counterparty_id: Mapped[str] = mapped_column(Text)
+    level: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (UniqueConstraint("company_id", "news_id", "counterparty_id", name="counterparty_alerts_uq"),
+                      Index("counterparty_alerts_company_idx", "company_id", "created_at"))
+
+
+class Subscription(Base, Payload):
+    """Подписка пользователя на компанию (SPR4-04): темы, порог, контрагенты, тихие часы, каналы, сводка."""
+    __tablename__ = "subscriptions"
+    user_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    company_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    unsubscribe_token: Mapped[str] = mapped_column(Text, unique=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class Delivery(Base, Payload):
+    """Журнал доставки сводок и алертов (SPR4-04): канал, статус, попытки; ключ не дает отправить дважды."""
+    __tablename__ = "deliveries"
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=False), primary_key=True)
+    user_id: Mapped[str] = mapped_column(Text)
+    company_id: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(Text)      # digest | alert
+    channel: Mapped[str] = mapped_column(Text)   # inapp | email | telegram
+    key: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, server_default="queued")  # queued | sent | failed | skipped
+    attempts: Mapped[int] = mapped_column(Integer, server_default="0")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    __table_args__ = (UniqueConstraint("key", "channel", name="deliveries_key_channel_uq"),
+                      Index("deliveries_user_idx", "user_id", "company_id", "created_at"),
+                      CheckConstraint("status IN ('queued', 'sent', 'failed', 'skipped')", name="deliveries_status_check"))
+
+
+class DialogTurn(Base, Payload):
+    """Реплика диалога по разбору (SPR4-05): вопрос, намерение, ответ с источниками и оценка пользователя."""
+    __tablename__ = "dialog_turns"
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=False), primary_key=True)
+    insight_id: Mapped[str] = mapped_column(Text)
+    user_id: Mapped[str] = mapped_column(Text)
+    company_id: Mapped[str] = mapped_column(Text)
+    rating: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (Index("dialog_turns_insight_idx", "insight_id", "user_id", "id"),
+                      CheckConstraint("rating IN (-1, 1)", name="dialog_turns_rating_check"))
+
+
+class ManagerClient(Base):
+    """Клиенты менеджера банка (SPR4-06): менеджер видит события и лиды только этих компаний."""
+    __tablename__ = "manager_clients"
+    email: Mapped[str] = mapped_column(Text, primary_key=True)
+    company_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Lead(Base, Payload):
+    """Заявка «обсудить с менеджером» (SPR4-06): создается только с явного согласия пользователя.
+    В payload — контекст разбора: новость, вывод, предложение, потребность, текст согласия."""
+    __tablename__ = "leads"
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=False), primary_key=True)
+    company_id: Mapped[str] = mapped_column(Text)
+    user_id: Mapped[str] = mapped_column(Text)
+    insight_id: Mapped[str] = mapped_column(Text)
+    offer_id: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, server_default="new")  # new | in_progress | done | declined
+    consent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    __table_args__ = (UniqueConstraint("user_id", "insight_id", "offer_id", name="leads_user_insight_offer_uq"),
+                      Index("leads_company_idx", "company_id", "created_at"),
+                      CheckConstraint("status IN ('new', 'in_progress', 'done', 'declined')", name="leads_status_check"))
+
+
 class BankProduct(Base, Payload):
     __tablename__ = "bank_products"
     product_id: Mapped[str] = mapped_column(Text, primary_key=True)
@@ -153,6 +260,25 @@ class Event(Base, Payload, Timestamped):
     id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
     kind: Mapped[str] = mapped_column(Text)
     __table_args__ = (Index("events_kind_idx", "kind"),)
+
+
+class ProductEvent(Base, Payload, Timestamped):
+    """Событие продуктовой воронки (SPR4-07): псевдоним пользователя, компания, роль и свойства-перечисления — без ПДн."""
+    __tablename__ = "product_events"
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    kind: Mapped[str] = mapped_column(Text)
+    user_hash: Mapped[str] = mapped_column(Text)
+    company_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    role: Mapped[str | None] = mapped_column(Text, nullable=True)
+    __table_args__ = (Index("product_events_kind_idx", "kind", "created_at"),
+                      Index("product_events_user_idx", "user_hash", "created_at"))
+
+
+class FeatureFlag(Base, Payload):
+    """Настройка фичефлага или эксперимента (SPR4-07): процент раскатки и компании пилота поверх значений по умолчанию."""
+    __tablename__ = "feature_flags"
+    key: Mapped[str] = mapped_column(Text, primary_key=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
 class ToolAudit(Base, Payload, Timestamped):

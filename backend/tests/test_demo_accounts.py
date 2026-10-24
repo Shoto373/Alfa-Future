@@ -22,7 +22,7 @@ def test_demo_accounts_open_a_ready_feed(raw_client, new_client, monkeypatch):
     monkeypatch.setenv("DEMO_ACCOUNTS", "1")
     monkeypatch.setenv("DEMO_PASSWORD", "demo-pass-123")
     first = demo_accounts.ensure()
-    assert set(first["created"]) == {"demo@alfa.test", "demo-ceo@alfa.test", "operator@alfa.test"}
+    assert set(first["created"]) == {"demo@alfa.test", "demo-ceo@alfa.test", "operator@alfa.test", "manager@alfa.test"}
     assert demo_accounts.ensure()["created"] == [], "повторный старт ничего не создает заново"
 
     cfo, ceo = new_client(), new_client()
@@ -35,6 +35,10 @@ def test_demo_accounts_open_a_ready_feed(raw_client, new_client, monkeypatch):
     assert cfo.get(f"{API}/feed", params={"company_id": company_id}).status_code == 200
     members = store.list_members(company_id)
     assert len(members) == 2, "демо-учетки не дублируют участников"
+    mgr = new_client()
+    assert mgr.post(f"{API}/auth/login", json={"email": "manager@alfa.test", "password": "demo-pass-123"}).status_code == 200
+    assert mgr.get(f"{API}/auth/me").json()["is_manager"] is True
+    assert [c["company_id"] for c in mgr.get(f"{API}/manager/clients").json()["clients"]] == [company_id]
 
 
 def test_claimed_company_is_not_taken_over(raw_client, new_client, monkeypatch):

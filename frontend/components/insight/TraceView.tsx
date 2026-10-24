@@ -18,6 +18,8 @@ const STEP: Record<string, string> = {
   get_story_history: "Похожие события в прошлом",
   get_story_coverage: "Другие источники",
   get_bank_products: "Продукты банка",
+  lookup_counterparty_chain: "Контрагенты в новости",
+  scenario_simulate: "Расчет «что если»",
   llm_compose: "Черновик AI",
   llm_retry: "Повтор черновика",
   rules_compose: "Быстрый разбор",
