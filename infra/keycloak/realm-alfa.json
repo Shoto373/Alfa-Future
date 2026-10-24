@@ -1,0 +1,107 @@
+{
+  "realm": "alfa",
+  "enabled": true,
+  "displayName": "Альфа-ID (демо)",
+  "sslRequired": "none",
+  "loginWithEmailAllowed": true,
+  "registrationAllowed": false,
+  "internationalizationEnabled": true,
+  "supportedLocales": [
+    "ru"
+  ],
+  "defaultLocale": "ru",
+  "clients": [
+    {
+      "clientId": "alfa-pulse",
+      "name": "Альфа.Пульс",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8000/api/v1/auth/oidc/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:3000"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:3000/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "alfa_companies",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "alfa_companies",
+            "claim.name": "alfa_companies",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "false",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "pilot@alfa.test",
+      "email": "pilot@alfa.test",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Пилот",
+      "lastName": "Финансовый директор",
+      "attributes": {
+        "alfa_companies": [
+          "U_9:cfo"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "alfa-demo-2026",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "pilot-ceo@alfa.test",
+      "email": "pilot-ceo@alfa.test",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Пилот",
+      "lastName": "Генеральный директор",
+      "attributes": {
+        "alfa_companies": [
+          "U_9:ceo"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "alfa-demo-2026",
+          "temporary": false
+        }
+      ]
+    }
+  ],
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "providerId": "declarative-user-profile",
+        "subComponents": {},
+        "config": {
+          "kc.user.profile.config": [
+            "{\"attributes\": [{\"name\": \"username\", \"displayName\": \"${username}\", \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}, \"validations\": {}}, {\"name\": \"email\", \"displayName\": \"${email}\", \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}, \"validations\": {\"email\": {}}}, {\"name\": \"firstName\", \"displayName\": \"${firstName}\", \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"validations\": {}}, {\"name\": \"lastName\", \"displayName\": \"${lastName}\", \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"validations\": {}}], \"groups\": [], \"unmanagedAttributePolicy\": \"ADMIN_EDIT\"}"
+          ]
+        }
+      }
+    ]
+  }
+}

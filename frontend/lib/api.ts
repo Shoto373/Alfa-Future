@@ -81,6 +81,9 @@ function sharedFeed(path: string, signal?: AbortSignal, fresh = false): Promise<
 
 export const api = {
   me: (signal?: AbortSignal) => request<User>("/api/v1/auth/me", {}, { signal }),
+  // Способы входа: по паролю (демо) и через корпоративный IdP (Альфа-ID, OIDC).
+  authMethods: () => request<{ password: boolean; oidc: boolean }>("/api/v1/auth/methods"),
+  oidcLoginUrl: (next = "/") => `${API_BASE_URL}/api/v1/auth/oidc/login?next=${encodeURIComponent(next)}`,
   login: (email: string, password: string) => request<User>("/api/v1/auth/login", json("POST", { email, password })),
   register: (name: string, email: string, password: string) =>
     request<User>("/api/v1/auth/register", json("POST", { name, email, password })),

@@ -7,10 +7,10 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse
 
-from app import cache, config, embeddings, llm, llm_usage, pipeline, quality, storage, vectors
+from app import cache, config, embeddings, llm, llm_usage, pipeline, quality, ratelimit, storage, vectors
 from app.agent import audit, orchestrator, qa
 from app.auth import store as auth_store
-from app.auth.deps import check_origin, current_user, member_of, require_operator
+from app.auth.deps import check_origin, client_ip, current_user, member_of, require_operator
 from app.companies import ai_settings as company_ai
 from app.companies import extra as company_extra
 from app.companies import profiles
@@ -61,6 +61,14 @@ def _company(company_id: str) -> dict:
 
 
 company_or_404 = _company
+
+
+def limited(scope: str):
+    """Зависимость: вошедший пользователь и учет запроса в лимите частоты (пользователь и адрес)."""
+    def dependency(request: Request, user: dict = Depends(current_user)) -> dict:
+        ratelimit.check(scope, user["user_id"], client_ip(request))
+        return user
+    return dependency
 
 
 def _limit_llm(user: dict, action: str) -> None:
@@ -270,7 +278,7 @@ def news(news_id: str) -> dict:
     return _news(news_id)
 
 
-@router.post("/news", responses=ERRORS, dependencies=[Depends(current_user)])
+@router.post("/news", responses=ERRORS, dependencies=[Depends(limited("news"))])
 def add_news(payload: NewsCreateRequest) -> dict:
     if payload.url:
         try:
@@ -297,7 +305,7 @@ def refresh_news() -> dict:
 
 
 @router.post("/insights", response_model=Insight, responses=ERRORS)
-async def create_insight(payload: InsightRequest, request: Request, user: dict = Depends(current_user)) -> dict:
+async def create_insight(payload: InsightRequest, request: Request, user: dict = Depends(limited("insights"))) -> dict:
     request_id: str = request.state.request_id
     # Роль — из членства; perspective лишь меняет угол зрения (доступ к компании проверяется так же).
     role = payload.perspective or member_of(user, payload.company_id)["role"]
@@ -362,7 +370,7 @@ def get_insight(insight_id: str, user: dict = Depends(current_user)) -> dict:
 
 
 @router.post("/insights/{insight_id}/questions", response_model=Answer, responses=ERRORS)
-def ask(insight_id: str, payload: QuestionRequest, user: dict = Depends(current_user)) -> dict:
+def ask(insight_id: str, payload: QuestionRequest, user: dict = Depends(limited("questions"))) -> dict:
     ins = storage.get_insight(insight_id)
     if ins is None:
         raise ApiError("INSIGHT_NOT_FOUND")

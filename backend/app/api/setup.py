@@ -22,6 +22,24 @@ UPLOAD_MAX_BYTES = 5 * 1024 * 1024 + 1024
 UPLOAD_PATH = re.compile(r"^/api/v1/companies/[^/]+/extra/files$")
 
 
+# Заголовки безопасности всех ответов API (SPR3-04). Ответы JSON дополнительно запрещают любую загрузку
+# ресурсов (CSP); документация /docs и PDF банка без CSP — им нужны свои скрипты и встроенный просмотр.
+SECURITY_HEADERS = [
+    (b"x-content-type-options", b"nosniff"),
+    (b"x-frame-options", b"DENY"),
+    (b"referrer-policy", b"strict-origin-when-cross-origin"),
+    (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
+]
+JSON_CSP = (b"content-security-policy", b"default-src 'none'; frame-ancestors 'none'")
+
+
+def _with_security_headers(headers: list) -> list:
+    out = [*headers, *SECURITY_HEADERS, (b"x-api-version", SCHEMA_VERSION.encode())]
+    if any(k.lower() == b"content-type" and v.startswith(b"application/json") for k, v in headers):
+        out.append(JSON_CSP)
+    return out
+
+
 def new_request_id() -> str:
     return f"req_{uuid.uuid4().hex}"
 
@@ -50,8 +68,8 @@ class RequestContextMiddleware:
         async def send_logged(message):
             if message["type"] == "http.response.start":
                 status_holder["status"] = message["status"]
-                # Версия контракта в каждом ответе: клиент видит, с какой версией API говорит.
-                message["headers"] = [*message.get("headers", []), (b"x-api-version", SCHEMA_VERSION.encode())]
+                # Версия контракта и заголовки безопасности — в каждом ответе.
+                message["headers"] = _with_security_headers(list(message.get("headers", [])))
             await send(message)
 
         try:
@@ -135,7 +153,7 @@ def configure_api(app: FastAPI) -> None:
 
     @app.exception_handler(ApiError)
     async def _api_error(request: Request, exc: ApiError):
-        return error_response(exc.code, request.state.request_id, exc.message)
+        return error_response(exc.code, request.state.request_id, exc.message, exc.headers)
 
     # Последний добавленный middleware — внешний. CORS снаружи,
     # чтобы ответ 413 из RequestContextMiddleware тоже получил CORS-заголовки.

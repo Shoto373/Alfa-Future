@@ -87,6 +87,26 @@ def set(key: str, value, ttl: int) -> None:  # noqa: A001 - имя по смыс
         _failed(exc)
 
 
+def incr(key: str, ttl: int) -> int:
+    """Счетчик с истечением (ограничение частоты): общий для процессов через Redis, без Redis — в памяти процесса."""
+    client = _redis()
+    if client is not None:
+        try:
+            pipe = client.pipeline()
+            pipe.incr(PREFIX + key)
+            pipe.expire(PREFIX + key, ttl, nx=True)
+            return int(pipe.execute()[0])
+        except Exception as exc:
+            _failed(exc)
+    now = time.monotonic()
+    with _lock:
+        expires, count = _local.get(key, (0.0, 0))
+        if expires <= now:
+            expires, count = now + ttl, 0
+        _local[key] = (expires, count + 1)
+        return count + 1
+
+
 def ping() -> bool | None:
     """True/False — Redis отвечает или нет, None — Redis не настроен."""
     if not config.redis_url():

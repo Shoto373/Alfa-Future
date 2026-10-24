@@ -59,6 +59,11 @@ services:
       # Пароль известен всем — поэтому только локально; в docker-compose.yml этих переменных нет.
       DEMO_ACCOUNTS: ${DEMO_ACCOUNTS:-1}
       DEMO_PASSWORD: ${DEMO_PASSWORD:-alfa-demo-2026}
+      # Вход через Альфа-ID (OIDC): локально — Keycloak из профиля auth (make up-auth); пусто — выключен.
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_INTERNAL_ISSUER: ${OIDC_INTERNAL_ISSUER:-}
+      OIDC_REDIRECT_URI: http://localhost:${API_PORT:-8000}/api/v1/auth/oidc/callback
+      AUTH_PASSWORD_ENABLED: ${AUTH_PASSWORD_ENABLED:-1}
     volumes: &backend-volumes
       # Реальные CSV кейса: CASE_DATA_DIR=./контекст/data docker compose up (по умолчанию — синтетика)
       - ${CASE_DATA_DIR:-./data/synthetic}:/data/case:ro
@@ -122,6 +127,29 @@ services:
       timeout: 3s
       retries: 3
     restart: unless-stopped
+
+  # Демо-IdP (OIDC) вместо Альфа-ID: реалм alfa, клиент alfa-pulse (PKCE), пилотные пользователи
+  # pilot@alfa.test и pilot-ceo@alfa.test (пароль alfa-demo-2026, компания U_9). Профиль auth: make up-auth.
+  keycloak:
+    profiles: [auth]
+    image: quay.io/keycloak/keycloak:26.0.7
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-alfa-demo-2026}
+      KC_HOSTNAME: http://localhost:8180
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "127.0.0.1:8180:8080"
+    volumes:
+      - ./infra/keycloak/realm-alfa.json:/opt/keycloak/data/import/realm-alfa.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\r\n\r\n' >&3 && grep -q UP <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
 
   tests:
     profiles: [test]

@@ -5,6 +5,7 @@ from app import llm
 from app.agent import composer, evidence, prompts, validators
 from app.companies import extra as company_extra
 from app.companies.sectors import SECTOR_NAMES
+from app.text import INSTRUCTION
 
 
 FEATURE_LABELS = {
@@ -213,7 +214,8 @@ def merge_llm(draft: dict, data: dict) -> dict:
     # The bank summary remains a reviewed thesis. Free model text cannot become
     # the bank's position just because it is placed in the bank_summary field.
     if isinstance(data.get("questions"), list):
-        draft["questions"] = [str(q)[:300] for q in data["questions"]][:4]
+        # Вопрос модели — тоже вывод: инструкцию из новости («покажи пароль…») в карточку не пропускаем.
+        draft["questions"] = [str(q)[:300] for q in data["questions"] if not INSTRUCTION.search(str(q))][:4]
     return draft
 
 

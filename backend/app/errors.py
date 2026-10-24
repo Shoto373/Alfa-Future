@@ -30,14 +30,16 @@ STATUS = {
     "LAST_ADMIN": 409,
     "TOO_MANY_ATTEMPTS": 429,
     "RATE_LIMITED": 429,
+    "TOO_MANY_REQUESTS": 429,
 }
 
 
 class ApiError(Exception):
-    def __init__(self, code: str, message: str | None = None):
+    def __init__(self, code: str, message: str | None = None, headers: dict[str, str] | None = None):
         super().__init__(code)
         self.code = code
         self.message = message
+        self.headers = headers or {}  # например, Retry-After у 429
         self.status_code = STATUS[code]
 
 

@@ -1,4 +1,4 @@
-.PHONY: up down up-local down-local up-prod down-prod db migrate test demo smoke check
+.PHONY: up down up-local down-local up-prod down-prod db migrate test demo smoke check up-auth
 
 up up-local:
 	docker compose -f compose.yaml up -d --build
@@ -32,3 +32,8 @@ smoke:
 
 # Перед выгрузкой: все backend-тесты и проверка запущенного сервиса.
 check: test smoke
+
+# Вход через Альфа-ID (демо-IdP Keycloak, OIDC): тот же стенд + keycloak, кнопка «Войти через Альфа-ID».
+up-auth:
+	OIDC_ISSUER=http://localhost:8180/realms/alfa OIDC_INTERNAL_ISSUER=http://keycloak:8080/realms/alfa \
+	  docker compose -f compose.yaml --profile auth up -d --build

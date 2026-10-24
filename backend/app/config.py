@@ -9,11 +9,36 @@ from sqlalchemy.engine import URL
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+RATE_LIMIT_DEFAULTS = {"insights": (30, 120), "questions": (20, 60), "news": (10, 30)}  # в минуту: пользователь, адрес
+
+
+def rate_limits(scope: str) -> tuple[int, int]:
+    """Лимит запросов в минуту на пользователя и на адрес: RATE_LIMIT_<SCOPE>=user,ip; 0 — без лимита."""
+    raw = os.environ.get(f"RATE_LIMIT_{scope.upper()}")
+    if raw:
+        user, _, ip = raw.partition(",")
+        return int(user or 0), int(ip or 0)
+    return RATE_LIMIT_DEFAULTS[scope]
+
+
+def secret(name: str) -> str:
+    """Секрет из файла (Docker secrets: NAME_FILE=/run/secrets/…) или, для совместимости, из переменной NAME.
+
+    Файл предпочтительнее: значение не видно в `docker inspect`, окружении процесса и выводе compose config."""
+    path = os.environ.get(f"{name}_FILE")
+    if path:
+        try:
+            return Path(path).read_text(encoding="utf-8").strip()
+        except OSError:
+            return ""
+    return os.environ.get(name, "")
+
+
 def database_url() -> str:
     if not os.environ.get("DATABASE_URL") and os.environ.get("PGHOST"):
         return URL.create("postgresql+psycopg", host=os.environ["PGHOST"], port=int(os.environ.get("PGPORT", "5432")),
                           database=os.environ.get("PGDATABASE", "alfa"), username=os.environ.get("PGUSER", "alfa"),
-                          password=os.environ.get("PGPASSWORD", "")).render_as_string(hide_password=False)
+                          password=secret("PGPASSWORD")).render_as_string(hide_password=False)
     return _env("DATABASE_URL", "postgresql://alfa:alfa-local@127.0.0.1:5432/alfa")
 
 
@@ -81,6 +106,23 @@ def operator_emails() -> set[str]:
     Администратор компании — представитель клиента, а не банка: эти данные сводные по всем клиентам.
     Пусто — служебные адреса закрыты для всех."""
     return {e.strip().lower() for e in os.environ.get("OPERATOR_EMAILS", "").split(",") if e.strip()}
+
+
+def oidc_settings() -> dict:
+    """Вход через корпоративный IdP (app/auth/oidc.py); пустой OIDC_ISSUER — вход через IdP выключен."""
+    return {
+        "issuer": os.environ.get("OIDC_ISSUER", "").rstrip("/"),
+        "internal_issuer": os.environ.get("OIDC_INTERNAL_ISSUER", "").rstrip("/"),
+        "client_id": os.environ.get("OIDC_CLIENT_ID", "alfa-pulse"),
+        "client_secret": secret("OIDC_CLIENT_SECRET"),
+        "redirect_uri": os.environ.get("OIDC_REDIRECT_URI", "http://localhost:8000/api/v1/auth/oidc/callback"),
+        "companies_claim": os.environ.get("OIDC_COMPANIES_CLAIM", "alfa_companies"),
+    }
+
+
+def auth_password_enabled() -> bool:
+    """Вход по email и паролю (демо); в пилоте с IdP выключается: AUTH_PASSWORD_ENABLED=0."""
+    return _env("AUTH_PASSWORD_ENABLED", "1") != "0"
 
 
 def frontend_origin() -> str:
@@ -169,7 +211,7 @@ def llm_settings() -> dict:
     return {
         "base_url": os.environ.get("LLM_BASE_URL", "").rstrip("/"),
         "fallback_base_url": os.environ.get("LLM_FALLBACK_BASE_URL", "").rstrip("/"),
-        "api_key": os.environ.get("LLM_API_KEY", ""),
+        "api_key": secret("LLM_API_KEY"),
         # Модель на каждую роль агента. Выбор по сравнению всех моделей кейса на одной реальной задаче:
         # DeepSeek пишет самые конкретные выводы (≈26 с, 0,3 ₽), GLM быстрая и точная для плана и проверки
         # (≈13 с, 0,1 ₽), Kimi-K2.6 тратит >7000 токенов на рассуждения и не укладывается во время ответа.
@@ -277,7 +319,7 @@ def warm_feeds_on_start() -> bool:
 
 def telegram_settings() -> tuple[str, str]:
     """Бот для ежедневного отчета о качестве (тот же, что у мониторинга сервера)."""
-    return os.environ.get("TELEGRAM_BOT_TOKEN", ""), os.environ.get("TELEGRAM_CHAT_ID", "")
+    return secret("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID", "")
 
 
 def quality_report_hour() -> int:
