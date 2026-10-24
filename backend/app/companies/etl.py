@@ -23,7 +23,10 @@ from app.companies.sectors import SECTOR_NAMES, sector_for_okved
 
 LARGE_REVENUE = 15e9           # крупный бизнес по условию кейса
 GROUP_MEMBER_MIN_REVENUE = 1e9  # участник группы > 15 млрд попадает в выборку с этой выручкой
-MAX_RELIABLE_GROUP = 50         # группы крупнее — скорее сегмент/шум, чем холдинг
+MAX_RELIABLE_GROUP = 50         # для отбора в выборку: группы крупнее не «дотягивают» мелких участников
+# Группа используется в выводах, если у ее выручки есть центр: отрасль с долей не меньше этой.
+# Число компаний не критерий: у девелопера сотни проектных юрлиц, но выручка — в стройке и недвижимости.
+GROUP_FOCUS_SHARE = 0.2
 PLACEHOLDER_REVENUE = 1000.0    # 601 компания имеет ровно 1000 ₽ — заглушка
 TOP_COUNTERPARTIES = 8
 
@@ -111,12 +114,24 @@ def select_large(companies: dict[str, dict]) -> tuple[set[str], dict[str, dict]]
     for gid, members in groups.items():
         revenue = sum(companies[m]["revenue"] or 0 for m in members)
         sectors = Counter(companies[m]["sector"] for m in members)
+        # Доли выручки группы по отраслям (заглушки выручки не считаются).
+        by_sector: Counter = Counter()
+        for m in members:
+            r = companies[m]["revenue"] or 0
+            if r > PLACEHOLDER_REVENUE and companies[m]["sector"] not in (None, "unknown"):
+                by_sector[companies[m]["sector"]] += r
+        total = sum(by_sector.values())
+        shares = [{"sector": s, "share": round(v / total, 3)} for s, v in by_sector.most_common(4)] if total else []
+        focus = [x["sector"] for x in shares if x["share"] >= GROUP_FOCUS_SHARE]
         group_stats[gid] = {
             "group_id": gid,
             "members": len(members),
             "revenue": revenue,
             "reliable": len(members) <= MAX_RELIABLE_GROUP,
             "top_sectors": [s for s, _ in sectors.most_common(3)],
+            "sector_shares": shares,
+            "focus_sectors": focus,
+            "usable": len(members) >= 2 and bool(focus),
         }
 
     selected = set()
@@ -219,6 +234,27 @@ def _counterparties(flows: dict, companies: dict[str, dict], group_id: str | Non
     }
 
 
+def _data_quality(c: dict, group: dict | None, pay: dict) -> list[str]:
+    """Пробелы и оговорки в данных компании — для профиля и проверок разбора."""
+    quality = []
+    if c["revenue"] is None or c["revenue"] <= PLACEHOLDER_REVENUE:
+        quality.append("Выручка отсутствует или указана заглушкой")
+    if not c["okved_code"]:
+        quality.append("Не указан основной ОКВЭД")
+    if c["stage"] is None:
+        quality.append("Не указана стадия развития бизнеса")
+    if c["workers_spark"] is None:
+        quality.append("Численность по СПАРК отсутствует, используется оценка ФНС")
+    if group and group["members"] >= 2 and not group["usable"]:
+        quality.append(f"Выручка группы из {group['members']} компаний разбросана по отраслям без явного центра — "
+                       "группа не используется для выводов")
+    if c["fts_flag"] and not c["fts_countries"]:
+        quality.append("Есть признак ВЭД, но страны не указаны")
+    if not pay["in"] and not pay["out"]:
+        quality.append("Нет платежей в выборке — контрагенты неизвестны")
+    return quality
+
+
 def build_profiles(data_dir: Path) -> dict:
     started = time.perf_counter()
     companies = read_companies(data_dir / "df_Uid_data_hack.csv")
@@ -243,21 +279,7 @@ def build_profiles(data_dir: Path) -> dict:
         affiliated.discard(cid)
         pay = payments[cid]
 
-        quality = []
-        if c["revenue"] is None or c["revenue"] <= PLACEHOLDER_REVENUE:
-            quality.append("Выручка отсутствует или указана заглушкой")
-        if not c["okved_code"]:
-            quality.append("Не указан основной ОКВЭД")
-        if c["stage"] is None:
-            quality.append("Не указана стадия развития бизнеса")
-        if c["workers_spark"] is None:
-            quality.append("Численность по СПАРК отсутствует, используется оценка ФНС")
-        if group and not group["reliable"]:
-            quality.append(f"GROUP_ID объединяет {group['members']} разнородных компаний — группа не используется для выводов")
-        if c["fts_flag"] and not c["fts_countries"]:
-            quality.append("Есть признак ВЭД, но страны не указаны")
-        if not pay["in"] and not pay["out"]:
-            quality.append("Нет платежей в выборке — контрагенты неизвестны")
+        quality = _data_quality(c, group, pay)
 
         industry = industries.get(cid, {})
         c.update({
@@ -278,6 +300,9 @@ def build_profiles(data_dir: Path) -> dict:
                 "revenue": group["revenue"] if group else None,
                 "reliable": group["reliable"] if group else None,
                 "top_sectors": group["top_sectors"] if group else [],
+                "sector_shares": group["sector_shares"] if group else [],
+                "focus_sectors": group["focus_sectors"] if group else [],
+                "usable": group["usable"] if group else False,
             },
             "suppliers": _counterparties(pay["out"], companies, c["group_id"]),
             "customers": _counterparties(pay["in"], companies, c["group_id"]),

@@ -61,7 +61,7 @@
   padding: 4px 10px;
   border-radius: 8px;
   background: var(--blue-soft);
-  color: #1f4fae;
+  color: var(--link);
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -89,4 +89,9 @@
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+// Прочитанная новость приглушена, но остается в ленте.
+.isRead h3 a {
+  color: var(--muted);
 }

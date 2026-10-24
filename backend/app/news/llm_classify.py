@@ -10,7 +10,7 @@
 import json
 import logging
 
-from app.agent import llm
+from app import llm
 from app.news.taxonomy import TOPICS
 
 logger = logging.getLogger("app.news.llm_classify")

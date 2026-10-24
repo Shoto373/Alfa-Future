@@ -2,8 +2,8 @@
 
 import pytest
 
-from app import embeddings, ranking
-from app.agent import llm, review
+from app import embeddings, llm, ranking
+from app.agent import review
 from app.news import magnitude
 from app.news.classifier import classify
 
@@ -154,8 +154,9 @@ def test_sanctions_tightening_is_a_risk_for_exposed_sector():
     (["Стоимость заимствований может вырасти"], [], "neg"),
     ([], ["Валютная выручка дает больше рублей"], "pos"),
     (["Издержки растут"], ["Спрос растет"], "mixed"),
-    (["Возможный риск — издержки растут."], ["Возможность — спрос растет."], "unclear"),
-    (["Возможный риск — издержки растут."], ["Спрос растет"], "pos"),
+    (["«Инфляция»: издержки растут. Касается компании: есть кредиты."],
+     ["«Инфляция»: спрос растет — если ситуация сложится в пользу компании."], "unclear"),
+    (["«Инфляция»: издержки растут. Касается компании: есть кредиты."], ["Спрос растет"], "pos"),
 ])
 def test_overall_effect_label(risks, opps, expected):
     from app.agent import composer
@@ -190,3 +191,44 @@ def test_ruble_wording_does_not_leak_into_rate_direction():
     assert cls.topic_directions["key_rate"] == "hold"
     assert classify("Ослабление рубля продолжилось", "Ослабление рубля продолжилось на фоне спроса на валюту.") \
         .topic_directions["fx"] == "up"
+
+
+@pytest.mark.parametrize("title,text,added", [
+    # Модель смысла путает с ключевой ставкой сам жанр «ведомство приняло решение» (реальные новости ленты).
+    ("Полянский назвал ОБСЕ окопом, через который Россию слышат в Европе",
+     "Постпред РФ подчеркнул, что организация остается доступным каналом для донесения российской позиции.", False),
+    ("Минпросвещения предложило ввести единое удостоверение учителя",
+     "Минпросвещения России подготовило проект постановления правительства.", False),
+    # Одно случайное деловое слово («бюджетных учреждений») — еще не деловой контекст.
+    ("Минпросвещения предложило ввести единое удостоверение учителя",
+     "Документ выдадут педагогам бюджетных учреждений.", False),
+    # Перефраз без слов словаря, но с деловым контекстом — тема по смыслу остается.
+    ("Мегарегулятор оставил стоимость заимствований без изменений",
+     "Регулятор не стал менять цену денег в экономике.", True),
+])
+def test_meaning_only_topic_needs_business_context(monkeypatch, title, text, added):
+    from app.news import semantic
+    from app.news.taxonomy import TOPICS
+
+    sims = dict.fromkeys(TOPICS, 0.3) | {"key_rate": 0.62}  # как у модели: оценка для каждой темы
+    monkeypatch.setattr(semantic, "analyze", lambda *a, **k: {"sims": sims, "non_business": 0.3, "added": ["key_rate"]})
+    topics = [t["topic"] for t in classify(title, text).topics]
+    assert ("key_rate" in topics) is added
+
+
+def test_weak_dictionary_hit_does_not_soften_meaning_threshold(monkeypatch):
+    # «торговле» — одно слабое совпадение со словарем, оно отсеется; смысловой порог должен остаться строгим
+    # (как без словарных тем), иначе дипломатическая новость получала «Ключевую ставку».
+    from app.news import semantic
+    from app.news.taxonomy import TOPICS
+
+    seen = {}
+
+    def fake(title, text, keyword_topics):
+        seen["anchor"] = set(keyword_topics)
+        return {"sims": dict.fromkeys(TOPICS, 0.3), "non_business": 0.3, "added": []}
+
+    monkeypatch.setattr(semantic, "analyze", fake)
+    classify("В МИДе подтвердили отказ России от договора о торговле оружием",
+             "Россия не намерена присоединяться к Международному договору о торговле оружием, заявили в постпредстве.")
+    assert seen["anchor"] == set(), "слабые словарные темы не опора для смысла"

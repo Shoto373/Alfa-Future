@@ -1,7 +1,7 @@
 .textarea {
   width: 100%;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-sm);
   padding: 11px 14px;
   background: var(--card);
   margin-bottom: 10px;
@@ -11,7 +11,7 @@
 .input {
   width: 100%;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-sm);
   padding: 11px 14px;
   background: var(--card);
   margin-bottom: 10px;

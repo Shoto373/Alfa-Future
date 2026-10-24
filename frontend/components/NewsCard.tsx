@@ -11,10 +11,10 @@ const REASON_STYLES: Record<string, string | undefined> = {
   user: styles.reasonUser,
 };
 
-export default function NewsCard({ item, compact = false }: { item: FeedItem; compact?: boolean }) {
+export default function NewsCard({ item, compact = false, read }: { item: FeedItem; compact?: boolean; read?: boolean }) {
   const { news, relevance } = item;
   return (
-    <article className={`${styles.newsCard} ${compact ? styles.compact : ""}`} data-testid="news-card">
+    <article className={`${styles.newsCard} ${compact ? styles.compact : ""} ${read ? styles.isRead : ""}`} data-testid="news-card">
       <div className={styles.newsMeta}>
         <Score value={relevance.score} />
         <span>{news.source}</span>
@@ -23,6 +23,7 @@ export default function NewsCard({ item, compact = false }: { item: FeedItem; co
         {news.kind === "user" && <span className={styles.kind}>Добавлено вами</span>}
         {news.duplicates > 0 && <span className={styles.kind}>+{news.duplicates} источн.</span>}
         <EffectBadge effect={item.cached_effect} className={styles.effect} />
+        {read && <span className={styles.kind}>Прочитано</span>}
       </div>
       <h3><Link href={`/pulse/n/${encodeURIComponent(news.news_id)}`}>{news.title}</Link></h3>
       {!compact && <p className={styles.lead}>{news.lead}</p>}

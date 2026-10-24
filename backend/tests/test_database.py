@@ -10,8 +10,8 @@ from alembic.migration import MigrationContext
 from sqlalchemy import select, func
 from app.models import BankProduct
 
-from app import database, storage
-from app.agent import llm, orchestrator
+from app import database, llm, llm_usage, storage
+from app.agent import orchestrator
 from app.companies import profiles
 from app.knowledge import kb
 from app.news import store
@@ -28,7 +28,7 @@ def test_migrations_are_idempotent_and_transactional():
     database.migrate()
     with database.session() as conn:
         context = MigrationContext.configure(conn.connection(), opts={"version_table_schema": database.schema()})
-        assert context.get_current_revision() == "0002"
+        assert context.get_current_revision() == "0007"
     with pytest.raises(RuntimeError):
         with database.session() as conn:
             database.set_state("rollback_probe", {"value": 1}, conn)
@@ -53,12 +53,13 @@ def test_insights_history_feedback_answers_survive_cache_reset(client, company):
 def test_concurrent_events_and_usage_are_not_lost():
     def write(i):
         storage.log_event("probe", index=i)
-        llm._record(3, cost=0.01)
+        llm_usage.commit(llm_usage.reserve("deepseek-v4.1-flash", 30, 10), 3, 0.01)
     with ThreadPoolExecutor(max_workers=5) as pool:
         list(pool.map(write, range(20)))
     assert len(storage._read("events")) == 20
     usage = llm.usage()
     assert usage["tokens"] == 60 and usage["cost"] == 0.2 and usage["calls"] == 20
+    assert usage["reserved_tokens"] == 0 and usage["reserved_cost"] == 0
 
 
 def test_llm_budget_uses_utc_day_and_persistent_usage(monkeypatch):
@@ -70,9 +71,9 @@ def test_llm_budget_uses_utc_day_and_persistent_usage(monkeypatch):
             # 00:30 Moscow on Oct 22 is still Oct 21 in the gateway budget.
             return datetime(2026, 10, 21, 21, 30, tzinfo=timezone.utc).astimezone(tz)
 
-    monkeypatch.setattr(llm, "datetime", FrozenDatetime)
-    assert llm._budget_day() == date(2026, 10, 21)
-    llm._record(7, cost=0.1)
+    monkeypatch.setattr(llm_usage, "datetime", FrozenDatetime)
+    assert llm_usage.budget_day() == date(2026, 10, 21)
+    llm_usage.commit(llm_usage.reserve("deepseek-v4.1-flash", 30, 10), 7, 0.1)
     assert llm.usage()["date"] == "2026-10-21"
     assert llm.usage()["tokens"] == 7
     with database.session() as db:

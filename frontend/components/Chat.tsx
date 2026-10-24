@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError, api } from "@/lib/api";
 import type { Answer } from "@/lib/types";
-import { ErrorBox, Icon, OriginTag } from "./ui";
+import { ErrorState, Icon, OriginTag } from "./ui";
 import common from "@/styles/common.module.scss";
 import forms from "@/styles/forms.module.scss";
 import styles from "@/components/Chat.module.scss";
@@ -79,8 +79,8 @@ export default function Chat({ insightId, suggestions }: { insightId: string; su
                 </div>
               </div>
             ))}
-            {busy && <p className={common.muted}>Ищем ответ…</p>}
-            {error && <ErrorBox message={error} />}
+            {busy && <p className={common.muted} role="status">Ищем ответ…</p>}
+            {error && <ErrorState error={error} />}
           </div>
           <form className={`${styles.chatForm} ${styles.assistantForm}`} onSubmit={(e) => { e.preventDefault(); void ask(q); }}>
             <input className={forms.input} ref={input} value={q} onChange={(e) => setQ(e.target.value)} maxLength={1000} disabled={busy} aria-busy={busy}

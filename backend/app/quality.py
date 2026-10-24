@@ -7,18 +7,20 @@
 - bank_coverage  доля разборов с позицией банка;
 - useful_rate    доля положительных оценок пользователей;
 - latency        p50 / p90 построения разбора, с;
-- pipeline       что собрал и разобрал конвейер новостей.
+- pipeline       что собрал и разобрал конвейер новостей;
+- budget         расход LLM за прошлый день бюджета против лимита, отказы бюджета, причины откатов
+                 к правилам (fallback_reason) и расход по моделям.
 Отчет уходит раз в сутки (QUALITY_REPORT_HOUR_UTC), если заданы TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID.
 """
 
 import logging
 import statistics
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 
-import httpx
 from sqlalchemy import select
 
-from app import config, database
+from app import config, database, llm_usage, notify
 from app.models import Event, Feedback, Insight
 
 logger = logging.getLogger("app.quality")
@@ -47,6 +49,9 @@ def daily(hours: int = 24) -> dict:
     latency = sorted(next((s["output"]["total_duration_ms"] / 1000 for s in i.get("trace", [])
                            if s.get("stage") == "finalize" and s.get("output")), 0) for i in llm_tried)
     up, down = ratings.count(1), ratings.count(-1)
+    # Бюджет — за прошлый день бюджета: отчет уходит утром, когда текущий день только начался.
+    yesterday = llm_usage.budget_day() - timedelta(days=1)
+    spent = llm_usage.usage(yesterday)
     return {
         "hours": hours,
         "insights": n,
@@ -63,11 +68,80 @@ def daily(hours: int = 24) -> dict:
         "insight_opens": events.count("insight_open"),
         "questions": events.count("question"),
         "pipeline": {k: pipeline_last.get(k) for k in ("started_at", "rss", "rules_built", "llm_built", "stories_named")},
+        "budget": {"day": spent["date"], "cost": spent["cost"], "cost_limit": spent["cost_limit"], "calls": spent["calls"],
+                   "rejected_by_budget": spent["rejected_by_budget"], "by_model": llm_usage.by_model(yesterday),
+                   "fallback_reasons": dict(Counter(i.get("fallback_reason") for i in llm_tried
+                                                    if i["mode"] == "rules" and i.get("fallback_reason")))},
     }
 
 
 def _pct(v) -> str:
     return "—" if v is None else f"{round(v * 100)}%"
+
+
+CHECK_LABELS = {
+    "completeness": "все разделы заполнены", "sources_linked": "у каждого вывода есть источник",
+    "bank_view_grounded": "позиция банка только из материалов банка", "bank_view_found": "найдены материалы банка",
+    "numbers_grounded": "цифры подтверждены источниками", "consistent_with_client": "нет противоречий с данными компании",
+    "personalized": "вывод опирается на признаки компании", "evidence_boundaries": "типы источников и признаков",
+    "headline_grounded": "заголовок подтвержден", "bank_summary_grounded": "резюме банка сверено с тезисом",
+    "semantic_review": "смысловая проверка второй моделью",
+}
+MIN_SAMPLE = 5  # меньше разборов или оценок — вывод о качестве преждевременен
+
+
+def findings(d: dict, totals: dict) -> list[dict]:
+    """Выводы мониторинга: что в норме и что стоит улучшить (level: ok | warn | info)."""
+    out = []
+
+    def add(level: str, text: str):
+        out.append({"level": level, "text": text})
+
+    if d["insights"] < MIN_SAMPLE:
+        add("info", f"За период всего {d['insights']} разборов — выводы о качестве пока предварительные.")
+    if d["llm_attempted"] and d["llm_share"] is not None:
+        if d["llm_share"] < 0.6:
+            add("warn", f"Только {_pct(d['llm_share'])} AI-разборов дошли до пользователя, остальные заменены быстрым разбором: "
+                        "модель часто не проходит проверки. Стоит разобрать частые ошибки ниже и уточнить промпт.")
+        else:
+            add("ok", f"AI-версию получают {_pct(d['llm_share'])} разборов, где подключалась модель.")
+    elif not totals["ai"]["llm_connected"]:
+        add("info", "Модель не подключена — работают только быстрые разборы без LLM.")
+    rates = totals["content"]["checks_pass_rate"]
+    weak = sorted((v, k) for k, v in rates.items() if v < 0.9)
+    for v, k in weak[:3]:
+        add("warn", f"Проверка «{CHECK_LABELS.get(k, k)}» проходит в {_pct(v)} разборов — главный кандидат на доработку.")
+    if rates and not weak:
+        add("ok", "Все самопроверки проходят не реже чем в 90% разборов.")
+    if d["grounded"] is not None and d["grounded"] < 0.95:
+        add("warn", f"Ссылку на источник имеют {_pct(d['grounded'])} утверждений — часть выводов не трассируется.")
+    if d["bank_coverage"] is not None:
+        if d["bank_coverage"] < 0.5:
+            add("warn", f"Позиция банка есть только в {_pct(d['bank_coverage'])} разборов — стоит пополнить базу тезисов "
+                        "по темам, которые чаще встречаются в ленте.")
+        else:
+            add("ok", f"Позиция Альфа-Банка есть в {_pct(d['bank_coverage'])} разборов.")
+    fb = d["feedback"]
+    if fb["up"] + fb["down"] >= MIN_SAMPLE:
+        if fb["useful_rate"] < 0.6:
+            sections = totals["personalization"]["by_section"]
+            worst = max(sections.items(), key=lambda kv: kv[1]["down"] - kv[1]["up"], default=None)
+            add("warn", f"Полезными разборы считают {_pct(fb['useful_rate'])} оценок"
+                        + (f"; больше всего минусов у раздела «{worst[0]}»." if worst and worst[1]["down"] else "."))
+        else:
+            add("ok", f"Пользователи считают полезными {_pct(fb['useful_rate'])} разборов.")
+    else:
+        add("info", "Оценок 👍/👎 пока мало — попросите пользователей оценивать разделы разбора.")
+    if d["latency_p90"] and d["latency_p90"] > 60:
+        add("warn", f"90% AI-разборов готовятся дольше {d['latency_p90']} с — пользователь дольше видит быстрый разбор.")
+    if d["feed_views"] >= MIN_SAMPLE:
+        rate = d["insight_opens"] / d["feed_views"]
+        if rate < 0.1:
+            add("warn", f"Разборы открывают в {_pct(rate)} просмотров ленты — стоит проверить, понятны ли заголовки и причины отбора.")
+    rss = (d["pipeline"] or {}).get("rss") or {}
+    if rss.get("failed"):
+        add("warn", "Недоступны источники новостей: " + ", ".join(rss["failed"]) + ".")
+    return out
 
 
 def report_text(d: dict) -> str:
@@ -81,8 +155,20 @@ def report_text(d: dict) -> str:
         f"Оценки: 👍 {d['feedback']['up']} · 👎 {d['feedback']['down']} (полезно: {_pct(d['feedback']['useful_rate'])})",
         f"Лента: просмотров {d['feed_views']}, открытий разборов {d['insight_opens']}, вопросов {d['questions']}",
         f"Конвейер (последний цикл): новых новостей {rss.get('added', '—')}, отсеяно {rss.get('skipped', '—')}, "
-        f"разборов на правилах {d['pipeline'].get('rules_built', '—')}, AI {d['pipeline'].get('llm_built', '—')}",
+        f"быстрых разборов {d['pipeline'].get('rules_built', '—')}, AI {d['pipeline'].get('llm_built', '—')}",
+        _budget_line(d["budget"]),
     ])
+
+
+FALLBACK_NAMES = {"budget": "лимит", "company_budget": "доля компании", "unavailable": "модель не ответила", "checks": "не прошли проверки"}
+
+
+def _budget_line(b: dict) -> str:
+    reasons = ", ".join(f"{FALLBACK_NAMES.get(k, k)} — {v}" for k, v in b["fallback_reasons"].items()) or "нет"
+    top = b["by_model"][0] if b["by_model"] else None
+    priciest = f" · дороже всех: {top['model']} {top['cost']} ₽" if top else ""
+    return (f"LLM за {b['day']}: {b['cost']} из {b['cost_limit']} ₽, вызовов {b['calls']}, "
+            f"отклонено бюджетом {b['rejected_by_budget']} · откаты к правилам: {reasons}{priciest}")
 
 
 def maybe_send_daily() -> bool:
@@ -94,12 +180,7 @@ def maybe_send_daily() -> bool:
     day = now.date().isoformat()
     if database.state(REPORT_KEY) == day:
         return False
-    text = report_text(daily())
-    try:
-        httpx.post(f"https://api.telegram.org/bot{token}/sendMessage", timeout=15,
-                   data={"chat_id": chat, "text": text, "parse_mode": "HTML", "disable_web_page_preview": "true"})
-    except httpx.HTTPError:
-        logger.warning("quality report: telegram unavailable")
+    if not notify.send(report_text(daily())):
         return False
     with database.session() as db:
         database.set_state(REPORT_KEY, day, db)

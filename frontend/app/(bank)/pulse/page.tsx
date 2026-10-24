@@ -1,17 +1,35 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 import AddNews from "@/components/AddNews";
 import NewsCard from "@/components/NewsCard";
-import { Card, ErrorBox, Icon, Loading } from "@/components/ui";
+import { Card, ErrorState, Icon, Loading } from "@/components/ui";
 import { useFeedWithTopics } from "@/lib/hooks";
+import { useRead } from "@/lib/notifications";
 import { useSession } from "@/lib/session";
-import type { StoryChip, TopicCount } from "@/lib/types";
+import type { FeedItem, TopicCount } from "@/lib/types";
 import common from "@/styles/common.module.scss";
 import styles from "@/app/(bank)/pulse/page.module.scss";
 
 const TOPICS_SHOWN = 10;
+const PAGE_SIZE = 30;
+
+type Sort = "priority" | "new" | "unread" | "read";
+const SORTS: { key: Sort; label: string }[] = [
+  { key: "priority", label: "По приоритету" },
+  { key: "new", label: "Сначала новые" },
+  { key: "unread", label: "Непрочитанные" },
+  { key: "read", label: "Прочитанные" },
+];
+
+/** Порядок ленты; внутри групп «прочитано / нет» — по приоритету (так их отдает сервер). */
+function sorted(items: FeedItem[], sort: Sort, read: Set<string>): FeedItem[] {
+  if (sort === "priority") return items;
+  if (sort === "new") return [...items].sort((a, b) => b.news.published_at.localeCompare(a.news.published_at));
+  const first = (i: FeedItem) => read.has(i.news.news_id) === (sort === "read") ? 0 : 1;
+  return [...items].sort((a, b) => first(a) - first(b));  // sort устойчивый: приоритет внутри групп сохраняется
+}
 
 export default function PulsePage() {
   return <Suspense fallback={<Loading text="Загружаем ленту…" />}><PulseFeed /></Suspense>;
@@ -23,30 +41,44 @@ function PulseFeed() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const topic = searchParams.get("topic") || undefined;
-  const story = searchParams.get("story") || undefined;
-  // Тема и сюжет — взаимоисключающие фильтры: выбор одного сбрасывает другой.
-  const setFilter = (key: "topic" | "story", value?: string) => {
+  const setTopic = (value?: string) => {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("topic");
     params.delete("story");
-    if (value) params.set(key, value);
+    if (value) params.set("topic", value);
     const query = params.toString();
     router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
   };
-  const setTopic = (value?: string) => setFilter("topic", value);
-  const setStory = (value?: string) => setFilter("story", value);
-  const page = useFeedWithTopics(session!.companyId, topic, story);
-  const feed = { ...page, data: page.data?.items ?? null };
+  const sort = (SORTS.find((s) => s.key === searchParams.get("sort"))?.key ?? "priority") as Sort;
+  const setSort = (value: Sort) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value === "priority") params.delete("sort"); else params.set("sort", value);
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+  const page = useFeedWithTopics(session!.companyId, topic);
+  const { read } = useRead(session!.user.user_id, session!.companyId);
+  const feed = { ...page, data: page.data ? sorted(page.data.items, sort, read) : null };
+  const companyId = session!.companyId;
+  // Новый фильтр, порядок или компания — снова первые 30 новостей.
+  const [shown, setShown] = useState(PAGE_SIZE);
+  const pageKey = `${companyId}|${topic ?? ""}|${sort}`;
+  const [shownFor, setShownFor] = useState(pageKey);
+  if (shownFor !== pageKey) {
+    setShownFor(pageKey);
+    setShown(PAGE_SIZE);
+  }
+  const unreadCount = page.data?.items.filter((i) => !read.has(i.news.news_id)).length ?? 0;
   const [allTopics, setAllTopics] = useState(false);
 
   // Только темы, по которым у компании есть новости; первые 10 видны сразу, остальные — по кнопке.
   // Счетчики приходят с сервером и не меняются при выборе темы, поэтому список не «прыгает».
-  const [topics, setTopics] = useState<TopicCount[]>([]);
-  useEffect(() => { if (page.data) setTopics(page.data.topic_counts); }, [page.data]);
-  useEffect(() => setTopics([]), [session!.companyId]);
-  const [stories, setStories] = useState<StoryChip[]>([]);
-  useEffect(() => { if (page.data) setStories(page.data.stories ?? []); }, [page.data]);
-  useEffect(() => setStories([]), [session!.companyId]);
+  // Пока грузится лента по новому фильтру, остаются прежние чипы этой же компании.
+  const [chips, setChips] = useState<{ source: object; companyId: string; topics: TopicCount[] } | null>(null);
+  if (page.data && chips?.source !== page.data) {
+    setChips({ source: page.data, companyId, topics: page.data.topic_counts });
+  }
+  const topics = chips?.companyId === companyId ? chips.topics : [];
   const visibleTopics = allTopics ? topics : topics.filter((t, i) => i < TOPICS_SHOWN || t.topic === topic);
   const hiddenCount = topics.length - topics.filter((t, i) => i < TOPICS_SHOWN || t.topic === topic).length;
 
@@ -61,23 +93,11 @@ function PulseFeed() {
 
       <div className={styles.feedTop}>
         <section className={`${common.card} ${styles.topicsCard}`}>
-          {stories.length > 0 && (
-            <>
-              <h2>Сюжеты</h2>
-              <div className={`${styles.chips} ${styles.storyChips}`} role="toolbar" aria-label="Фильтр по сюжетам">
-                {stories.map((s) => (
-                  <button key={s.story_id} className={story === s.story_id ? `${styles.chip} ${styles.on}` : styles.chip}
-                    aria-pressed={story === s.story_id} onClick={() => setStory(story === s.story_id ? undefined : s.story_id)}
-                    title={`Одно событие: ${s.size} сообщений разных источников`}>
-                    {s.label} <span className={styles.chipCount}>{s.size}</span>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
           <h2>Темы</h2>
           <div className={styles.chips} role="toolbar" aria-label="Фильтр по темам">
-            <button className={!topic && !story ? `${styles.chip} ${styles.on}` : styles.chip} aria-pressed={!topic && !story} onClick={() => setTopic(undefined)}>Все темы</button>
+            <button className={!topic ? `${styles.chip} ${styles.on}` : styles.chip} aria-pressed={!topic} onClick={() => setTopic(undefined)}>
+              Все темы {page.data && <span className={styles.chipCount}>{page.data.total}</span>}
+            </button>
             {visibleTopics.map((t) => (
               <button key={t.topic} className={topic === t.topic ? `${styles.chip} ${styles.on}` : styles.chip} aria-pressed={topic === t.topic} onClick={() => setTopic(t.topic)}>
                 {t.name} <span className={styles.chipCount}>{t.count}</span>
@@ -93,11 +113,27 @@ function PulseFeed() {
         <div id="add-news" className={styles.anchor}><AddNews onAdded={feed.reload} compact /></div>
       </div>
 
+      <div className={styles.sortBar} role="toolbar" aria-label="Порядок ленты">
+        {SORTS.map((s) => (
+          <button key={s.key} className={sort === s.key ? `${styles.chip} ${styles.on}` : styles.chip}
+            aria-pressed={sort === s.key} onClick={() => setSort(s.key)}>
+            {s.label}
+            {s.key === "unread" && page.data && <span className={styles.chipCount}>{unreadCount}</span>}
+            {s.key === "read" && page.data && <span className={styles.chipCount}>{page.data.items.length - unreadCount}</span>}
+          </button>
+        ))}
+      </div>
+
       <div className={styles.feed}>
         {feed.loading && <Loading text="Подбираем новости под компанию…" />}
-        {feed.error && <ErrorBox message={feed.error.message} onRetry={feed.reload} />}
+        {feed.error && <ErrorState error={feed.error} onRetry={feed.reload} />}
         {feed.data?.length === 0 && <Card><p>По этой теме новостей нет. Выберите другую тему или добавьте новость.</p></Card>}
-        {feed.data?.map((item) => <NewsCard key={item.news.news_id} item={item} />)}
+        {feed.data?.slice(0, shown).map((item) => <NewsCard key={item.news.news_id} item={item} read={read.has(item.news.news_id)} />)}
+        {feed.data && feed.data.length > shown && (
+          <button className={`${common.btn} ${common.btnSecondary} ${styles.more}`} onClick={() => setShown((n) => n + PAGE_SIZE)}>
+            Показать ещё {Math.min(PAGE_SIZE, feed.data.length - shown)} из {feed.data.length - shown}
+          </button>
+        )}
       </div>
     </div>
   );

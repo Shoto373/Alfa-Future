@@ -2,6 +2,7 @@
 
 from fastapi.responses import JSONResponse
 
+from app.errors import STATUS  # коды и ApiError — в базовом слое app/errors.py
 from app.schemas import ErrorDetail, ErrorResponse
 
 MESSAGES = {
@@ -10,6 +11,7 @@ MESSAGES = {
     "NEWS_NOT_FOUND": "Новость не найдена",
     "INSIGHT_NOT_FOUND": "Карточка анализа не найдена",
     "DOCUMENT_NOT_FOUND": "Документ не найден",
+    "FILE_NOT_FOUND": "Файл не найден",
     "FETCH_FAILED": "Не удалось загрузить материал по ссылке",
     "REQUEST_TOO_LARGE": "Тело запроса превышает допустимый размер",
     "DATA_UNAVAILABLE": "Данные о компаниях недоступны",
@@ -27,40 +29,8 @@ MESSAGES = {
     "MEMBER_EXISTS": "Участник с таким email уже добавлен в компанию",
     "LAST_ADMIN": "Нельзя убрать последнего администратора компании",
     "TOO_MANY_ATTEMPTS": "Слишком много неудачных попыток входа, повторите позже",
+    "RATE_LIMITED": "Слишком много запросов к AI за час, повторите позже",
 }
-
-STATUS = {
-    "INVALID_REQUEST": 400,
-    "COMPANY_NOT_FOUND": 404,
-    "NEWS_NOT_FOUND": 404,
-    "INSIGHT_NOT_FOUND": 404,
-    "DOCUMENT_NOT_FOUND": 404,
-    "FETCH_FAILED": 422,
-    "REQUEST_TOO_LARGE": 413,
-    "DATA_UNAVAILABLE": 503,
-    "INTERNAL_ERROR": 500,
-    "INVALID_ANALYSIS_RESULT": 500,
-    "ANALYSIS_UNAVAILABLE": 503,
-    "ANALYSIS_TIMEOUT": 504,
-    "UNAUTHORIZED": 401,
-    "FORBIDDEN": 403,
-    "INVALID_CREDENTIALS": 401,
-    "EMAIL_TAKEN": 409,
-    "COMPANY_CLAIMED": 409,
-    "TOO_MANY_COMPANIES": 409,
-    "MEMBER_NOT_FOUND": 404,
-    "MEMBER_EXISTS": 409,
-    "LAST_ADMIN": 409,
-    "TOO_MANY_ATTEMPTS": 429,
-}
-
-
-class ApiError(Exception):
-    def __init__(self, code: str, message: str | None = None):
-        super().__init__(code)
-        self.code = code
-        self.message = message
-        self.status_code = STATUS[code]
 
 
 def error_response(code: str, request_id: str, message: str | None = None) -> JSONResponse:

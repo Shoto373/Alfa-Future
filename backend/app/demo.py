@@ -5,6 +5,7 @@ Run with --rules for an offline demonstration. Reuses valid cached analyses;
 """
 import argparse
 import asyncio
+import json
 import os
 import uuid
 
@@ -52,7 +53,6 @@ async def prepare(rules: bool = False, refresh: bool = False, synthetic: bool = 
 
 
 def main():
-    import json
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--rules", action="store_true")
     p.add_argument("--refresh", action="store_true")

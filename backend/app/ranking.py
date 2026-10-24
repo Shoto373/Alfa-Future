@@ -15,15 +15,19 @@ score = важность × (совпадение тем с экспозиция
 import hashlib
 import math
 import re
+import time
 from datetime import datetime, timezone
 
 import numpy as np
+from sqlalchemy import select
 
-from app import embeddings
-from app.companies import profiles
+from app import cache, config, database, embeddings
+from app.companies import extra, profiles
 from app.companies.sectors import SECTOR_NAMES
-from app.news import magnitude
-from app.news.taxonomy import TOPICS
+from app.models import Feedback, Insight
+from app.news import magnitude, store
+from app.news.classifier import _count_stem, tokenize
+from app.news.taxonomy import COUNTRY_STEMS, TOPICS
 
 ROLES = {
     "owner": {"name": "Собственник", "focus": {"sanctions_geopolitics": 1.3, "gdp_industry": 1.2, "consumer_demand": 1.2, "corporate_finance": 1.3, "construction_realestate": 1.1}},
@@ -33,6 +37,31 @@ ROLES = {
     "treasurer": {"name": "Руководитель казначейства", "focus": {"key_rate": 1.4, "fx": 1.4, "deposits": 1.3, "bonds": 1.3, "credit_market": 1.2}},
     "clevel": {"name": "Другой C-level руководитель", "focus": {"gdp_industry": 1.1, "consumer_demand": 1.1, "labor": 1.1}},
 }
+
+# Для подписи «Важная тема для …» в причинах отбора.
+ROLE_FOR = {"owner": "собственника", "ceo": "генерального директора", "cfo": "финансового директора",
+            "accountant": "главного бухгалтера", "treasurer": "казначейства", "clevel": "руководителя"}
+
+
+def _reason_text(e: dict) -> str:
+    """Причина для карточки: без повтора «Отрасль «…»:» — отрасль и так видна из соседней причины."""
+    why = e["why"]
+    if e["origin"] == "sector_model" and "»: " in why:
+        why = why.split("»: ", 1)[1]
+    return why[:1].upper() + why[1:]
+
+
+# Уверенность в теме по смыслу: словарь находит «санкции» и в новости о заявлении Нетаньяху (близость 0,31),
+# но вес такой темы должен быть заметно меньше, чем у новости, которая действительно о ней (0,55+).
+TOPIC_CONF_LOW, TOPIC_CONF_HIGH, TOPIC_CONF_FLOOR = 0.30, 0.50, 0.2
+
+
+def _topic_confidence(t: dict) -> float:
+    sim = t.get("semantic")
+    if sim is None:  # смысловая модель выключена — только словарь
+        return 1.0
+    return max(TOPIC_CONF_FLOOR, min(1.0, (sim - TOPIC_CONF_LOW) / (TOPIC_CONF_HIGH - TOPIC_CONF_LOW)))
+
 
 HALF_LIFE_DAYS = 45
 MAX_FEED_AGE_DAYS = 120
@@ -47,10 +76,40 @@ STORY_SIMILARITY = 0.88  # заголовки ближе этого — один
 NOW_OVERRIDE: datetime | None = None  # для тестов
 
 
+FEEDBACK_TTL = 60.0
+_feedback_memo: dict[tuple, tuple[float, dict]] = {}
+
+
+def topic_feedback(company_id: str, role: str) -> dict[str, int]:
+    """Сумма оценок пользователей (+1/−1) по темам новостей для компании и роли.
+
+    Оценка разбора относится к темам его новости: так лента учится, какие темы этой роли полезны.
+    """
+    key = (config.database_schema(), company_id, role)
+    hit = _feedback_memo.get(key)
+    if hit and time.monotonic() - hit[0] < FEEDBACK_TTL:
+        return hit[1]
+    with database.session() as db:
+        rows = db.execute(select(Insight.news_id, Feedback.payload["rating"].as_integer())
+                          .join(Feedback, Feedback.insight_id == Insight.insight_id)
+                          .where(Insight.company_id == company_id, Insight.role == role)).all()
+    net: dict[str, int] = {}
+    for news_id, rating in rows:
+        news = store.get(news_id)
+        for t in (news or {}).get("classification", {}).get("topics", [])[:2]:
+            net[t["topic"]] = net.get(t["topic"], 0) + int(rating or 0)
+    _feedback_memo[key] = (time.monotonic(), net)
+    return net
+
+
+def forget_feedback() -> None:
+    """Сброс памяти оценок: вызывается при сохранении новой оценки."""
+    _feedback_memo.clear()
+
+
 def _topic_feedback(company_id: str, role: str) -> dict[str, int]:
-    from app import storage
     try:
-        return storage.topic_feedback(company_id, role)
+        return topic_feedback(company_id, role)
     except Exception:  # оценки — уточнение, а не условие ранжирования
         return {}
 
@@ -79,14 +138,8 @@ def _region_stem(region: str | None) -> str | None:
     return word
 
 
-def score(news: dict, company_id: str, role: str) -> dict:
-    c = profiles.get(company_id)
-    cls = news["classification"]
-    reasons: list[dict] = []
-    topic_scores = {t["topic"]: t["score"] for t in cls["topics"]}
-    total_topic = sum(topic_scores.values()) or 1
-    shares = {t: v / total_topic for t, v in topic_scores.items()}
-
+def _exposure_signal(company_id: str, topic_scores: dict[str, float], shares: dict[str, float], reasons: list[dict]) -> float:
+    """Вклад признаков компании по темам новости; признаки одной темы — с убывающим весом 1, 1/2, 1/4…"""
     by_topic: dict[str, list[float]] = {}
     seen = set()
     for e in profiles.exposures(company_id):
@@ -98,15 +151,17 @@ def score(news: dict, company_id: str, role: str) -> dict:
         if key not in seen:
             seen.add(key)
             reasons.append({"kind": "exposure", "topic": e["topic"], "feature": e["feature"], "origin": e["origin"],
-                            "weight": round(contribution, 3), "text": e["why"]})
-    # Убывающий вклад признаков одной темы: 1, 1/2, 1/4…
-    exposure_sum = sum(v * 0.5 ** i for values in by_topic.values() for i, v in enumerate(sorted(values, reverse=True)))
+                            "weight": round(contribution, 3), "text": _reason_text(e)})
+    return sum(v * 0.5 ** i for values in by_topic.values() for i, v in enumerate(sorted(values, reverse=True)))
 
+
+def _direct_signals(c: dict | None, cls: dict, news: dict, reasons: list[dict]) -> tuple[float, float, float, float]:
+    """Прямые упоминания: отрасль компании, отрасли ее контрагентов, страны ВЭД и регион."""
     direct = 0.0
     if c and c["sector"] in cls["sectors"]:
         direct = 1.0
         reasons.append({"kind": "sector_mention", "feature": "sector", "origin": "news", "weight": 1.0,
-                        "text": f"В новости прямо упоминается отрасль компании — {SECTOR_NAMES.get(c['sector'])}"})
+                        "text": f"Новость про вашу отрасль — {SECTOR_NAMES.get(c['sector'], '').lower()}"})
     supply_chain = 0.0
     if c:
         for side, label in (("suppliers", "поставщикам"), ("customers", "от покупателей")):
@@ -116,47 +171,81 @@ def score(news: dict, company_id: str, role: str) -> dict:
                     supply_chain += item["share"]
                     reasons.append({"kind": "supply_chain", "feature": f"{side}.by_sector", "origin": "payments",
                                     "weight": round(item["share"], 3),
-                                    "text": f"Новость об отрасли «{SECTOR_NAMES.get(item['sector'], item['sector'])}»: "
-                                            f"на нее приходится {round(item['share'] * 100)}% платежей {label}"})
+                                    "text": f"Затрагивает ваших {'поставщиков' if side == 'suppliers' else 'покупателей'}: "
+                                            f"{round(item['share'] * 100)}% платежей {label} — отрасль "
+                                            f"«{SECTOR_NAMES.get(item['sector'], item['sector'])}»"})
         supply_chain = min(supply_chain, 1.0)
     country_hit = 0.0
     if c:
-        overlap = sorted(set(cls["countries"]) & {x.title() for x in c["fts_countries"]})
+        # Страна должна быть предметом новости (заголовок и начало), а не упоминанием в хвосте текста.
+        head = tokenize(f"{news['title']} {news['text'][:600]}")
+        salient = {k for k, stems in COUNTRY_STEMS.items() if any(_count_stem(head, s) for s in stems)}
+        overlap = sorted(set(cls["countries"]) & salient & {x.title() for x in c["fts_countries"]})
         if overlap:
             country_hit = 1.0
             reasons.append({"kind": "country", "feature": "fts_countries", "origin": "client_data", "weight": 1.0,
-                            "text": f"Новость касается стран ВЭД компании: {', '.join(overlap)}"})
+                            "text": f"Касается стран, с которыми вы работаете: {', '.join(overlap)}"})
     region_hit = 0.0
     stem = _region_stem(c.get("region")) if c else None
     if stem and stem not in REGION_SKIP and re.search(rf"(?<![а-яa-z-]){re.escape(stem)}",
                                                       f"{news['title']} {news['text'][:1500]}".lower().replace("ё", "е")):
         region_hit = REGION_WEIGHT
         reasons.append({"kind": "region", "feature": "region", "origin": "client_data", "weight": REGION_WEIGHT,
-                        "text": f"Новость касается региона компании — {c['region']}"})
+                        "text": f"Касается вашего региона — {c['region']}"})
+    return direct, supply_chain, country_hit, region_hit
 
+
+def _group_signal(c: dict | None, cls: dict, reasons: list[dict]) -> float:
+    """Новость про отрасль, где работают другие компании группы."""
+    g = profiles.group(c) if c else None
+    hit = [s for s in g["other_sectors"] if s in cls["sectors"]] if g else []
+    if not hit:
+        return 0.0
+    reasons.append({"kind": "group", "feature": "group", "origin": "client_data", "weight": 0.5,
+                    "text": f"Касается вашей группы компаний — отрасль «{SECTOR_NAMES.get(hit[0], hit[0])}»"})
+    return 0.5
+
+
+def _feedback_multiplier(company_id: str, role: str, shares: dict[str, float], reasons: list[dict]) -> float:
+    """Обратная связь: оценки разборов этой компании и роли поднимают или опускают темы (×0.6…×1.3)."""
+    net = _topic_feedback(company_id, role)
+    if not (net and shares):
+        return 1.0
+    feedback_mult = sum(share * min(FEEDBACK_MAX, max(FEEDBACK_MIN, 1 + FEEDBACK_STEP * net.get(t, 0)))
+                        for t, share in shares.items())
+    liked = [TOPICS[t]["name"] for t in shares if net.get(t, 0) > 0 and t in TOPICS]
+    disliked = [TOPICS[t]["name"] for t in shares if net.get(t, 0) < 0 and t in TOPICS]
+    if liked or disliked:
+        reasons.append({"kind": "feedback", "feature": "feedback", "origin": "user", "weight": round(feedback_mult, 2),
+                        "text": "Учтены ваши оценки: " + "; ".join(
+                            ([f"полезно — {', '.join(liked)}"] if liked else []) +
+                            ([f"не интересно — {', '.join(disliked)}"] if disliked else []))})
+    return feedback_mult
+
+
+def score(news: dict, company_id: str, role: str) -> dict:
+    """Релевантность новости для компании и роли (0–100) и причины отбора, самые весомые — первыми."""
+    c = profiles.get(company_id)
+    cls = news["classification"]
+    reasons: list[dict] = []
+    topic_scores = {t["topic"]: t["score"] for t in cls["topics"]}
+    total_topic = sum(topic_scores.values()) or 1
+    shares = {t: v / total_topic for t, v in topic_scores.items()}
+    confidence = {t["topic"]: _topic_confidence(t) for t in cls["topics"]}
+
+    exposure_sum = _exposure_signal(company_id, topic_scores, shares, reasons)
+    direct, supply_chain, country_hit, region_hit = _direct_signals(c, cls, news, reasons)
+    group_hit = _group_signal(c, cls, reasons)
     role_spec = ROLES.get(role, ROLES["ceo"])
     role_mult = sum(share * role_spec["focus"].get(t, 1.0) for t, share in shares.items()) if shares else 1.0
-
-    # Обратная связь: оценки разборов этой компании и роли поднимают или опускают темы (×0.6…×1.3).
-    feedback_mult = 1.0
-    net = _topic_feedback(company_id, role)
-    if net and shares:
-        feedback_mult = sum(share * min(FEEDBACK_MAX, max(FEEDBACK_MIN, 1 + FEEDBACK_STEP * net.get(t, 0)))
-                            for t, share in shares.items())
-        liked = [TOPICS[t]["name"] for t in shares if net.get(t, 0) > 0 and t in TOPICS]
-        disliked = [TOPICS[t]["name"] for t in shares if net.get(t, 0) < 0 and t in TOPICS]
-        if liked or disliked:
-            reasons.append({"kind": "feedback", "feature": "feedback", "origin": "user", "weight": round(feedback_mult, 2),
-                            "text": "Учтены ваши оценки: " + "; ".join(
-                                ([f"полезно — {', '.join(liked)}"] if liked else []) +
-                                ([f"не интересно — {', '.join(disliked)}"] if disliked else []))})
+    feedback_mult = _feedback_multiplier(company_id, role, shares, reasons)
     if role_mult > 1.05:
         reasons.append({"kind": "role", "feature": "role", "origin": "user", "weight": round(role_mult, 2),
-                        "text": f"Тема в фокусе роли «{role_spec['name']}»"})
+                        "text": f"Важная тема для {ROLE_FOR.get(role, 'вашей роли')}"})
 
     strength = cls.get("magnitude")
     strength_mult = magnitude.FACTOR[strength["level"]] if strength else 1.0
-    if strength and strength["level"] == "strong":
+    if strength and strength["level"] == "strong" and re.search(r"\d", strength["evidence"]):
         reasons.append({"kind": "magnitude", "feature": "magnitude", "origin": "news", "weight": strength_mult,
                         "text": f"Сильное изменение: «{strength['evidence']}»"})
 
@@ -164,11 +253,13 @@ def score(news: dict, company_id: str, role: str) -> dict:
     freshness = 0.5 ** (age / HALF_LIFE_DAYS)
     importance = 0.5 + sum(share * TOPICS[t]["importance"] for t, share in shares.items() if t in TOPICS)
     # No permanent 40% freshness floor: old external events must leave the feed.
-    raw = importance * (exposure_sum + direct + supply_chain + country_hit + region_hit) * role_mult * strength_mult * freshness \
-        * feedback_mult
+    topic_conf = sum(share * confidence.get(t, 1.0) for t, share in shares.items()) if shares else 1.0
+    raw = importance * (exposure_sum + direct + group_hit + supply_chain + country_hit + region_hit) * role_mult \
+        * strength_mult * freshness * feedback_mult * topic_conf
     value = round(100 * (1 - math.exp(-raw / 2.5)), 1)
 
-    reasons.sort(key=lambda r: r["weight"], reverse=True)
+    # Роль — общий признак, а не связь с компанией: в конце списка причин.
+    reasons.sort(key=lambda r: (r["kind"] == "role", -r["weight"]))
     return {"score": value, "raw": round(raw, 3), "freshness": round(freshness, 3), "age_days": round(age, 1),
             "reasons": reasons[:8]}
 
@@ -179,7 +270,6 @@ def _collapse_stories(ranked: list[dict]) -> list[dict]:
     Сначала — по сюжетам хранилища (новости одного события и его продолжения), затем —
     по похожим заголовкам среди оставшихся. story_size — сколько еще сообщений у сюжета.
     """
-    from app.news import store
 
     by_story: dict[str, dict] = {}
     kept_rows = []
@@ -222,15 +312,39 @@ def feed(items: list[dict], company_id: str, role: str, topic: str | None = None
         if topic and topic not in [t["topic"] for t in news["classification"]["topics"]]:
             continue
         relevance = score(news, company_id, role)
-        has_company_basis = any(r["kind"] in ("exposure", "sector_mention", "country", "supply_chain", "region")
+        has_company_basis = any(r["kind"] in ("exposure", "sector_mention", "group", "country", "supply_chain", "region")
                                 for r in relevance["reasons"])
         if not news["classification"]["topics"] or not has_company_basis or relevance["score"] < MIN_FEED_SCORE:
             continue
+        if (news.get("materiality") or {}).get("material") is False:
+            continue  # модель-классификатор: событие не влияет на крупный бизнес (частный случай, спорт, назначение)
         if news.get("kind") != "seed" and relevance["age_days"] > MAX_FEED_AGE_DAYS:
             continue
         ranked.append({"news": news, "relevance": relevance})
     ranked.sort(key=lambda r: r["relevance"]["score"], reverse=True)
-    return _collapse_stories(ranked[: limit * 2])[:limit]
+    return _diversify(_collapse_stories(ranked[: limit * 2]))[:limit]
+
+
+DIVERSITY_STEP, DIVERSITY_FLOOR = 0.85, 0.6
+
+
+def _diversify(ranked: list[dict]) -> list[dict]:
+    """Однообразие ленты штрафуется: каждая следующая новость с той же главной темой — ×0.85 (не ниже ×0.6).
+
+    Иначе пятнадцать заметок об одном заседании ЦБ получают одинаковые 90 и вытесняют остальные события.
+    """
+    seen: dict[str, int] = {}
+    out = []
+    for r in ranked:
+        topics = r["news"]["classification"]["topics"]
+        main = topics[0]["topic"] if topics else ""
+        k = seen.get(main, 0)
+        seen[main] = k + 1
+        factor = max(DIVERSITY_FLOOR, DIVERSITY_STEP ** k)
+        rel = r["relevance"] if factor == 1 else {**r["relevance"], "score": round(r["relevance"]["score"] * factor, 1)}
+        out.append({**r, "relevance": rel})
+    out.sort(key=lambda r: r["relevance"]["score"], reverse=True)
+    return out
 
 
 def company_feed(company_id: str, role: str, limit: int = 500) -> list[dict]:
@@ -240,15 +354,13 @@ def company_feed(company_id: str, role: str, limit: int = 500) -> list[dict]:
     профилей дают новый ключ. TTL ограничивает дрейф свежести внутри одной ревизии.
     В кэше лежат только id и оценки — сами новости берутся из хранилища в памяти.
     """
-    from app import cache, config
-    from app.news import store
 
     if NOW_OVERRIDE is not None:  # тесты с фиксированным временем считают ленту напрямую
         return feed(store.all_items(), company_id, role, None, limit)
     # Оценки пользователей меняют ранжирование — их отпечаток входит в ключ.
     feedback = hashlib.sha1(repr(sorted(_topic_feedback(company_id, role).items())).encode()).hexdigest()[:10]
     key = (f"feed:v2:{company_id}:{role}:{limit}:{store.revision()}:{profiles.signature()}:{embeddings.signature()}"
-           f":fb{feedback}")
+           f":fb{feedback}:x{extra.signature(company_id)}")
     hit = cache.get(key)
     if hit is not None:
         rows = [(store.get(r["news_id"]), r) for r in hit]

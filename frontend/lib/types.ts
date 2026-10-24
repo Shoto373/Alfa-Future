@@ -14,6 +14,14 @@ export interface User {
   name: string;
   email: string;
   memberships: Membership[];
+  is_operator?: boolean;  // сотрудник банка: блок «Сервис банка» в профиле
+}
+
+export interface LLMSwitch {
+  paused: boolean;
+  connected: boolean;
+  by?: string;
+  at?: string;
 }
 
 export interface LookupCompany {
@@ -69,6 +77,69 @@ export interface Relevance {
   reasons: RelevanceReason[];
 }
 
+/** Ответ /feed: total и topic_counts — по всей ленте компании, items — с учетом фильтра. */
+export interface FeedPage {
+  items: FeedItem[];
+  total: number;
+  topic_counts: TopicCount[];
+  stories: StoryChip[];
+}
+
+/** Мониторинг качества: показатели за период, накопленные метрики и выводы. */
+export interface QualityOverview {
+  period: {
+    hours: number;
+    insights: number;
+    llm_attempted: number;
+    llm_share: number | null;
+    first_pass: number | null;
+    grounded: number | null;
+    bank_coverage: number | null;
+    latency_p50: number | null;
+    latency_p90: number | null;
+    feedback: { up: number; down: number; useful_rate: number | null };
+    feed_views: number;
+    insight_opens: number;
+    questions: number;
+    pipeline: {
+      started_at?: string | null;
+      rss?: { added: number; duplicates: number; skipped: number; failed: string[] } | null;
+      rules_built?: number | null;
+      llm_built?: number | null;
+    } | null;
+  };
+  totals: {
+    content: { insights: number; first_pass_rate: number; claims_with_sources: number; checks_pass_rate: Record<string, number> };
+    personalization: { by_section: Record<string, { up: number; down: number }> };
+    ai: { llm_connected: boolean; llm_usage?: { tokens: number; limit: number; cost: number; cost_limit: number } };
+  };
+  findings: { level: "ok" | "warn" | "info"; text: string }[];
+  check_labels: Record<string, string>;
+}
+
+export type ExtraShareKey = "floating_debt_share" | "fx_revenue_share" | "import_share";
+
+/** Сведения, которые компания сообщила о себе: доли в процентах и свободный текст. */
+export interface CompanyExtra {
+  company_id: string;
+  shares: Partial<Record<ExtraShareKey, number>>;
+  notes: string;
+  updated_at: string | null;
+  fields: { key: ExtraShareKey; label: string }[];
+  files: CompanyFile[];
+}
+
+/** Приложенный файл: текст из него — часть сведений компании для агента. */
+export interface CompanyFile {
+  file_id: string;
+  name: string;
+  kind: "csv" | "pdf";
+  size: number;
+  chars: number;
+  uploaded_at: string;
+  preview: string;
+}
+
 export interface TraceStep {
   step: number;
   stage: "plan" | "tool" | "compose" | "check" | "adapt" | "finalize";
@@ -76,6 +147,7 @@ export interface TraceStep {
   detail: string;
   status: "ok" | "warning" | "error" | "skipped";
   duration_ms: number;
+  output?: Record<string, unknown> | null;
 }
 
 export interface Insight {
@@ -88,6 +160,7 @@ export interface Insight {
   created_at: string;
   mode: "llm" | "rules";
   model: string | null;
+  fallback_reason?: "paused" | "disabled" | "budget" | "company_budget" | "unavailable" | "checks" | null;
   title: string;
   headline: string;
   effect?: Effect | null;
@@ -146,7 +219,8 @@ export interface CompanyProfile extends CompanySummary {
   products: Record<string, boolean | null>;
   fts_flag: boolean | null;
   market: { okved_peers: number | null; okved_rank: number | null; okved_share: number | null; sector_share: number | null; note: string };
-  group: { group_id: string | null; members: number | null; revenue: number | null; reliable: boolean | null };
+  group: { group_id: string | null; members: number | null; revenue: number | null; reliable: boolean | null; top_sectors?: string[];
+    sector_shares?: { sector: string; share: number }[]; focus_sectors?: string[]; usable?: boolean };
   suppliers: Counterparties;
   customers: Counterparties;
   linked_persons: number;
@@ -205,7 +279,7 @@ export interface Meta {
   data: { profiles: number; total_companies: number; selection_rule: string; source_dir: string };
   knowledge: { documents: number; theses: number };
   news: number;
-  llm: { connected: boolean; allowed_models: string[]; usage: { tokens: number; limit: number; calls: number } };
+  llm: { connected: boolean; allowed_models: string[] };
   roles: { role: Role; name: string }[];
   topics: { topic: string; name: string }[];
   sectors: { sector: string; name: string }[];
@@ -219,4 +293,12 @@ export interface BankDocument {
   stale?: boolean;
   pdf_available: boolean;
   theses: { id: string; page: number; text: string; topics: string[]; stance?: string; stale?: boolean }[];
+}
+
+/** Расход дневного бюджета LLM (/metrics → ai.llm_usage), для блока «Сервис банка». */
+export interface LLMBudget {
+  cost: number;
+  cost_limit: number;
+  reserved_cost: number;
+  rejected_by_budget: number;
 }

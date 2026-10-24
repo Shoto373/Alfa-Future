@@ -30,8 +30,11 @@ from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 
-from app import config, database, quality, ranking, storage
+from app import config, database, llm, llm_usage, quality, ranking, storage
+from app.agent import orchestrator, prompts
+from app.auth import store as auth_store
 from app.companies import profiles
+from app.news import parser, store
 
 logger = logging.getLogger("app.pipeline")
 
@@ -55,8 +58,6 @@ def status() -> dict:
 
 def audience() -> list[tuple[str, str]]:
     """Пары «компания — роль» по участникам привязанных компаний."""
-    from app.auth import store as auth_store
-
     pairs = {(cid, m["role"]) for cid in auth_store.claimed_ids() for m in auth_store.list_members(cid)
              if m["user_id"]}
     return sorted((cid, role) for cid, role in pairs if profiles.get(cid) is not None)
@@ -64,9 +65,6 @@ def audience() -> list[tuple[str, str]]:
 
 def _name_stories() -> int:
     """Динамические темы: сюжеты из 3+ сообщений получают короткое название от быстрой модели."""
-    from app.agent import llm, prompts
-    from app.news import store
-
     if not _llm_budget_left():
         return 0
     known = store._labels()
@@ -88,23 +86,23 @@ def _name_stories() -> int:
 
 
 def _llm_budget_left() -> bool:
-    from app.agent import llm
-
     if not llm.available():
         return False
-    u = llm.usage()
+    llm_usage.sweep()  # резервы упавшего процесса не должны навсегда выключить AI-версии конвейера
+    u = llm_usage.usage()
     share = config.pipeline_llm_share()
-    return u["tokens"] < u["limit"] * share and u["cost"] < u["cost_limit"] * share
+    # С резервом идущих вызовов: доля конвейера не съедает бюджет, уже обещанный запросам пользователей.
+    return u["tokens"] + u["reserved_tokens"] < u["limit"] * share and u["cost"] + u["reserved_cost"] < u["cost_limit"] * share
 
 
 async def _analyze(company: dict, role: str, news: dict, use_llm: bool) -> dict | None:
-    from app.agent import orchestrator
-
     request_id = f"req_auto_{uuid.uuid4().hex}"
     try:
-        job = orchestrator.run(company, role, news, request_id, use_llm=use_llm)
-        insight = await asyncio.wait_for(job, timeout=config.analysis_timeout())
-        await asyncio.to_thread(storage.save_insight, insight)
+        # Тот же разбор уже строит пользователь — ждем его результат, модель вызывается один раз.
+        # Конвейер — работа банка: тратит свою долю (PIPELINE_LLM_SHARE), а не долю компании пользователей.
+        job = orchestrator.run_once(company, role, news, request_id, use_llm=use_llm, charge_company=False,
+                                    on_built=lambda ins: asyncio.to_thread(storage.save_insight, ins))
+        insight, _ = await asyncio.wait_for(job, timeout=config.analysis_timeout())
     except Exception as exc:  # одна неудачная карточка не останавливает конвейер
         logger.warning("auto analysis failed company=%s news=%s llm=%s: %s",
                        company["company_id"], news["news_id"], use_llm, type(exc).__name__)
@@ -118,8 +116,6 @@ def _save(report: dict) -> None:
 
 
 async def _collect(report: dict) -> None:
-    from app.news import parser
-
     if not config.rss_sources():
         return
     try:
@@ -166,6 +162,10 @@ async def cycle(started_at: str | None = None) -> dict:
               "quality_report": False, "duration": None, "error": None}
     await _collect(report)
     report["stories_named"] = await _optional(_name_stories, "stories", 0)
+    # Существенность еще не проверенных новостей (собранных до включения проверки или при сбое модели).
+    if await asyncio.to_thread(_llm_budget_left):
+        report["materiality_checked"] = await _optional(
+            lambda: store.check_materiality(config.pipeline_materiality_batch()), "materiality", 0)
 
     pairs = await asyncio.to_thread(audience)
     report["pairs"] = len(pairs)

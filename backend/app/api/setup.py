@@ -1,6 +1,7 @@
 """Глобальные обработчики ошибок, CORS, лимит тела и журналирование."""
 
 import logging
+import re
 import time
 import uuid
 
@@ -9,11 +10,15 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import config
-from app.api.errors import ApiError, error_response
+from app.api.errors import error_response
+from app.errors import ApiError
 
 logger = logging.getLogger("app.api")
 
 MAX_BODY_BYTES = 64 * 1024
+# Загрузка файла компании (CSV/PDF) — единственный адрес с большим телом запроса.
+UPLOAD_MAX_BYTES = 5 * 1024 * 1024 + 1024
+UPLOAD_PATH = re.compile(r"^/api/v1/companies/[^/]+/extra/files$")
 
 
 def new_request_id() -> str:
@@ -61,8 +66,9 @@ class RequestContextMiddleware:
 
     async def _handle(self, scope, receive, send, request_id):
         headers = dict(scope.get("headers") or [])
+        limit = UPLOAD_MAX_BYTES if UPLOAD_PATH.match(scope.get("path", "")) else self.max_bytes
         length = headers.get(b"content-length")
-        if length is not None and length.isdigit() and int(length) > self.max_bytes:
+        if length is not None and length.isdigit() and int(length) > limit:
             await error_response("REQUEST_TOO_LARGE", request_id)(scope, receive, send)
             return
 
@@ -75,7 +81,7 @@ class RequestContextMiddleware:
                 break
             chunk = message.get("body", b"")
             size += len(chunk)
-            if size > self.max_bytes:
+            if size > limit:
                 await error_response("REQUEST_TOO_LARGE", request_id)(scope, receive, send)
                 return
             chunks.append(chunk)

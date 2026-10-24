@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ApiError, api } from "@/lib/api";
-import { Card, ErrorBox } from "./ui";
+import { Card, ErrorState } from "./ui";
 import styles from "@/components/AddNews.module.scss";
 import common from "@/styles/common.module.scss";
 import forms from "@/styles/forms.module.scss";
@@ -48,7 +48,7 @@ export default function AddNews({ onAdded, compact = false }: { onAdded: () => v
       ) : (
         <input className={forms.input} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" maxLength={2000} />
       )}
-      {error && <ErrorBox message={error} />}
+      {error && <ErrorState error={error} />}
       {note && <p className={`${common.muted} ${common.small}`}>{note}</p>}
       <button className={`${styles.btn} ${common.btnPrimary}`} disabled={!valid || busy} onClick={submit}>{busy ? "Анализируем…" : "Разобрать"}</button>
     </Card>

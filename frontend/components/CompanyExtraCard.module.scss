@@ -1,0 +1,100 @@
+@use "../styles/breakpoints";
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.shares {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+
+}
+
+.share label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// Знак % внутри поля: подписи короткие и поля стоят ровно в ряд.
+.percent {
+  position: relative;
+  display: block;
+
+  input {
+    padding-right: 36px;
+  }
+
+  > span {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(calc(-50% - 5px));
+    color: var(--muted);
+    pointer-events: none;
+  }
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.files {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+
+  h3 {
+    margin: 0;
+  }
+}
+
+.fileList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+}
+
+.fileMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+
+  strong {
+    overflow-wrap: anywhere;
+  }
+}
+
+.preview {
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@include breakpoints.down(breakpoints.$mobile) {
+  .shares {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

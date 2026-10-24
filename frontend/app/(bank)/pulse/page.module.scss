@@ -44,7 +44,7 @@
   }
 
   .chip:not(.on):not(.chipMore):hover {
-    background: #e6e8eb;
+    background: var(--bg-hover);
   }
 }
 
@@ -85,7 +85,13 @@
   }
 }
 
-// Сюжеты — динамические темы: отделены от тем отступом снизу.
-.storyChips {
-  margin-bottom: 16px;
+.sortBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.more {
+  align-self: center;
 }

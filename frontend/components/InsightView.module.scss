@@ -30,7 +30,7 @@
 .insightHead {
   border-radius: 28px;
   padding: 28px;
-  color: #fff;
+  color: var(--white);
   background: radial-gradient(55% 120% at 92% 120%, rgba(239, 49, 36, .6), transparent 70%), var(--dark);
 
   h1 {
@@ -45,7 +45,7 @@
 
   .btnSecondary {
     background: rgba(255, 255, 255, .1);
-    color: #fff;
+    color: var(--white);
   }
 
   .btnSecondary:hover:not(:disabled) {
@@ -101,11 +101,34 @@
   }
 }
 
+// Сноска на источник: маленький круглый номер.
+.refs {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 6px;
+  vertical-align: 2px;
+}
+
 .refs a {
-  font-size: 12px;
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--blue-soft);
   color: var(--blue);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
   text-decoration: none;
-  margin-left: 2px;
+  transition: background .15s, color .15s;
+
+  &:hover,
+  &:focus-visible {
+    background: var(--blue);
+    color: #fff;
+  }
 }
 
 .bankCard {
@@ -188,7 +211,7 @@
   gap: 12px;
   counter-reset: src;
 
-  li {
+  > li {
     display: grid;
     grid-template-columns: 30px 130px minmax(0, 1fr) auto;
     gap: 10px;
@@ -198,18 +221,35 @@
     padding: 4px;
   }
 
-  li::before {
-    content: "[" counter(src) "]";
+  // Номер источника — тот же круглый значок, что у сносок в тексте.
+  > li::before {
+    content: counter(src);
+    display: inline-grid;
+    place-items: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--blue-soft);
     color: var(--blue);
-    font-size: 13px;
-    padding-top: 2px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    margin-top: 2px;
+    justify-self: start;
+  }
+
+  > li.focused::before,
+  > li:target::before {
+    background: var(--blue);
+    color: #fff;
   }
 
   p {
     margin: 2px 0 0;
   }
 
-  li:target {
+  > li:target {
     background: var(--blue-soft);
     border-radius: 12px;
   }
@@ -231,35 +271,69 @@
 
 .srcClientData {
   background: var(--blue-soft);
-  color: #1f4fae;
+  color: var(--link);
 }
 
 .trace {
-  margin: 0;
-  padding-left: 22px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
+  gap: 14px;
+  font-size: 14px;
+  line-height: 1.45;
+  margin-bottom: 20px;
 
-  li {
+  p {
+    margin: 0;
+  }
+}
+
+.traceGroup {
+  h4 {
+    margin: 0 0 6px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+  }
+
+  > ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  > ul > li {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
     gap: 8px;
     align-items: baseline;
   }
 }
 
-.traceStage {
+.traceIcon {
   font-weight: 700;
-  min-width: 92px;
+  text-align: center;
+  color: var(--green);
 }
 
-.traceWarning .traceStage {
+.traceBody strong {
+  font-weight: 600;
+}
+
+.traceQueries {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+.traceWarning .traceIcon {
   color: var(--amber);
 }
 
-.traceError .traceStage {
+.traceError .traceIcon {
   color: var(--red-dark);
 }
 
@@ -330,11 +404,11 @@
 }
 
 .insightHead {
-  --score-color: #fff;
+  --score-color: var(--white);
   --score-track: rgba(255, 255, 255, .15);
 }
 
-.sources li.focused {
+.sources > li.focused {
   background: var(--blue-soft);
   border-radius: 12px;
 }
@@ -394,8 +468,187 @@
   border-color: var(--amber);
 }
 
+// Штатный режим без модели: статичный значок вместо индикатора загрузки.
+.upgradeNoteInfo::before {
+  animation: none;
+  border-color: var(--blue);
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+// Другой разрез: выбор роли — таблетка в стиле кнопок шапки и свое меню.
+.roleMenu {
+  position: relative;
+}
+
+.perspective {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .1);
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .15s;
+
+  &:hover:not(:disabled) {
+    background: rgba(255, 255, 255, .18);
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, .5);
+    outline-offset: 2px;
+  }
+
+  &:disabled {
+    opacity: .6;
+    cursor: default;
+  }
+}
+
+.roleMenuPop {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 260px;
+  padding: 6px;
+  border-radius: 16px;
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: var(--shadow-pop);
+}
+
+.roleMenuHead {
+  padding: 8px 12px 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.roleMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+
+  > span:first-child {
+    flex: 1;
+  }
+
+  &:hover,
+  &:focus-visible {
+    background: var(--bg);
+    outline: none;
+  }
+}
+
+.roleMenuOn {
+  font-weight: 600;
+  color: var(--red);
+}
+
+.roleMenuYou {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+// Заголовок новости в шапке — ссылка на первоисточник.
+.newsLink {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  text-decoration: none;
+
+  &:hover > span:first-child {
+    color: #fff;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+
+.newsHost {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, .45);
+}
+
+// Несколько тезисов одного документа банка — цитаты с номером страницы.
+.srcQuotes {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  li {
+    display: block;
+  }
+}
+
+.srcPage {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+// Почему новость в ленте: короткая метка — суть.
+.reasonList {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+
+  > div {
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  dt {
+    color: var(--muted);
+  }
+
+  dd {
+    margin: 0;
+  }
+
+  @media (max-width: 700px) {
+    > div {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 2px;
+    }
   }
 }

@@ -33,7 +33,7 @@ def test_legacy_adoption_keeps_records_and_removes_custom_versioning():
     with database.session() as db:
         assert db.scalar(select(Event.payload)) == {"preserve": [1, "original"]}
         assert "schema_migrations" not in inspect(db.connection()).get_table_names()
-        assert MigrationContext.configure(db.connection(), opts={"version_table_schema": database.schema()}).get_current_revision() == "0002"
+        assert MigrationContext.configure(db.connection(), opts={"version_table_schema": database.schema()}).get_current_revision() == "0007"
 
 
 def test_unknown_legacy_schema_is_not_stamped():
@@ -53,8 +53,8 @@ def test_alembic_upgrade_matches_orm_and_downgrade_roundtrip():
         assert compare_metadata(context, Base.metadata) == []
     cfg = database.alembic_config()
     command.downgrade(cfg, "base")
-    with database.engine().connect() as conn:
-        assert set(inspect(conn).get_table_names()) == {"alembic_version"}
+    with database.engine().connect() as conn:  # схема теста явно: в общей базе в public могут быть рабочие таблицы
+        assert set(inspect(conn).get_table_names(schema=database.schema())) == {"alembic_version"}
     command.upgrade(cfg, "head")
     with database.session() as db:
         db.add(Event(kind="after_upgrade", payload={"ok": True}))

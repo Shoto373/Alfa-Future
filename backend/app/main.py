@@ -4,7 +4,7 @@ import logging
 
 from fastapi import FastAPI
 
-from app import config, database, pipeline, warmup
+from app import config, database, demo_accounts, legacy_import, pipeline, warmup
 from app.api.router import router
 from app.api.setup import configure_api
 from app.auth.router import router as auth_router
@@ -16,8 +16,18 @@ logger = logging.getLogger("app")
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     await asyncio.to_thread(database.migrate)
+    # Учетные записи из прежнего JSON-хранилища (RUNTIME_DIR) — в PostgreSQL, один раз; файлы остаются.
+    imported = await asyncio.to_thread(legacy_import.import_auth_once)
+    if imported and any(imported.values()):
+        logger.info("auth imported from runtime JSON: %s", imported)
     # Прогрев: профили, модель, векторы, база знаний, новости и ленты — до приема запросов.
     app.state.warmup = await asyncio.to_thread(warmup.run)
+    try:  # локальная проверка: готовые учетные записи (DEMO_ACCOUNTS=1 только в compose.yaml)
+        demo = await asyncio.to_thread(demo_accounts.ensure)
+        if demo and demo["created"]:
+            logger.info("demo accounts created: %s", demo)
+    except Exception:  # без демо-записей сервис работает: регистрация открыта
+        logger.exception("demo accounts failed")
     task = None
     if config.rss_refresh_minutes() > 0:
         # Конвейер в фоне: сбор новостей из RSS и их разбор для привязанных компаний.

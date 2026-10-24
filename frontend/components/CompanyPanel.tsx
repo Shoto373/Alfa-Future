@@ -21,6 +21,17 @@ function Flow({ title, d, sectors }: { title: string; d: Counterparties; sectors
   );
 }
 
+function groupText(p: CompanyProfile, sectors: Record<string, string>): string {
+  const g = p.group;
+  if (!g.group_id || !g.members || g.members < 2) return "не входит";
+  const base = `${g.members} компаний, выручка ${money(g.revenue)}`;
+  // Группа учитывается в выводах, только если у ее выручки есть центр — отрасль с заметной долей.
+  if (!g.usable) return `${base}; выручка разбросана по отраслям — в выводах не учитывается`;
+  const mix = (g.sector_shares ?? []).filter((x) => g.focus_sectors?.includes(x.sector))
+    .map((x) => `${(sectors[x.sector] ?? x.sector).toLowerCase()} ${pct(x.share, 0)}`);
+  return mix.length ? `${base}; основная выручка: ${mix.join(", ")}` : base;
+}
+
 export default function CompanyPanel({ profile: p, exposures, sectors, title = "Контекст компании" }: { profile: CompanyProfile; exposures: Exposure[]; sectors: Record<string, string>; title?: string }) {
   const topExposures = [...exposures].sort((a, b) => b.weight - a.weight).slice(0, 5);
   return (
@@ -33,6 +44,10 @@ export default function CompanyPanel({ profile: p, exposures, sectors, title = "
         <li><span>Персонал (ФНС)</span><strong>{p.workers_fns ?? "нет данных"}</strong></li>
         <li><span>ВЭД (ФТС)</span><strong>{p.fts_flag ? (p.fts_countries.join(", ") || "страны не указаны") : "нет"}</strong></li>
         <li><span>Тип клиента</span><strong>{p.client_type ?? "—"}</strong></li>
+        <li><span>Группа компаний</span><strong>{groupText(p, sectors)}</strong></li>
+        {p.affiliated_companies > 0 && (
+          <li><span>Связанные компании</span><strong>{p.affiliated_companies} через {p.linked_persons} связанных лиц</strong></li>
+        )}
       </ul>
       <p className={`${common.muted} ${common.small}`}>{p.market.note}</p>
       <div className={common.tags}>

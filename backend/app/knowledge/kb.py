@@ -18,7 +18,7 @@ from pathlib import Path
 from app.news.classifier import tokenize
 import numpy as np
 
-from app import config, database, embeddings, vectors
+from app import config, database, embeddings, vector_store, vectors
 from sqlalchemy import select, func
 from app.models import BankDocument, BankThesis, BankProduct
 
@@ -118,6 +118,11 @@ DENSE_FLOOR = 0.30    # ниже этого сходство считается 
 # заголовка и длинного тезиса сходство в целом ниже (подобрано на тезисах кейса).
 DENSE_PASS_MIN = 0.35
 DENSE_PASS_GAP = 0.08
+# Абсолютный минимум близости к событию: относительный порог всегда пропускает «лучший из слабых»,
+# и в разбор попадали тезисы о другом (рейтинг «Полюса» к новости о «ФосАгро»).
+DENSE_ABS_MIN = 0.45
+MIN_SHARED_WORDS = 2   # без смысловой модели: столько значимых слов новости в тексте тезиса
+SECTOR_OVERRIDE = 0.55  # тезис об отрасли/эмитенте без совпадения отрасли — только при очень высокой близости
 
 
 @lru_cache(maxsize=4)
@@ -125,7 +130,7 @@ def _thesis_vectors(signature: str, model: str) -> tuple[list[str], np.ndarray] 
     """Матрица векторов тезисов. Векторы хранятся в коллекции thesis векторного хранилища."""
     theses = _kb()["theses"]
     ids = [t["id"] for t in theses]
-    stored = vectors.sync(vectors.THESIS, [(t["id"], t["text"], {
+    stored = vectors.sync(vector_store.THESIS, [(t["id"], t["text"], {
         "doc_id": t["doc_id"], "topics": t["topics"], "sectors": t["sectors"], "stale": t["stale"]}) for t in theses],
         prune_missing=True)
     if stored is None:  # хранилище недоступно — векторы только в памяти
@@ -181,11 +186,22 @@ def search(query: str = "", topics: list[str] | None = None, sectors: list[str] 
         if topics and not topic_hit:
             continue
         sim = sims.get(t["id"], 0.0)
-        by_meaning = sim >= pass_at
-        if topics and len(q) > 5 and len(meaningful & t["_token_set"]) < 2 and not by_meaning:
+        shared = len(meaningful & t["_token_set"])
+        # Про это событие: близко по смыслу (не ниже абсолютного порога) и та же тема или общие слова, либо очень близко.
+        # Общие слова сравниваются по 5-буквенным основам и путают формы («рубль» и «рубля»), поэтому при совпавшей
+        # теме решает смысловая близость.
+        by_meaning = (sim >= max(pass_at, DENSE_ABS_MIN) and (topic_hit or shared >= 2)) or sim >= SECTOR_OVERRIDE
+        # Со смысловой моделью тезис обязан быть близок по смыслу: общие слова «совет директоров по ключевой ставке»
+        # в новости о цифровом рубле не делают тезис о ставке релевантным. Без модели — по совпадению слов;
+        # короткий запрос («ключевая ставка») — достаточно всех его значимых слов.
+        if q and dense and not by_meaning:
             continue
-        if not topics and (lexical < 2 or len(meaningful & t["_token_set"]) < 2) and not by_meaning:
+        if q and not dense and shared < min(MIN_SHARED_WORDS, max(1, len(meaningful))):
+            continue  # тема совпала, но тезис не про это событие (без запроса — выборка по теме, как раньше)
+        if not topics and lexical < 2 and not by_meaning:
             continue
+        if q and dense and t["sectors"] and sectors and not sector_hit and sim < SECTOR_OVERRIDE:
+            continue  # тезис о другой отрасли или конкретном эмитенте
         score = lexical + DENSE_WEIGHT * max(0.0, sim - DENSE_FLOOR) + 2.5 * topic_hit + 1.5 * sector_hit
         if score <= 0:
             continue

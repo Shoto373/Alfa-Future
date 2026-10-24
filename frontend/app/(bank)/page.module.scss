@@ -25,7 +25,7 @@
   background: radial-gradient(60% 90% at 78% 110%, rgba(239, 49, 36, .55), transparent 70%),
     radial-gradient(40% 60% at 55% 0%, rgba(239, 49, 36, .18), transparent 70%),
     var(--dark);
-  color: #fff;
+  color: var(--white);
 }
 
 .heroMain {
@@ -116,7 +116,7 @@
   }
 
   strong {
-    color: #fff;
+    color: var(--white);
   }
 }
 
@@ -127,7 +127,7 @@
   background: var(--green-acid);
   display: grid;
   place-items: center;
-  color: #fff;
+  color: var(--white);
   flex-shrink: 0;
 }
 
@@ -138,7 +138,7 @@
 
 .heroBanner .iconBtn:hover {
   background: rgba(255, 255, 255, .1);
-  color: #fff;
+  color: var(--white);
 }
 
 .heroTiles {
@@ -159,8 +159,8 @@
   gap: 12px;
   align-items: center;
   text-decoration: none;
-  color: #fff;
-  border-radius: 14px;
+  color: var(--white);
+  border-radius: var(--radius-sm);
   padding: 6px;
 
   &:hover {
@@ -207,7 +207,7 @@
   gap: 10px;
   padding: 8px 0;
   text-decoration: none;
-  color: #fff;
+  color: var(--white);
 }
 
 .heroList li a:hover span:first-child {
@@ -221,7 +221,7 @@
 
 .heroList .countRed {
   background: var(--red);
-  color: #fff;
+  color: var(--white);
 }
 
 .heroPromo {
@@ -229,7 +229,7 @@
   flex-direction: column;
   gap: 6px;
   text-decoration: none;
-  color: #fff;
+  color: var(--white);
   position: relative;
   overflow: hidden;
   background: linear-gradient(160deg, rgba(255, 255, 255, .1), rgba(255, 255, 255, .02) 60%), rgba(239, 49, 36, .12);
@@ -330,7 +330,7 @@
 
 .topReason {
   font-size: 13px;
-  color: #1f4fae;
+  color: var(--link);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -358,7 +358,7 @@
 .story {
   border-radius: var(--radius);
   padding: 22px 24px;
-  color: #fff;
+  color: var(--white);
   text-decoration: none;
   display: flex;
   flex-direction: column;
@@ -443,11 +443,11 @@
 
 .hero {
   --error-background: rgba(239, 49, 36, .2);
-  --error-color: #fff;
+  --error-color: var(--white);
   --skeleton-background: linear-gradient(90deg, rgba(255,255,255,.06), rgba(255,255,255,.14), rgba(255,255,255,.06));
 }
 
 .storyLegend {
   --origin-fact-background: rgba(255,255,255,.14);
-  --origin-fact-color: #fff;
+  --origin-fact-color: var(--white);
 }

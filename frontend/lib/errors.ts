@@ -13,6 +13,6 @@ const MESSAGES: Record<string, string> = {
 
 /** Понятное сообщение для пользователя по ошибке API. */
 export function errorText(e: unknown, fallback = "Не удалось выполнить действие. Повторите попытку."): string {
-  if (e instanceof ApiError) return MESSAGES[e.code] ?? e.message ?? fallback;
+  if (e instanceof ApiError) return MESSAGES[e.code] ?? (e.message || fallback);
   return fallback;
 }

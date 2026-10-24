@@ -2,20 +2,18 @@
 
 Ключ подключается через LLM_BASE_URL + LLM_API_KEY. Без ключа клиент
 недоступен, и агент работает в режиме правил. Разрешены только модели
-из Приложения 3 кейса; учитывается дневной лимит токенов.
+из Приложения 3 кейса. Перед вызовом стоимость резервируется в дневном
+бюджете (app/llm_usage.py): параллельные вызовы не превышают лимит вместе.
 """
 
 import json
 import logging
 import re
 import time
-from datetime import date, datetime, timezone
 
 import httpx
 
-from app import config, database
-from app.models import LLMUsage
-from sqlalchemy.dialects.postgresql import insert
+from app import config, llm_usage
 
 logger = logging.getLogger("app.agent.llm")
 
@@ -27,13 +25,16 @@ PRIMARY_RETRY_SECONDS = 300.0  # после сбоя основного шлюз
 _primary_down_until = 0.0
 
 
-def _budget_day() -> date:
-    """Gateway budget resets at 03:00 Moscow time, i.e. midnight UTC."""
-    return datetime.now(timezone.utc).date()
-
-
 class LLMError(Exception):
     pass
+
+
+class BudgetError(LLMError):
+    """Вызов не выполнен: резерв не помещается в дневной лимит или долю компании (app/llm_usage.py)."""
+
+    def __init__(self, message: str, scope: str = "total"):
+        super().__init__(message)
+        self.scope = scope
 
 
 def _norm(name: str) -> str:
@@ -45,9 +46,20 @@ def is_allowed(model: str) -> bool:
     return any(_norm(a) in n for a in config.ALLOWED_MODELS)
 
 
-def available() -> bool:
+def configured() -> bool:
+    """Ключ и адрес шлюза заданы (иначе модель не подключена, а не временно недоступна)."""
     s = config.llm_settings()
-    return bool(s["base_url"] and s["api_key"]) and time.monotonic() >= _down_until
+    return bool(s["base_url"] and s["api_key"])
+
+
+def unavailable_reason() -> str:
+    """Почему модель сейчас не вызывается — для плашки в карточке: paused, disabled или unavailable."""
+    return "paused" if llm_usage.paused() else "unavailable" if configured() else "disabled"
+
+
+def available() -> bool:
+    """Ключ задан, шлюз не на паузе после сбоя и сотрудник банка не выключил AI."""
+    return configured() and time.monotonic() >= _down_until and not llm_usage.paused()
 
 
 def _post(payload: dict, s: dict) -> httpx.Response:
@@ -72,22 +84,7 @@ def _post(payload: dict, s: dict) -> httpx.Response:
     raise last or httpx.ConnectError("no LLM base url")
 
 
-def usage() -> dict:
-    day = _budget_day()
-    with database.session() as db:
-        row = db.get(LLMUsage, day)
-        tokens, cost, calls, errors = (row.tokens, row.cost, row.calls, row.errors) if row else (0, 0, 0, 0)
-    s = config.llm_settings()
-    return {"date": day.isoformat(), "tokens": tokens, "cost": round(float(cost), 3), "calls": calls,
-            "errors": errors, "limit": s["daily_token_limit"], "cost_limit": s["daily_cost_limit"]}
-
-
-def _record(tokens: int, error: bool = False, cost: float = 0.0, call: bool = True) -> None:
-    with database.session() as db:
-        stmt = insert(LLMUsage).values(day=_budget_day(), tokens=max(0, tokens), cost=max(0, cost),
-                                       calls=int(call), errors=int(error))
-        db.execute(stmt.on_conflict_do_update(index_elements=[LLMUsage.day],
-            set_={k: getattr(LLMUsage, k) + getattr(stmt.excluded, k) for k in ("tokens", "cost", "calls", "errors")}))
+usage = llm_usage.usage  # дневной учет: потрачено, зарезервировано, отказы по бюджету, лимиты
 
 
 def _extract_json(text: str) -> dict:
@@ -101,6 +98,20 @@ def _extract_json(text: str) -> dict:
     return json.loads(text[start:end + 1])
 
 
+def _failed(reservation: llm_usage.Reservation, committed: bool, exc: Exception | None = None) -> None:
+    """Вызов не удался: до списания — снять резерв, после — только отметить ошибку.
+
+    Тайм-аут ответа: запрос ушел, и шлюз мог его оплатить — списываем оценку резерва (с запасом),
+    иначе неучтенные траты незаметно превысили бы лимит шлюза."""
+    if committed:
+        llm_usage.record_error(reservation)
+    elif isinstance(exc, (httpx.ReadTimeout, httpx.WriteTimeout)):
+        llm_usage.commit(reservation, reservation.tokens, reservation.cost)
+        llm_usage.record_error(reservation)
+    else:
+        llm_usage.release(reservation)
+
+
 def chat_json(system: str, user: str, model_kind: str = "compose", max_tokens: int = 2000) -> tuple[dict, dict]:
     """Вызов модели роли model_kind (plan | compose | review | qa) с ответом в JSON. Возвращает (json, meta)."""
     s = config.llm_settings()
@@ -109,11 +120,17 @@ def chat_json(system: str, user: str, model_kind: str = "compose", max_tokens: i
     model = s["models"].get(model_kind)
     if not model:
         raise LLMError(f"Неизвестная роль модели: {model_kind}")
+    if model_kind in ("compose", "qa"):
+        # У края дневного лимита черновики и ответы чата пишет более дешевая модель: AI-версии держатся дольше.
+        economy_at, economy_model = config.llm_economy()
+        if llm_usage.spent_share() >= economy_at:
+            model = economy_model
     if not is_allowed(model):
         raise LLMError(f"Модель {model} не входит в список разрешенных кейсом")
-    u = usage()
-    if u["tokens"] >= u["limit"] or u["cost"] >= u["cost_limit"]:
-        raise LLMError("Исчерпан дневной лимит LLM")
+    try:
+        reservation = llm_usage.reserve(model, len(system) + len(user), max_tokens)
+    except llm_usage.BudgetExceeded as exc:  # агент откатится к правилам, причина — в трассе
+        raise BudgetError(str(exc), exc.scope) from exc
 
     payload = {
         "model": model,
@@ -125,7 +142,7 @@ def chat_json(system: str, user: str, model_kind: str = "compose", max_tokens: i
     if s["reasoning_effort"] and any(m in model for m in s["reasoning_effort_models"]):
         payload["reasoning_effort"] = s["reasoning_effort"]
     started = time.perf_counter()
-    recorded = False
+    committed = False
     try:
         resp = _post(payload, s)
         for optional in ("response_format", "reasoning_effort"):
@@ -138,18 +155,18 @@ def chat_json(system: str, user: str, model_kind: str = "compose", max_tokens: i
         content = choice["message"].get("content") or ""
         usage_info = body.get("usage") or {}
         tokens = int(usage_info.get("total_tokens") or (len(system) + len(user) + len(content)) // 3)
-        _record(tokens, cost=float(usage_info.get("cost") or 0.0))
-        recorded = True
+        llm_usage.commit(reservation, tokens, llm_usage.cost_of(model, tokens, usage_info.get("cost")))
+        committed = True
         if not isinstance(content, str):
             raise LLMError("Модель вернула ответ неподдерживаемого формата")
         if choice.get("finish_reason") == "length":
             raise LLMError("Ответ модели обрезан по лимиту токенов")
         data = _extract_json(content)
     except LLMError:
-        _record(0, error=True, call=not recorded)
+        _failed(reservation, committed)
         raise
     except (httpx.HTTPError, KeyError, ValueError, IndexError, TypeError, AttributeError) as exc:
-        _record(0, error=True, call=not recorded)
+        _failed(reservation, committed, exc)
         logger.warning("llm call failed model=%s error=%s", model, type(exc).__name__)
         raise LLMError(f"Ошибка вызова модели: {type(exc).__name__}") from exc
     return data, {"model": model, "tokens": tokens, "duration_ms": round((time.perf_counter() - started) * 1000, 1)}

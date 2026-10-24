@@ -3,11 +3,11 @@
 import hashlib
 import time
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from app import config, database
-from app.agent import llm
-from sqlalchemy import select
+from app import config, database, llm, llm_usage, ranking
+from sqlalchemy import func, select
+from app.companies import extra as company_extra
 from app.models import AppState, Insight, Feedback, Answer, Event
 
 # Меняется, когда правила меняют содержание карточек: старые перестают быть актуальным кэшем.
@@ -61,11 +61,17 @@ def _newest_first() -> tuple:
     return (Insight.created_at.desc(), (Insight.payload["mode"].astext == "llm").desc(), Insight.insight_id.desc())
 
 
+def _fresh(company_id: str) -> tuple:
+    """Карточки, собранные до изменения сведений от компании, устарели."""
+    since = company_extra.updated_at(company_id)
+    return (Insight.created_at > since,) if since else ()
+
+
 def cached_insight(company_id: str, role: str, news_id: str) -> dict | None:
     version = cache_version()
     with database.session() as db:
         return db.scalar(select(Insight.payload).where(Insight.company_id == company_id, Insight.role == role,
-            Insight.news_id == news_id, Insight.cache_version == version)
+            Insight.news_id == news_id, Insight.cache_version == version, *_fresh(company_id))
             .order_by(*_newest_first()).limit(1))
 
 
@@ -77,7 +83,7 @@ def cached_insights(company_id: str, role: str, news_ids: list[str]) -> dict[str
     with database.session() as db:
         rows = db.execute(select(Insight.news_id, Insight.payload)
             .where(Insight.company_id == company_id, Insight.role == role, Insight.cache_version == version,
-                   Insight.news_id.in_(news_ids))
+                   Insight.news_id.in_(news_ids), *_fresh(company_id))
             .order_by(Insight.news_id, *_newest_first())
             .distinct(Insight.news_id)).all()
     return dict(rows)
@@ -99,45 +105,17 @@ def cached_insight_refs(company_id: str, role: str, news_ids: list[str]) -> dict
     with database.session() as db:
         rows = db.execute(select(Insight.news_id, Insight.insight_id, Insight.payload["effect"].astext)
             .where(Insight.company_id == company_id, Insight.role == role, Insight.cache_version == version,
-                   Insight.news_id.in_(news_ids))
+                   Insight.news_id.in_(news_ids), *_fresh(company_id))
             .order_by(Insight.news_id, *_newest_first())
             .distinct(Insight.news_id)).all()
     return {news_id: (insight_id, effect) for news_id, insight_id, effect in rows}
-
-
-FEEDBACK_TTL = 60.0
-_feedback_memo: dict[tuple, tuple[float, dict]] = {}
-
-
-def topic_feedback(company_id: str, role: str) -> dict[str, int]:
-    """Сумма оценок пользователей (+1/−1) по темам новостей для компании и роли.
-
-    Оценка разбора относится к темам его новости: так лента учится, какие темы этой роли полезны.
-    """
-    key = (config.database_schema(), company_id, role)
-    hit = _feedback_memo.get(key)
-    if hit and time.monotonic() - hit[0] < FEEDBACK_TTL:
-        return hit[1]
-    from app.news import store
-
-    with database.session() as db:
-        rows = db.execute(select(Insight.news_id, Feedback.payload["rating"].as_integer())
-                          .join(Feedback, Feedback.insight_id == Insight.insight_id)
-                          .where(Insight.company_id == company_id, Insight.role == role)).all()
-    net: dict[str, int] = {}
-    for news_id, rating in rows:
-        news = store.get(news_id)
-        for t in (news or {}).get("classification", {}).get("topics", [])[:2]:
-            net[t["topic"]] = net.get(t["topic"], 0) + int(rating or 0)
-    _feedback_memo[key] = (time.monotonic(), net)
-    return net
 
 
 def _append(table: str, record: dict) -> None:
     record = {"ts": datetime.now(timezone.utc).isoformat(timespec="seconds")} | record
     with database.session() as db:
         if table == "feedback":
-            _feedback_memo.clear()
+            ranking.forget_feedback()  # новая оценка сразу меняет ленту
         if table in ("feedback", "answers"):
             model = Feedback if table == "feedback" else Answer
             db.add(model(insight_id=record["insight_id"], payload=record))
@@ -168,6 +146,16 @@ def log_event(kind: str, **data) -> None:
     _append("events", {"kind": kind} | data)
 
 
+def count_events(kind: str, within_seconds: int, **match) -> int:
+    """События вида kind за последние within_seconds с совпадающими полями (лимиты частоты запросов)."""
+    since = datetime.now(timezone.utc) - timedelta(seconds=within_seconds)
+    query = select(func.count()).select_from(Event).where(Event.kind == kind, Event.created_at >= since)
+    for key, value in match.items():
+        query = query.where(Event.payload[key].astext == str(value))
+    with database.session() as db:
+        return db.scalar(query) or 0
+
+
 def metrics() -> dict:
     insights = _read("insights")
     feedback = _read("feedback")
@@ -176,8 +164,13 @@ def metrics() -> dict:
     checks: dict[str, list[bool]] = defaultdict(list)
     first_pass, claims_total, claims_linked, latency = 0, 0, 0, []
     modes = Counter()
+    llm_tried = llm_fallback = 0
     for ins in insights:
         modes[ins["mode"]] += 1
+        # Откат к правилам: модель вызывалась (шаг llm_compose в трассе), а итоговый разбор — на правилах.
+        if any(s["name"] == "llm_compose" for s in ins["trace"]):
+            llm_tried += 1
+            llm_fallback += ins["mode"] == "rules"
         first_pass += int(ins["quality"]["attempts"] == 1 and ins["quality"]["passed"])
         for c in ins["quality"]["checks"]:
             checks[c["name"]].append(c["passed"])
@@ -193,6 +186,7 @@ def metrics() -> dict:
     by_section = defaultdict(Counter)
     for f in feedback:
         by_section[f.get("section") or "card"][f["rating"]] += 1
+    usage = llm_usage.usage()
     feed_views = sum(1 for e in events if e["kind"] == "feed_view")
     opens = sum(1 for e in events if e["kind"] == "insight_open")
     n = len(insights) or 1
@@ -214,8 +208,14 @@ def metrics() -> dict:
         "ai": {
             "modes": dict(modes),
             "avg_latency_ms": round(sum(latency) / len(latency), 1) if latency else None,
-            "llm_usage": llm.usage(),
+            "llm_usage": usage,
             "llm_connected": llm.available(),
+            "reserved_cost": usage["reserved_cost"],
+            "rejected_by_budget": usage["rejected_by_budget"],
+            "llm_by_model": llm_usage.by_model(),
+            "llm_by_company": llm_usage.by_company(),
+            "llm_paused": llm_usage.pause_state(),
+            "fallback_rate": round(llm_fallback / llm_tried, 3) if llm_tried else None,
         },
         "recent_feedback": [f for f in feedback[-10:] if f.get("comment")],
     }

@@ -1,13 +1,27 @@
 """Зависимости FastAPI: текущий пользователь, членство и права администратора компании."""
 
+import ipaddress
+
 from fastapi import Cookie, Depends, Request
 
 from app import config
-from app.api.errors import ApiError
+from app.errors import ApiError
 from app.auth import store
 
 COOKIE = "session"
 _SAFE = {"GET", "HEAD", "OPTIONS"}
+
+
+def client_ip(request: Request) -> str:
+    """Адрес клиента. За nginx соединение приходит с внутреннего адреса, настоящий — в X-Real-IP;
+    заголовку верим только от внутреннего адреса, иначе его подделал бы любой."""
+    host = request.client.host if request.client else ""
+    try:
+        internal = ipaddress.ip_address(host).is_private or ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        internal = False
+    forwarded = request.headers.get("x-real-ip", "").strip()
+    return forwarded if internal and forwarded else host
 
 
 def check_origin(request: Request) -> None:
@@ -44,7 +58,9 @@ def require_admin(company_id: str, user: dict = Depends(current_user)) -> dict:
     return m
 
 
-def require_any_admin(user: dict = Depends(current_user)) -> dict:
-    if not any(m["is_admin"] for m in user["memberships"]):
+def require_operator(user: dict = Depends(current_user)) -> dict:
+    """Сотрудник банка из OPERATOR_EMAILS. Сводные данные по всем клиентам (метрики, расходы, аудит)
+    не открываются администратору компании-клиента: он видит только свою компанию."""
+    if user["email"].lower() not in config.operator_emails():
         raise ApiError("FORBIDDEN")
     return user

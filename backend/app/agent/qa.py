@@ -7,7 +7,10 @@
 
 import re
 
-from app.agent import llm, prompts
+from app import llm
+
+from app.agent import prompts
+from app.agent.validators import claim_errors
 from app.companies.sectors import SECTOR_NAMES
 from app.knowledge import kb
 from app.news.classifier import classify
@@ -112,7 +115,6 @@ def answer(insight: dict, company: dict, question: str) -> dict:
                 ids = [s for s in c.get("source_ids", []) if isinstance(s, str) and s in sources] if isinstance(c.get("source_ids"), list) else []
                 origin = c.get("origin") if c.get("origin") in ("fact", "client_data", "bank", "ai") else "ai"
                 if ids and isinstance(c.get("text"), str):
-                    from app.agent.validators import claim_errors
                     evidence_theses = {t["id"]: t for t in theses}
                     for sid in sources:
                         if sid.startswith("bank:"):

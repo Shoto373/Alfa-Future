@@ -8,7 +8,8 @@ from decimal import Decimal
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Identity, Index, Integer, Numeric, Text, func
+from sqlalchemy import (BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Identity, Index, Integer, Numeric, Text,
+                        UniqueConstraint, func)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -110,6 +111,56 @@ class Answer(Base, Payload, Timestamped):
     __table_args__ = (Index("answers_insight_idx", "insight_id"),)
 
 
+class AuthUser(Base):
+    """Пользователь. Email хранится в нижнем регистре и уникален; пароль — scrypt с солью и параметрами в записи."""
+    __tablename__ = "users"
+    user_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    name: Mapped[str] = mapped_column(Text)
+    email: Mapped[str] = mapped_column(Text, unique=True)
+    pw_salt: Mapped[str] = mapped_column(Text)
+    pw_hash: Mapped[str] = mapped_column(Text)
+    pw_params: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AuthMembership(Base):
+    """Членство в компании. user_id пуст у приглашения — привязывается при регистрации с тем же email."""
+    __tablename__ = "memberships"
+    member_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    company_id: Mapped[str] = mapped_column(Text)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.user_id", ondelete="CASCADE"))
+    email: Mapped[str] = mapped_column(Text)
+    role: Mapped[str] = mapped_column(Text)
+    is_admin: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    founder: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    invited_by: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (UniqueConstraint("company_id", "email", name="memberships_company_email_uq"),
+                      Index("memberships_user_idx", "user_id"))
+
+
+class AuthSession(Base):
+    """Сессия: только SHA-256 токена; истекает через SESSION_TTL_HOURS со скользящим продлением."""
+    __tablename__ = "sessions"
+    token_hash: Mapped[str] = mapped_column(Text, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (Index("sessions_user_idx", "user_id"), Index("sessions_expires_idx", "expires_at"))
+
+
+class LoginFailure(Base):
+    """Попытка входа (запись до проверки пароля, при успехе удаляется): блокировка по паре email + адрес
+    и общий потолок на email — общие для всех воркеров."""
+    __tablename__ = "login_failures"
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    email: Mapped[str] = mapped_column(Text)
+    ip: Mapped[str] = mapped_column(Text, server_default="")
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (Index("login_failures_email_at_idx", "email", "at"),)
+
+
 class LLMUsage(Base):
     __tablename__ = "llm_usage"
     day: Mapped[date] = mapped_column(primary_key=True)
@@ -117,6 +168,46 @@ class LLMUsage(Base):
     cost: Mapped[Decimal] = mapped_column(Numeric, server_default="0")
     calls: Mapped[int] = mapped_column(Integer, server_default="0")
     errors: Mapped[int] = mapped_column(Integer, server_default="0")
+    # Резерв идущих вызовов (оценка по max_tokens и цене модели) и отказы по бюджету — app/llm_usage.py.
+    reserved_tokens: Mapped[int] = mapped_column(BigInteger, server_default="0")
+    reserved_cost: Mapped[Decimal] = mapped_column(Numeric, server_default="0")
+    rejected: Mapped[int] = mapped_column(Integer, server_default="0")
+
+
+class LLMUsageModel(Base):
+    """Дневной учет по модели: фактическая цена за 1000 токенов для сверки с оценкой config.LLM_PRICES."""
+    __tablename__ = "llm_usage_models"
+    day: Mapped[date] = mapped_column(ForeignKey("llm_usage.day"), primary_key=True)
+    model: Mapped[str] = mapped_column(Text, primary_key=True)
+    tokens: Mapped[int] = mapped_column(BigInteger, server_default="0")
+    cost: Mapped[Decimal] = mapped_column(Numeric, server_default="0")
+    calls: Mapped[int] = mapped_column(Integer, server_default="0")
+    errors: Mapped[int] = mapped_column(Integer, server_default="0")
+
+
+class LLMUsageCompany(Base):
+    """Дневной учет по компании-клиенту: одна компания не может израсходовать общий бюджет (LLM_COMPANY_SHARE)."""
+    __tablename__ = "llm_usage_companies"
+    day: Mapped[date] = mapped_column(ForeignKey("llm_usage.day"), primary_key=True)
+    company_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tokens: Mapped[int] = mapped_column(BigInteger, server_default="0")
+    cost: Mapped[Decimal] = mapped_column(Numeric, server_default="0")
+    calls: Mapped[int] = mapped_column(Integer, server_default="0")
+    reserved_tokens: Mapped[int] = mapped_column(BigInteger, server_default="0")
+    reserved_cost: Mapped[Decimal] = mapped_column(Numeric, server_default="0")
+    rejected: Mapped[int] = mapped_column(Integer, server_default="0")
+
+
+class LLMReservation(Base):
+    """Резерв одного идущего вызова LLM: снимается при списании факта, ошибке или через 10 минут."""
+    __tablename__ = "llm_reservations"
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    day: Mapped[date] = mapped_column(ForeignKey("llm_usage.day"))
+    company_id: Mapped[str | None] = mapped_column(Text)
+    tokens: Mapped[int] = mapped_column(BigInteger)
+    cost: Mapped[Decimal] = mapped_column(Numeric)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (Index("llm_reservations_created_idx", "created_at"),)
 
 
 class VectorItem(Base, Payload):

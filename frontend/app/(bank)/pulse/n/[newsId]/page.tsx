@@ -4,11 +4,11 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import InsightView from "@/components/InsightView";
-import { ErrorBox, Icon, Skeleton } from "@/components/ui";
+import { ErrorState, Icon, Skeleton } from "@/components/ui";
 import { AbortedError, ApiError, api } from "@/lib/api";
 import { markRead } from "@/lib/notifications";
 import { useSession } from "@/lib/session";
-import type { Insight } from "@/lib/types";
+import type { Insight, Role } from "@/lib/types";
 import common from "@/styles/common.module.scss";
 import styles from "@/app/(bank)/pulse/n/[newsId]/page.module.scss";
 
@@ -17,12 +17,21 @@ const STEPS = ["Определяем контекст компании", "Ище
 export default function InsightPage() {
   const { newsId } = useParams<{ newsId: string }>();
   const { session } = useSession();
+  // Смена компании или новости — разбор с чистого листа; ответ на старый запрос игнорируется.
+  return <NewsInsight key={`${session!.companyId}:${session!.role}:${newsId}`} newsId={newsId} />;
+}
+
+function NewsInsight({ newsId }: { newsId: string }) {
+  const { session } = useSession();
+  const companyId = session!.companyId;
   const [insight, setInsight] = useState<Insight | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState(0);
   const [upgrading, setUpgrading] = useState(false);
   const [upgradeFailed, setUpgradeFailed] = useState(false);
+  // Другой разрез: тот же разбор глазами другой роли компании; по умолчанию — своя роль.
+  const [perspective, setPerspective] = useState<Role>(session!.role);
   const seq = useRef(0);
 
   // Открыли разбор — уведомление по этой новости прочитано.
@@ -31,20 +40,16 @@ export default function InsightPage() {
   }, [session, newsId]);
   const controller = useRef<AbortController | null>(null);
 
-  const load = useCallback((force = false) => {
+  // Запрос разбора; состояние меняется только по ответам — сброс перед повтором делает load.
+  const run = useCallback((force: boolean) => {
     controller.current?.abort();
     const c = new AbortController();
     controller.current = c;
     const mine = ++seq.current;
-    const companyId = session!.companyId;
     const id = decodeURIComponent(newsId);
-    setLoading(true);
-    setError(null);
-    setUpgrading(false);
-    setUpgradeFailed(false);
-    if (!force) setInsight(null);
     // 1) Сразу — готовая карточка или разбор на правилах (доли секунды).
-    api.insight(companyId, id, { force, fast: true }, c.signal)
+    const view = perspective === session!.role ? undefined : perspective;
+    api.insight(companyId, id, { force, fast: true, perspective: view }, c.signal)
       .then((ins) => {
         if (mine !== seq.current) return;
         setInsight(ins);
@@ -52,7 +57,7 @@ export default function InsightPage() {
         if (ins.mode !== "rules") return;
         // 2) Следом — версия модели: она заменит карточку на правилах, когда будет готова.
         setUpgrading(true);
-        return api.insight(companyId, id, {}, c.signal)
+        return api.insight(companyId, id, { perspective: view }, c.signal)
           .then((full) => {
             if (mine !== seq.current) return;
             setInsight(full);
@@ -68,17 +73,26 @@ export default function InsightPage() {
         setError(e instanceof ApiError ? e : new ApiError("Непредвиденная ошибка", "CLIENT", true));
         setLoading(false);
       });
-  }, [session, newsId]);
+  }, [companyId, newsId, perspective, session]);
 
-  // Смена компании или роли — новый разбор; ответ на старый запрос игнорируется.
+  // «Пересчитать» и «Повторить»: сброс состояния и новый запрос.
+  const load = (force = false) => {
+    setLoading(true);
+    setError(null);
+    setUpgrading(false);
+    setUpgradeFailed(false);
+    setStep(0);
+    if (!force) setInsight(null);
+    run(force);
+  };
+
   useEffect(() => {
-    load();
+    run(false);
     return () => controller.current?.abort();
-  }, [load, session!.companyId]);
+  }, [run]);
 
   useEffect(() => {
     if (!loading) return;
-    setStep(0);
     const t = setInterval(() => setStep((s) => Math.min(s + 1, STEPS.length - 1)), 700);
     return () => clearInterval(t);
   }, [loading]);
@@ -93,9 +107,10 @@ export default function InsightPage() {
           <Skeleton lines={4} />
         </div>
       )}
-      {error && <ErrorBox message={error.message} onRetry={() => load()} />}
+      {error && <ErrorState error={error} onRetry={() => load()} />}
       {insight && <InsightView insight={insight} onRefresh={() => load(true)} refreshing={loading}
-        upgrading={upgrading} upgradeFailed={upgradeFailed} />}
+        upgrading={upgrading} upgradeFailed={upgradeFailed}
+        perspective={perspective} ownRole={session!.role} onPerspective={setPerspective} />}
     </div>
   );
 }

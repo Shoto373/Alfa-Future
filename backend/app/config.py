@@ -4,12 +4,13 @@ import os
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from sqlalchemy.engine import URL
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def database_url() -> str:
     if not os.environ.get("DATABASE_URL") and os.environ.get("PGHOST"):
-        from sqlalchemy.engine import URL
         return URL.create("postgresql+psycopg", host=os.environ["PGHOST"], port=int(os.environ.get("PGPORT", "5432")),
                           database=os.environ.get("PGDATABASE", "alfa"), username=os.environ.get("PGUSER", "alfa"),
                           password=os.environ.get("PGPASSWORD", "")).render_as_string(hide_password=False)
@@ -28,12 +29,18 @@ ALLOWED_MODELS = (
     "kimi-k2.6",
 )
 
+# Деловые разделы, а не общие ленты: в общей ленте ТАСС деловых было около половины.
 DEFAULT_RSS = [
     {"name": "Банк России", "url": "https://www.cbr.ru/rss/eventrss"},
     {"name": "Интерфакс", "url": "https://www.interfax.ru/rss.asp"},
     {"name": "РБК", "url": "https://rssexport.rbc.ru/rbcnews/news/30/full.rss"},
-    {"name": "ТАСС", "url": "https://tass.ru/rss/v2.xml"},
-    {"name": "Коммерсантъ", "url": "https://www.kommersant.ru/RSS/news.xml"},
+    {"name": "Коммерсантъ", "url": "https://www.kommersant.ru/RSS/section-economics.xml"},
+    {"name": "Коммерсантъ", "url": "https://www.kommersant.ru/RSS/section-business.xml"},
+    {"name": "Коммерсантъ", "url": "https://www.kommersant.ru/RSS/section-finance.xml"},
+    {"name": "Ведомости", "url": "https://www.vedomosti.ru/rss/rubric/economics"},
+    {"name": "Ведомости", "url": "https://www.vedomosti.ru/rss/rubric/business"},
+    {"name": "Ведомости", "url": "https://www.vedomosti.ru/rss/rubric/finance"},
+    {"name": "Frank Media", "url": "https://frankmedia.ru/feed"},
 ]
 
 
@@ -61,6 +68,19 @@ def profiles_path() -> Path:
 
 def analysis_timeout() -> float:
     return float(_env("ANALYSIS_TIMEOUT_SECONDS", "150"))
+
+
+def session_ttl_hours() -> float:
+    """Срок жизни сессии; продлевается при активности (скользящее окно)."""
+    return float(_env("SESSION_TTL_HOURS", "12"))
+
+
+def operator_emails() -> set[str]:
+    """Сотрудники банка (email через запятую): метрики, расходы LLM, журнал инструментов, ручной сбор новостей.
+
+    Администратор компании — представитель клиента, а не банка: эти данные сводные по всем клиентам.
+    Пусто — служебные адреса закрыты для всех."""
+    return {e.strip().lower() for e in os.environ.get("OPERATOR_EMAILS", "").split(",") if e.strip()}
 
 
 def frontend_origin() -> str:
@@ -91,12 +111,21 @@ def rss_sources() -> list[dict]:
 
 
 def rss_max_items() -> int:
-    return int(_env("RSS_MAX_ITEMS", "30"))
+    return int(_env("RSS_MAX_ITEMS", "50"))
 
 
 def rss_full_text() -> bool:
     """Скачивать полный текст статьи по ссылке из RSS (анонс ленты — запасной вариант)."""
     return _env("RSS_FULL_TEXT", "1").lower() not in ("0", "false", "no", "off")
+
+
+def demo_accounts() -> bool:
+    """Готовые учетные записи для локальной проверки (app/demo_accounts.py); только локальный compose.yaml."""
+    return _env("DEMO_ACCOUNTS", "0") == "1"
+
+
+def demo_password() -> str:
+    return _env("DEMO_PASSWORD", "alfa-demo-2026")
 
 
 def rss_refresh_minutes() -> int:
@@ -117,6 +146,11 @@ def pipeline_llm_per_cycle() -> int:
 def pipeline_llm_share() -> float:
     """Доля дневного лимита LLM, которую может потратить конвейер; остальное — запросам пользователей."""
     return float(_env("PIPELINE_LLM_SHARE", "0.5"))
+
+
+def pipeline_materiality_batch() -> int:
+    """Сколько непроверенных новостей конвейер проверяет на существенность за цикл."""
+    return int(_env("PIPELINE_MATERIALITY_BATCH", "40"))
 
 
 def pipeline_story_labels() -> int:
@@ -153,6 +187,43 @@ def llm_settings() -> dict:
         # Провайдер кейса возвращает usage.cost в рублях; бюджет — 500 ₽/день на команду.
         "daily_cost_limit": float(_env("LLM_DAILY_COST_LIMIT", "450")),
     }
+
+
+def llm_company_share() -> float:
+    """Доля общего дневного бюджета LLM, которую может израсходовать одна компания-клиент."""
+    return float(_env("LLM_COMPANY_SHARE", "0.2"))
+
+
+def llm_user_limits() -> dict[str, int]:
+    """Запросы к модели на пользователя в час: «Пересчитать» и вопросы в чате (0 — без ограничения)."""
+    return {"refresh": int(_env("LLM_USER_REFRESH_PER_HOUR", "10")),
+            "question": int(_env("LLM_USER_QUESTIONS_PER_HOUR", "30"))}
+
+
+def llm_economy() -> tuple[float, str]:
+    """С какой доли дневного лимита черновики и ответы чата пишет более дешевая модель, и какая."""
+    return float(_env("LLM_ECONOMY_AT", "0.8")), _env("LLM_MODEL_ECONOMY", "z-ai/glm-5.3-flash")
+
+
+# Оценка цены, ₽ за 1000 токенов (вход + выход), с запасом — по замерам выбора моделей (см. llm_settings).
+# Нужна для резерва бюджета до ответа и для учета, если шлюз не вернул usage.cost; списывается факт.
+LLM_PRICES = {"deepseek": 0.06, "glm": 0.04, "gemma": 0.03, "qwen3-vl": 0.06, "qwen": 0.06, "kimi": 0.6}
+LLM_DEFAULT_PRICE = 0.1
+
+
+def llm_price_per_1k(model: str) -> float:
+    """Цена модели по первому совпавшему фрагменту имени; LLM_PRICES=deepseek=0.05,glm=0.03 переопределяет."""
+    overrides = {}
+    for part in os.environ.get("LLM_PRICES", "").split(","):
+        if "=" in part:
+            key, value = part.split("=", 1)
+            overrides[key.strip().lower()] = float(value)
+    name = model.lower()
+    for prices in (overrides, LLM_PRICES):
+        for key, price in prices.items():
+            if key in name:
+                return price
+    return LLM_DEFAULT_PRICE
 
 
 def bank_pdf_dir() -> Path | None:
@@ -193,6 +264,12 @@ def telegram_settings() -> tuple[str, str]:
 def quality_report_hour() -> int:
     """Час (UTC), после которого уходит ежедневный отчет о качестве; 6 UTC = 9:00 МСК."""
     return int(_env("QUALITY_REPORT_HOUR_UTC", "6"))
+
+
+def materiality_llm_enabled() -> bool:
+    """Проверка существенности новости моделью-классификатором (app.news.materiality). Включена по умолчанию,
+    если LLM подключена; MATERIALITY_LLM=0 — только словари и смысловая модель."""
+    return _env("MATERIALITY_LLM", "1").lower() in ("1", "true", "yes", "on")
 
 
 def classify_llm_enabled() -> bool:

@@ -7,8 +7,9 @@
 
 import re
 
+from app.agent import composer, evidence
 from app.news.store import similarity
-from app.agent import evidence
+from app.text import INSTRUCTION
 
 _NUM = re.compile(r"\d+(?:[.,]\d+)?")
 _THOUSANDS = re.compile(r"(?<=\d)[  ](?=\d{3}(?!\d))")
@@ -16,6 +17,11 @@ _THOUSANDS = re.compile(r"(?<=\d)[  ](?=\d{3}(?!\d))")
 
 # Метки периодов аналитики («7М26», «2П27», «3К26») — обозначения, а не числовые утверждения.
 _PERIOD = re.compile(r"\b\d{1,2}[МПКMH]\d{2}\b")
+# Служебные обозначения во входных данных модели: в тексте для руководителя их быть не должно.
+JARGON = re.compile(
+    r"\b[a-z]+(?:_[a-z]+)+\b|\b\w+\s*=\s*\w+|\b(?:true|false|null|none)\b|\b(?:news|bank|client|product):[\w-]+"
+    r"|\b(?:loans|deposits|leasing|factoring|payroll|guarantees|rko|coverage|story|exposures?|features?|origin|"
+    r"sources?|profile|role_focus|okved|fts|counterparties)\b", re.IGNORECASE)
 _YEAR = re.compile(r"^(19|20)\d{2}$")
 
 
@@ -68,8 +74,10 @@ def claim_errors(section: str, c: dict, ctx: dict, source_ids: set[str]) -> set[
         errors.add("numbers")
     if c.get("origin") in ("ai", "client_data") and evidence.contradictions(c["text"], ctx["company"]):
         errors.add("contradictions")
-    if evidence.INSTRUCTION.search(c["text"]):
+    if INSTRUCTION.search(c["text"]):
         errors.add("instruction")
+    if c.get("origin") in ("ai", "client_data") and JARGON.search(c["text"]):
+        errors.add("jargon")
     return errors
 
 
@@ -221,6 +229,5 @@ def apply_fix(draft: dict, results: list[dict], source_ids: set[str], grounding_
         bv["available"] = bool(bv["theses"])
         bv["summary"] = bv["theses"][0]["text"] if bv["theses"] else None
         if "restore_headline" in fixes:
-            from app.agent import composer
             draft["headline"] = composer.compose(ctx)["headline"]
     return done

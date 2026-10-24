@@ -27,6 +27,9 @@ export function markRead(userId: string, companyId: string, ids: string[]): void
   window.dispatchEvent(new CustomEvent(EVENT, { detail: { userId, companyId, ids } }));
 }
 
+/** Прочитанные материалы аналитики банка — тем же механизмом, в отдельном пространстве. */
+export const ANALYTICS_SCOPE = "analytics";
+
 /** Набор прочитанных id и функции отметки; синхронизируется между вкладками и компонентами. */
 export function useRead(userId: string, companyId: string) {
   const [read, setRead] = useState<Set<string>>(() => new Set());

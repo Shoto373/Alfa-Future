@@ -2,7 +2,9 @@ import asyncio
 
 import pytest
 
-from app.agent import llm, orchestrator
+from app import llm
+
+from app.agent import orchestrator
 from app.news import store
 
 

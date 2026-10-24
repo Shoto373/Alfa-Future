@@ -1,0 +1,2124 @@
+[
+ {
+  "actions": [
+   {
+    "features": [],
+    "origin": "ai",
+    "source_ids": [
+     "news:seed-rate-hold",
+     "client:profile",
+     "bank:rate-01"
+    ],
+    "text": "Пересчитать график обслуживания долга при текущих условиях финансирования и проверить запас по ковенантам"
+   },
+   {
+    "features": [],
+    "origin": "ai",
+    "source_ids": [
+     "news:seed-rate-hold",
+     "client:profile",
+     "bank:rate-01"
+    ],
+    "text": "Сравнить плавающую и фиксированную ставку для новых траншей; оценить хеджирование части долга"
+   }
+  ],
+  "bank_view": {
+   "available": true,
+   "conflicts": [
+    "Пересмотр прогноза ключевой ставки на 2026-12-31: 13.5 % в материале от 2026-09-07 → 14.0 % в материале от 2026-09-11.",
+    "Пересмотр прогноза курса доллара на 2027-12-31: 95.0 руб./$ в материале от 2026-09-07 → 93.0 руб./$ в материале от 2026-09-11."
+   ],
+   "summary": "11 сентября 2026 г. ЦБ РФ сохранил ключевую ставку на уровне 14,0%. На совете директоров обсуждался только вариант паузы, снижение не рассматривалось; в пресс-релизе есть корректировки, свидетельствующие об ужесточении позиции.",
+   "theses": [
+    {
+     "features": [],
+     "origin": "bank",
+     "source_ids": [
+      "bank:rate-01"
+     ],
+     "text": "11 сентября 2026 г. ЦБ РФ сохранил ключевую ставку на уровне 14,0%. На совете директоров обсуждался только вариант паузы, снижение не рассматривалось; в пресс-релизе есть корректировки, свидетельствующие об ужесточении позиции."
+    },
+    {
+     "features": [],
+     "origin": "bank",
+     "source_ids": [
+      "bank:rate-05"
+     ],
+     "text": "Альфа-Банк ожидает сохранения паузы на заседании 23 октября и ставки 14,0% до конца 2026 г. (ранее прогноз был 13,5%). Прогноз на конец 2027 г. — 12,0%."
+    }
+   ]
+  },
+  "company_id": "U_26",
+  "disclaimer": "Прототип для хакатона. Данные о компаниях обезличены, новости демо-ленты пересказывают материалы кейса. Материал не является инвестиционной рекомендацией. Выводы с пометкой «AI» сформированы автоматически.",
+  "effect": "neg",
+  "fallback_reason": null,
+  "features_used": [
+   {
+    "label": "Отрасли покупателей",
+    "name": "customers.by_sector",
+    "value": "Энергетика и ЖКХ 99%, Розничная торговля 1%, Химическая промышленность 0%"
+   },
+   {
+    "label": "Лизинг",
+    "name": "products.leasing",
+    "value": "есть"
+   },
+   {
+    "label": "Кредитные продукты",
+    "name": "products.loans",
+    "value": "есть"
+   }
+  ],
+  "headline": "АО «Арматура Судьбы Трейд»: стоимость новых заимствований и лизинга остается высокой.",
+  "mode": "rules",
+  "model": null,
+  "news_id": "seed-rate-hold",
+  "opportunities": [],
+  "products": [
+   {
+    "product_id": "prod-deposit",
+    "reason": "Связано с темой «Ключевая ставка»",
+    "text": "Сравнить сроки и доходность размещения свободной ликвидности с учетом текущих условий и потребности в средствах.",
+    "title": "Депозит и неснижаемый остаток"
+   },
+   {
+    "product_id": "prod-hedge-rate",
+    "reason": "Связано с темой «Ключевая ставка»",
+    "text": "Зафиксировать стоимость части плавающего долга при сохранении высокой ставки.",
+    "title": "Процентный своп (IRS)"
+   },
+   {
+    "product_id": "prod-leasing",
+    "reason": "Связано с темой «Ключевая ставка»",
+    "text": "Обновление фондов без единовременной нагрузки на ликвидность.",
+    "title": "Лизинг оборудования и транспорта"
+   }
+  ],
+  "quality": {
+   "attempts": 1,
+   "checks": [
+    {
+     "detail": "Все разделы заполнены",
+     "name": "completeness",
+     "passed": true
+    },
+    {
+     "detail": "Каждое утверждение ссылается на источник",
+     "name": "sources_linked",
+     "passed": true
+    },
+    {
+     "detail": "Позиция банка опирается только на материалы банка",
+     "name": "bank_view_grounded",
+     "passed": true
+    },
+    {
+     "detail": "Найдены релевантные материалы банка",
+     "name": "bank_view_found",
+     "passed": true
+    },
+    {
+     "detail": "Все числа подтверждены источниками",
+     "name": "numbers_grounded",
+     "passed": true
+    },
+    {
+     "detail": "Противоречий с данными клиента нет",
+     "name": "consistent_with_client",
+     "passed": true
+    },
+    {
+     "detail": "Использовано признаков компании: 3",
+     "name": "personalized",
+     "passed": true
+    },
+    {
+     "detail": "Проверены типы источников, числа в указанных источниках и доступность признаков",
+     "name": "evidence_boundaries",
+     "passed": true
+    },
+    {
+     "detail": "Проверены числа и противоречия в заголовке",
+     "name": "headline_grounded",
+     "passed": true
+    },
+    {
+     "detail": "Резюме банка соответствует проверенному тезису",
+     "name": "bank_summary_grounded",
+     "passed": true
+    }
+   ],
+   "passed": true
+  },
+  "questions": [
+   "Какая доля долга компании привязана к плавающей ставке и когда ближайшие погашения?"
+  ],
+  "relevance": {
+   "reasons": [
+    {
+     "feature": "products.loans",
+     "kind": "exposure",
+     "origin": "client_data",
+     "text": "Есть кредиты: стоимость новых займов зависит от ставки",
+     "topic": "key_rate",
+     "weight": 1.8
+    },
+    {
+     "feature": "customers.by_sector",
+     "kind": "exposure",
+     "origin": "payments",
+     "text": "99% платежей покупателей — отрасль «Энергетика и ЖКХ»: капиталоемкие инвестпрограммы финансируются долгом",
+     "topic": "key_rate",
+     "weight": 1.035
+    },
+    {
+     "feature": "products.leasing",
+     "kind": "exposure",
+     "origin": "client_data",
+     "text": "Есть лизинг: платежи по новым сделкам зависят от ставки",
+     "topic": "key_rate",
+     "weight": 0.9
+    },
+    {
+     "feature": "role",
+     "kind": "role",
+     "origin": "user",
+     "text": "Важная тема для финансового директора",
+     "topic": null,
+     "weight": 1.4
+    }
+   ],
+   "score": 81.2
+  },
+  "risks": [
+   {
+    "features": [
+     "products.loans",
+     "customers.by_sector",
+     "products.leasing"
+    ],
+    "origin": "ai",
+    "source_ids": [
+     "news:seed-rate-hold",
+     "client:payments",
+     "client:profile",
+     "bank:rate-05"
+    ],
+    "text": "Стоимость новых заимствований и лизинга остается высокой: есть кредиты — стоимость новых займов зависит от ставки. Горизонт по прогнозу банка: Альфа-Банк ожидает сохранения паузы на заседании 23 октября и ставки 14,0% до конца 2026 г."
+   }
+  ],
+  "role": "cfo",
+  "schema_version": "1.0.0",
+  "sources": [
+   {
+    "date": "2026-09-11",
+    "doc_id": null,
+    "excerpt": "11 сентября 2026 года совет директоров Банка России сохранил ключевую ставку на уровне 14% годовых.",
+    "kind": "news",
+    "page": null,
+    "source_id": "news:seed-rate-hold",
+    "title": "Банк России сохранил ключевую ставку на уровне 14% годовых",
+    "url": null
+   },
+   {
+    "date": "2026-09-11",
+    "doc_id": "rate_2026_09_11",
+    "excerpt": "11 сентября 2026 г. ЦБ РФ сохранил ключевую ставку на уровне 14,0%. На совете директоров обсуждался только вариант паузы, снижение не рассматривалось; в пресс-релизе есть корректировки, свидетельствующие об ужесточении позиции.",
+    "kind": "bank_analytics",
+    "page": 1,
+    "source_id": "bank:rate-01",
+    "title": "Ключевая ставка ЦБ РФ: ставка без изменения на 14,0%, риторика стала жестче",
+    "url": null
+   },
+   {
+    "date": "2026-09-11",
+    "doc_id": "rate_2026_09_11",
+    "excerpt": "Альфа-Банк ожидает сохранения паузы на заседании 23 октября и ставки 14,0% до конца 2026 г. (ранее прогноз был 13,5%). Прогноз на конец 2027 г. — 12,0%.",
+    "kind": "bank_analytics",
+    "page": 1,
+    "source_id": "bank:rate-05",
+    "title": "Ключевая ставка ЦБ РФ: ставка без изменения на 14,0%, риторика стала жестче",
+    "url": null
+   },
+   {
+    "date": "2026-09-07",
+    "doc_id": "macro_7m26",
+    "excerpt": "Таблица прогнозов (август 2026): инфляция 7,5% на конец 2026 г.; ставка на конец 2026 г. 13,5%, 2027 г. 12,0%; курс 87,2 руб./$ на конец 2026 г. и 95,0 руб./$ на конец 2027 г.; промпроизводство в августе 0,2% г/г.",
+    "kind": "bank_analytics",
+    "page": 3,
+    "source_id": "bank:m7-08",
+    "title": "Макростатистика 7М26: данные по рынку труда не подтверждают охлаждения экономики",
+    "url": null
+   },
+   {
+    "date": "2026-09-11",
+    "doc_id": "rate_2026_09_11",
+    "excerpt": "Прогноз Альфа-Банка: инфляция 7,5% на конец 2026 г. и 5,5% на конец 2027 г.; средняя ставка 14,6% в 2026 г. и 13,0% в 2027 г.; курс 87,2 руб./$ и 13,0 руб./юань на конец 2026 г., 93,0 руб./$ и 13,8 руб./юань на конец 2027 г.",
+    "kind": "bank_analytics",
+    "page": 2,
+    "source_id": "bank:rate-06",
+    "title": "Ключевая ставка ЦБ РФ: ставка без изменения на 14,0%, риторика стала жестче",
+    "url": null
+   },
+   {
+    "date": null,
+    "doc_id": null,
+    "excerpt": "24.10 Производство чугуна, стали и ферросплавов; регион Свердловская область",
+    "kind": "client_data",
+    "page": null,
+    "source_id": "client:profile",
+    "title": "Профиль АО «Арматура Судьбы Трейд» (данные кейса)",
+    "url": null
+   },
+   {
+    "date": null,
+    "doc_id": null,
+    "excerpt": "Поставщиков: 8, покупателей: 6",
+    "kind": "client_data",
+    "page": null,
+    "source_id": "client:payments",
+    "title": "Платежи компании (данные кейса)",
+    "url": null
+   },
+   {
+    "date": null,
+    "doc_id": null,
+    "excerpt": "Сравнить сроки и доходность размещения свободной ликвидности с учетом текущих условий и потребности в средствах.",
+    "kind": "bank_product",
+    "page": null,
+    "source_id": "product:prod-deposit",
+    "title": "Депозит и неснижаемый остаток",
+    "url": null
+   },
+   {
+    "date": null,
+    "doc_id": null,
+    "excerpt": "Зафиксировать стоимость части плавающего долга при сохранении высокой ставки.",
+    "kind": "bank_product",
+    "page": null,
+    "source_id": "product:prod-hedge-rate",
+    "title": "Процентный своп (IRS)",
+    "url": null
+   },
+   {
+    "date": null,
+    "doc_id": null,
+    "excerpt": "Обновление фондов без единовременной нагрузки на ликвидность.",
+    "kind": "bank_product",
+    "page": null,
+    "source_id": "product:prod-leasing",
+    "title": "Лизинг оборудования и транспорта",
+    "url": null
+   }
+  ],
+  "title": "Банк России сохранил ключевую ставку на уровне 14% годовых",
+  "trace": [
+   {
+    "detail": "Обязательные шаги: get_company_profile → get_exposures → get_counterparties → search_bank_analytics → check_forecast_conflicts → get_story_history → get_story_coverage → get_bank_products",
+    "name": "plan",
+    "output": {
+     "steps": [
+      {
+       "tool": "get_company_profile",
+       "why": "контекст компании"
+      },
+      {
+       "tool": "get_exposures",
+       "why": "через какие признаки событие касается компании"
+      },
+      {
+       "tool": "get_counterparties",
+       "why": "событие может прийти через цепочку поставок"
+      },
+      {
+       "tool": "search_bank_analytics",
+       "why": "позиция и прогнозы Альфа-Банка по теме"
+      },
+      {
+       "tool": "check_forecast_conflicts",
+       "why": "сверить прогнозы банка из разных материалов"
+      },
+      {
+       "tool": "get_story_history",
+       "why": "тренд или разовое событие"
+      },
+      {
+       "tool": "get_story_coverage",
+       "why": "сверить факты с другими источниками"
+      },
+      {
+       "tool": "get_bank_products",
+       "why": "релевантные решения банка"
+      }
+     ]
+    },
+    "stage": "plan",
+    "status": "ok",
+    "step": 1
+   },
+   {
+    "detail": "контекст компании: получено",
+    "name": "get_company_profile",
+    "output": {
+     "args": {}
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 2
+   },
+   {
+    "detail": "через какие признаки событие касается компании: найдено связей с компанией: 3",
+    "name": "get_exposures",
+    "output": {
+     "args": {
+      "topics": [
+       "key_rate"
+      ]
+     }
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 3
+   },
+   {
+    "detail": "событие может прийти через цепочку поставок: поставщиков 8, покупателей 6",
+    "name": "get_counterparties",
+    "output": {
+     "args": {}
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 4
+   },
+   {
+    "detail": "позиция и прогнозы Альфа-Банка по теме: найдено тезисов: 2",
+    "name": "search_bank_analytics",
+    "output": {
+     "args": {
+      "query": "Банк России сохранил ключевую ставку на уровне 14% годовых 11 сентября 2026 года совет директоров Банка России сохранил ключевую ставку на уровне 14% годовых.",
+      "sectors": [
+       "metallurgy"
+      ],
+      "topics": [
+       "key_rate"
+      ]
+     },
+     "thesis_ids": [
+      "rate-01",
+      "rate-05"
+     ]
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 5
+   },
+   {
+    "detail": "сверить прогнозы банка из разных материалов: расхождения в прогнозах: 2",
+    "name": "check_forecast_conflicts",
+    "output": {
+     "args": {
+      "topics": [
+       "key_rate"
+      ]
+     }
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 6
+   },
+   {
+    "detail": "тренд или разовое событие: похожих событий раньше не было",
+    "name": "get_story_history",
+    "output": {
+     "args": {
+      "news_id": "seed-rate-hold"
+     }
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 7
+   },
+   {
+    "detail": "сверить факты с другими источниками: других источников по событию нет",
+    "name": "get_story_coverage",
+    "output": {
+     "args": {
+      "news_id": "seed-rate-hold"
+     }
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 8
+   },
+   {
+    "detail": "релевантные решения банка: подходящих продуктов: 3",
+    "name": "get_bank_products",
+    "output": {
+     "args": {
+      "topics": [
+       "key_rate"
+      ]
+     }
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 9
+   },
+   {
+    "detail": "Быстрый разбор: эффект = чувствительность компании × направление события",
+    "name": "rules_compose",
+    "output": null,
+    "stage": "compose",
+    "status": "ok",
+    "step": 10
+   },
+   {
+    "detail": "Все проверки пройдены",
+    "name": "self_check_1",
+    "output": {
+     "checks": [
+      {
+       "name": "completeness",
+       "passed": true
+      },
+      {
+       "name": "sources_linked",
+       "passed": true
+      },
+      {
+       "name": "bank_view_grounded",
+       "passed": true
+      },
+      {
+       "name": "bank_view_found",
+       "passed": true
+      },
+      {
+       "name": "numbers_grounded",
+       "passed": true
+      },
+      {
+       "name": "consistent_with_client",
+       "passed": true
+      },
+      {
+       "name": "personalized",
+       "passed": true
+      },
+      {
+       "name": "evidence_boundaries",
+       "passed": true
+      },
+      {
+       "name": "headline_grounded",
+       "passed": true
+      },
+      {
+       "name": "bank_summary_grounded",
+       "passed": true
+      }
+     ],
+     "claim_errors": {}
+    },
+    "stage": "check",
+    "status": "ok",
+    "step": 11
+   },
+   {
+    "detail": "Быстрый разбор готов, источников: 10",
+    "name": "finalize",
+    "output": {},
+    "stage": "finalize",
+    "status": "ok",
+    "step": 12
+   }
+  ],
+  "what_happened": {
+   "actors": [
+    "Банк России"
+   ],
+   "assumptions": [
+    {
+     "features": [],
+     "origin": "ai",
+     "source_ids": [
+      "news:seed-rate-hold"
+     ],
+     "text": "Масштаб изменения: слабое, в новости — «сохранил»."
+    }
+   ],
+   "dates": [
+    "11 сентября 2026 года",
+    "23 октября"
+   ],
+   "facts": [
+    {
+     "features": [],
+     "origin": "fact",
+     "source_ids": [
+      "news:seed-rate-hold"
+     ],
+     "text": "11 сентября 2026 года совет директоров Банка России сохранил ключевую ставку на уровне 14% годовых."
+    },
+    {
+     "features": [],
+     "origin": "fact",
+     "source_ids": [
+      "news:seed-rate-hold"
+     ],
+     "text": "Регулятор отметил ускорение роста цен в устойчивых компонентах до 5–6% и указал, что проинфляционные риски связаны с более продолжительным выбытием производственных мощностей."
+    },
+    {
+     "features": [],
+     "origin": "fact",
+     "source_ids": [
+      "news:seed-rate-hold"
+     ],
+     "text": "Следующее заседание по ключевой ставке пройдет 23 октября."
+    }
+   ],
+   "summary": "11 сентября 2026 года совет директоров Банка России сохранил ключевую ставку на уровне 14% годовых."
+  },
+  "why_important": [
+   {
+    "features": [
+     "products.loans"
+    ],
+    "origin": "ai",
+    "source_ids": [
+     "news:seed-rate-hold",
+     "client:profile"
+    ],
+    "text": "В новости: «11 сентября 2026 года совет директоров Банка России сохранил ключевую ставку на уровне 14% годовых». Для компании это важно: есть кредиты — стоимость новых займов зависит от ставки."
+   },
+   {
+    "features": [
+     "customers.by_sector"
+    ],
+    "origin": "client_data",
+    "source_ids": [
+     "client:payments"
+    ],
+    "text": "99% платежей покупателей — отрасль «Энергетика и ЖКХ» — капиталоемкие инвестпрограммы финансируются долгом"
+   },
+   {
+    "features": [
+     "products.leasing"
+    ],
+    "origin": "client_data",
+    "source_ids": [
+     "client:profile"
+    ],
+    "text": "Есть лизинг — платежи по новым сделкам зависят от ставки"
+   }
+  ]
+ },
+ {
+  "actions": [
+   {
+    "features": [],
+    "origin": "ai",
+    "source_ids": [
+     "news:seed-inflation-week",
+     "client:profile",
+     "bank:infl-01"
+    ],
+    "text": "Обновить бюджет с учетом прогноза инфляции банка и проверить индексацию в договорах"
+   },
+   {
+    "features": [],
+    "origin": "ai",
+    "source_ids": [
+     "news:seed-inflation-week",
+     "client:profile",
+     "bank:infl-01"
+    ],
+    "text": "Пересчитать логистические издержки и проверить условия топливных надбавок в договорах перевозки"
+   }
+  ],
+  "bank_view": {
+   "available": true,
+   "conflicts": [
+    "Пересмотр прогноза курса доллара на 2027-12-31: 95.0 руб./$ в материале от 2026-09-07 → 93.0 руб./$ в материале от 2026-09-11."
+   ],
+   "summary": "За неделю 25–31 августа Росстат зафиксировал дефляцию 0,01% н/н; с начала года цены выросли на 4,67%, годовая инфляция — 6,32%. По итогам августа ожидается дефляция 0,07%.",
+   "theses": [
+    {
+     "features": [],
+     "origin": "bank",
+     "source_ids": [
+      "bank:infl-01"
+     ],
+     "text": "За неделю 25–31 августа Росстат зафиксировал дефляцию 0,01% н/н; с начала года цены выросли на 4,67%, годовая инфляция — 6,32%. По итогам августа ожидается дефляция 0,07%."
+    },
+    {
+     "features": [],
+     "origin": "bank",
+     "source_ids": [
+      "bank:infl-02"
+     ],
+     "text": "Бензин подорожал на 0,91% н/н после 0,89% неделей ранее; ситуация на рынке топлива не позволяет считать волну роста цен исчерпанной — это важный проинфляционный риск."
+    }
+   ]
+  },
+  "company_id": "U_26",
+  "disclaimer": "Прототип для хакатона. Данные о компаниях обезличены, новости демо-ленты пересказывают материалы кейса. Материал не является инвестиционной рекомендацией. Выводы с пометкой «AI» сформированы автоматически.",
+  "effect": "none",
+  "fallback_reason": null,
+  "features_used": [
+   {
+    "label": "Отрасль",
+    "name": "sector",
+    "value": "Металлургия"
+   }
+  ],
+  "headline": "АО «Арматура Судьбы Трейд»: прямой связи с событием по имеющимся данным не видно.",
+  "mode": "rules",
+  "model": null,
+  "news_id": "seed-inflation-week",
+  "opportunities": [],
+  "products": [],
+  "quality": {
+   "attempts": 1,
+   "checks": [
+    {
+     "detail": "Все разделы заполнены",
+     "name": "completeness",
+     "passed": true
+    },
+    {
+     "detail": "Каждое утверждение ссылается на источник",
+     "name": "sources_linked",
+     "passed": true
+    },
+    {
+     "detail": "Позиция банка опирается только на материалы банка",
+     "name": "bank_view_grounded",
+     "passed": true
+    },
+    {
+     "detail": "Найдены релевантные материалы банка",
+     "name": "bank_view_found",
+     "passed": true
+    },
+    {
+     "detail": "Все числа подтверждены источниками",
+     "name": "numbers_grounded",
+     "passed": true
+    },
+    {
+     "detail": "Противоречий с данными клиента нет",
+     "name": "consistent_with_client",
+     "passed": true
+    },
+    {
+     "detail": "Использовано признаков компании: 1",
+     "name": "personalized",
+     "passed": true
+    },
+    {
+     "detail": "Проверены типы источников, числа в указанных источниках и доступность признаков",
+     "name": "evidence_boundaries",
+     "passed": true
+    },
+    {
+     "detail": "Проверены числа и противоречия в заголовке",
+     "name": "headline_grounded",
+     "passed": true
+    },
+    {
+     "detail": "Резюме банка соответствует проверенному тезису",
+     "name": "bank_summary_grounded",
+     "passed": true
+    }
+   ],
+   "passed": true
+  },
+  "questions": [
+   "Есть ли в договорах механизмы индексации цен?",
+   "Какую долю себестоимости составляют топливо и логистика?"
+  ],
+  "relevance": {
+   "reasons": [
+    {
+     "feature": "magnitude",
+     "kind": "magnitude",
+     "origin": "news",
+     "text": "Сильное изменение: «на 0,91%»",
+     "topic": null,
+     "weight": 1.1
+    },
+    {
+     "feature": "role",
+     "kind": "role",
+     "origin": "user",
+     "text": "Важная тема для финансового директора",
+     "topic": null,
+     "weight": 1.13
+    }
+   ],
+   "score": 0.0
+  },
+  "risks": [],
+  "role": "cfo",
+  "schema_version": "1.0.0",
+  "sources": [
+   {
+    "date": "2026-09-02",
+    "doc_id": null,
+    "excerpt": "По данным Росстата, за неделю с 25 по 31 августа цены снизились на 0,01%.",
+    "kind": "news",
+    "page": null,
+    "source_id": "news:seed-inflation-week",
+    "title": "Росстат зафиксировал недельную дефляцию 0,01%, бензин продолжает дорожать",
+    "url": null
+   },
+   {
+    "date": "2026-09-02",
+    "doc_id": "inflation_2026_09_02",
+    "excerpt": "За неделю 25–31 августа Росстат зафиксировал дефляцию 0,01% н/н; с начала года цены выросли на 4,67%, годовая инфляция — 6,32%. По итогам августа ожидается дефляция 0,07%.",
+    "kind": "bank_analytics",
+    "page": 1,
+    "source_id": "bank:infl-01",
+    "title": "Инфляция 25–31 августа: основные выводы",
+    "url": null
+   },
+   {
+    "date": "2026-09-02",
+    "doc_id": "inflation_2026_09_02",
+    "excerpt": "Бензин подорожал на 0,91% н/н после 0,89% неделей ранее; ситуация на рынке топлива не позволяет считать волну роста цен исчерпанной — это важный проинфляционный риск.",
+    "kind": "bank_analytics",
+    "page": 1,
+    "source_id": "bank:infl-02",
+    "title": "Инфляция 25–31 августа: основные выводы",
+    "url": null
+   },
+   {
+    "date": "2026-09-11",
+    "doc_id": "rate_2026_09_11",
+    "excerpt": "Прогноз Альфа-Банка: инфляция 7,5% на конец 2026 г. и 5,5% на конец 2027 г.; средняя ставка 14,6% в 2026 г. и 13,0% в 2027 г.; курс 87,2 руб./$ и 13,0 руб./юань на конец 2026 г., 93,0 руб./$ и 13,8 руб./юань на конец 2027 г.",
+    "kind": "bank_analytics",
+    "page": 2,
+    "source_id": "bank:rate-06",
+    "title": "Ключевая ставка ЦБ РФ: ставка без изменения на 14,0%, риторика стала жестче",
+    "url": null
+   },
+   {
+    "date": "2026-09-07",
+    "doc_id": "macro_7m26",
+    "excerpt": "Таблица прогнозов (август 2026): инфляция 7,5% на конец 2026 г.; ставка на конец 2026 г. 13,5%, 2027 г. 12,0%; курс 87,2 руб./$ на конец 2026 г. и 95,0 руб./$ на конец 2027 г.; промпроизводство в августе 0,2% г/г.",
+    "kind": "bank_analytics",
+    "page": 3,
+    "source_id": "bank:m7-08",
+    "title": "Макростатистика 7М26: данные по рынку труда не подтверждают охлаждения экономики",
+    "url": null
+   },
+   {
+    "date": null,
+    "doc_id": null,
+    "excerpt": "24.10 Производство чугуна, стали и ферросплавов; регион Свердловская область",
+    "kind": "client_data",
+    "page": null,
+    "source_id": "client:profile",
+    "title": "Профиль АО «Арматура Судьбы Трейд» (данные кейса)",
+    "url": null
+   },
+   {
+    "date": null,
+    "doc_id": null,
+    "excerpt": "Поставщиков: 8, покупателей: 6",
+    "kind": "client_data",
+    "page": null,
+    "source_id": "client:payments",
+    "title": "Платежи компании (данные кейса)",
+    "url": null
+   }
+  ],
+  "title": "Росстат зафиксировал недельную дефляцию 0,01%, бензин продолжает дорожать",
+  "trace": [
+   {
+    "detail": "Обязательные шаги: get_company_profile → get_exposures → get_counterparties → search_bank_analytics → check_forecast_conflicts → get_story_history → get_story_coverage → get_bank_products",
+    "name": "plan",
+    "output": {
+     "steps": [
+      {
+       "tool": "get_company_profile",
+       "why": "контекст компании"
+      },
+      {
+       "tool": "get_exposures",
+       "why": "через какие признаки событие касается компании"
+      },
+      {
+       "tool": "get_counterparties",
+       "why": "событие может прийти через цепочку поставок"
+      },
+      {
+       "tool": "search_bank_analytics",
+       "why": "позиция и прогнозы Альфа-Банка по теме"
+      },
+      {
+       "tool": "check_forecast_conflicts",
+       "why": "сверить прогнозы банка из разных материалов"
+      },
+      {
+       "tool": "get_story_history",
+       "why": "тренд или разовое событие"
+      },
+      {
+       "tool": "get_story_coverage",
+       "why": "сверить факты с другими источниками"
+      },
+      {
+       "tool": "get_bank_products",
+       "why": "релевантные решения банка"
+      }
+     ]
+    },
+    "stage": "plan",
+    "status": "ok",
+    "step": 1
+   },
+   {
+    "detail": "контекст компании: получено",
+    "name": "get_company_profile",
+    "output": {
+     "args": {}
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 2
+   },
+   {
+    "detail": "через какие признаки событие касается компании: найдено связей с компанией: 0",
+    "name": "get_exposures",
+    "output": {
+     "args": {
+      "topics": [
+       "inflation",
+       "fuel_oil"
+      ]
+     }
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 3
+   },
+   {
+    "detail": "событие может прийти через цепочку поставок: поставщиков 8, покупателей 6",
+    "name": "get_counterparties",
+    "output": {
+     "args": {}
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 4
+   },
+   {
+    "detail": "позиция и прогнозы Альфа-Банка по теме: найдено тезисов: 2",
+    "name": "search_bank_analytics",
+    "output": {
+     "args": {
+      "query": "Росстат зафиксировал недельную дефляцию 0,01%, бензин продолжает дорожать По данным Росстата, за неделю с 25 по 31 августа цены снизились на 0,01%.",
+      "sectors": [
+       "metallurgy",
+       "fuel_trade"
+      ],
+      "topics": [
+       "inflation",
+       "fuel_oil"
+      ]
+     },
+     "thesis_ids": [
+      "infl-01",
+      "infl-02"
+     ]
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 5
+   },
+   {
+    "detail": "сверить прогнозы банка из разных материалов: расхождения в прогнозах: 1",
+    "name": "check_forecast_conflicts",
+    "output": {
+     "args": {
+      "topics": [
+       "inflation",
+       "fuel_oil"
+      ]
+     }
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 6
+   },
+   {
+    "detail": "тренд или разовое событие: похожих событий раньше: 1, последнее 2026-07-27",
+    "name": "get_story_history",
+    "output": {
+     "args": {
+      "news_id": "seed-inflation-week"
+     }
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 7
+   },
+   {
+    "detail": "сверить факты с другими источниками: других источников по событию нет",
+    "name": "get_story_coverage",
+    "output": {
+     "args": {
+      "news_id": "seed-inflation-week"
+     }
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 8
+   },
+   {
+    "detail": "релевантные решения банка: подходящих продуктов: 0",
+    "name": "get_bank_products",
+    "output": {
+     "args": {
+      "topics": [
+       "inflation",
+       "fuel_oil"
+      ]
+     }
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 9
+   },
+   {
+    "detail": "Быстрый разбор: эффект = чувствительность компании × направление события",
+    "name": "rules_compose",
+    "output": null,
+    "stage": "compose",
+    "status": "ok",
+    "step": 10
+   },
+   {
+    "detail": "Все проверки пройдены",
+    "name": "self_check_1",
+    "output": {
+     "checks": [
+      {
+       "name": "completeness",
+       "passed": true
+      },
+      {
+       "name": "sources_linked",
+       "passed": true
+      },
+      {
+       "name": "bank_view_grounded",
+       "passed": true
+      },
+      {
+       "name": "bank_view_found",
+       "passed": true
+      },
+      {
+       "name": "numbers_grounded",
+       "passed": true
+      },
+      {
+       "name": "consistent_with_client",
+       "passed": true
+      },
+      {
+       "name": "personalized",
+       "passed": true
+      },
+      {
+       "name": "evidence_boundaries",
+       "passed": true
+      },
+      {
+       "name": "headline_grounded",
+       "passed": true
+      },
+      {
+       "name": "bank_summary_grounded",
+       "passed": true
+      }
+     ],
+     "claim_errors": {}
+    },
+    "stage": "check",
+    "status": "ok",
+    "step": 11
+   },
+   {
+    "detail": "Быстрый разбор готов, источников: 7",
+    "name": "finalize",
+    "output": {},
+    "stage": "finalize",
+    "status": "ok",
+    "step": 12
+   }
+  ],
+  "what_happened": {
+   "actors": [
+    "Росстат"
+   ],
+   "assumptions": [
+    {
+     "features": [],
+     "origin": "ai",
+     "source_ids": [
+      "news:seed-fuel-prices"
+     ],
+     "text": "Это продолжение истории: 27.07.2026 уже была новость «Цены на бензин выросли на 26% за год»."
+    },
+    {
+     "features": [],
+     "origin": "ai",
+     "source_ids": [
+      "news:seed-inflation-week"
+     ],
+     "text": "Масштаб изменения: сильное, в новости — «на 0,91%»."
+    }
+   ],
+   "dates": [
+    "31 августа"
+   ],
+   "facts": [
+    {
+     "features": [],
+     "origin": "fact",
+     "source_ids": [
+      "news:seed-inflation-week"
+     ],
+     "text": "По данным Росстата, за неделю с 25 по 31 августа цены снизились на 0,01%."
+    },
+    {
+     "features": [],
+     "origin": "fact",
+     "source_ids": [
+      "news:seed-inflation-week"
+     ],
+     "text": "С начала года рост цен составил 4,67%, годовая инфляция ускорилась до 6,32%."
+    },
+    {
+     "features": [],
+     "origin": "fact",
+     "source_ids": [
+      "news:seed-inflation-week"
+     ],
+     "text": "Бензин подорожал на 0,91% за неделю после 0,89% неделей ранее, а плодоовощная продукция подешевела на 1,72%."
+    }
+   ],
+   "summary": "По данным Росстата, за неделю с 25 по 31 августа цены снизились на 0,01%."
+  },
+  "why_important": [
+   {
+    "features": [
+     "sector"
+    ],
+    "origin": "ai",
+    "source_ids": [
+     "client:profile"
+    ],
+    "text": "Прямых признаков чувствительности компании к теме не найдено. По доступным данным отрасли «Металлургия» нельзя уверенно оценить влияние."
+   }
+  ]
+ },
+ {
+  "actions": [
+   {
+    "features": [],
+    "origin": "ai",
+    "source_ids": [
+     "news:seed-fuel-prices",
+     "client:profile",
+     "bank:infl-02"
+    ],
+    "text": "Пересчитать логистические издержки и проверить условия топливных надбавок в договорах перевозки"
+   },
+   {
+    "features": [],
+    "origin": "ai",
+    "source_ids": [
+     "news:seed-fuel-prices",
+     "client:profile",
+     "bank:infl-02"
+    ],
+    "text": "Обновить бюджет с учетом прогноза инфляции банка и проверить индексацию в договорах"
+   }
+  ],
+  "bank_view": {
+   "available": true,
+   "conflicts": [
+    "Пересмотр прогноза курса доллара на 2027-12-31: 95.0 руб./$ в материале от 2026-09-07 → 93.0 руб./$ в материале от 2026-09-11."
+   ],
+   "summary": "Бензин подорожал на 0,91% н/н после 0,89% неделей ранее; ситуация на рынке топлива не позволяет считать волну роста цен исчерпанной — это важный проинфляционный риск.",
+   "theses": [
+    {
+     "features": [],
+     "origin": "bank",
+     "source_ids": [
+      "bank:infl-02"
+     ],
+     "text": "Бензин подорожал на 0,91% н/н после 0,89% неделей ранее; ситуация на рынке топлива не позволяет считать волну роста цен исчерпанной — это важный проинфляционный риск."
+    },
+    {
+     "features": [],
+     "origin": "bank",
+     "source_ids": [
+      "bank:rate-03"
+     ],
+     "text": "Инфляционные ожидания населения в августе составили 13,7% (среднее за 2025 г. — 13,2%); консенсус-прогноз инфляции на 2027 г. вырос с 4,9% до 5,2%; ожидания предприятий на 3 месяца — 7,0%."
+    }
+   ]
+  },
+  "company_id": "U_26",
+  "disclaimer": "Прототип для хакатона. Данные о компаниях обезличены, новости демо-ленты пересказывают материалы кейса. Материал не является инвестиционной рекомендацией. Выводы с пометкой «AI» сформированы автоматически.",
+  "effect": "none",
+  "fallback_reason": null,
+  "features_used": [
+   {
+    "label": "Отрасль",
+    "name": "sector",
+    "value": "Металлургия"
+   }
+  ],
+  "headline": "АО «Арматура Судьбы Трейд»: прямой связи с событием по имеющимся данным не видно.",
+  "mode": "rules",
+  "model": null,
+  "news_id": "seed-fuel-prices",
+  "opportunities": [],
+  "products": [],
+  "quality": {
+   "attempts": 1,
+   "checks": [
+    {
+     "detail": "Все разделы заполнены",
+     "name": "completeness",
+     "passed": true
+    },
+    {
+     "detail": "Каждое утверждение ссылается на источник",
+     "name": "sources_linked",
+     "passed": true
+    },
+    {
+     "detail": "Позиция банка опирается только на материалы банка",
+     "name": "bank_view_grounded",
+     "passed": true
+    },
+    {
+     "detail": "Найдены релевантные материалы банка",
+     "name": "bank_view_found",
+     "passed": true
+    },
+    {
+     "detail": "Все числа подтверждены источниками",
+     "name": "numbers_grounded",
+     "passed": true
+    },
+    {
+     "detail": "Противоречий с данными клиента нет",
+     "name": "consistent_with_client",
+     "passed": true
+    },
+    {
+     "detail": "Использовано признаков компании: 1",
+     "name": "personalized",
+     "passed": true
+    },
+    {
+     "detail": "Проверены типы источников, числа в указанных источниках и доступность признаков",
+     "name": "evidence_boundaries",
+     "passed": true
+    },
+    {
+     "detail": "Проверены числа и противоречия в заголовке",
+     "name": "headline_grounded",
+     "passed": true
+    },
+    {
+     "detail": "Резюме банка соответствует проверенному тезису",
+     "name": "bank_summary_grounded",
+     "passed": true
+    }
+   ],
+   "passed": true
+  },
+  "questions": [
+   "Какую долю себестоимости составляют топливо и логистика?",
+   "Есть ли в договорах механизмы индексации цен?"
+  ],
+  "relevance": {
+   "reasons": [
+    {
+     "feature": "magnitude",
+     "kind": "magnitude",
+     "origin": "news",
+     "text": "Сильное изменение: «на 26%»",
+     "topic": null,
+     "weight": 1.1
+    }
+   ],
+   "score": 0.0
+  },
+  "risks": [],
+  "role": "cfo",
+  "schema_version": "1.0.0",
+  "sources": [
+   {
+    "date": "2026-07-27",
+    "doc_id": null,
+    "excerpt": "Розничные цены на бензин выросли на 7% за июнь и на 26% за последние 12 месяцев по состоянию на 27 июля.",
+    "kind": "news",
+    "page": null,
+    "source_id": "news:seed-fuel-prices",
+    "title": "Цены на бензин выросли на 26% за год",
+    "url": null
+   },
+   {
+    "date": "2026-09-02",
+    "doc_id": "inflation_2026_09_02",
+    "excerpt": "Бензин подорожал на 0,91% н/н после 0,89% неделей ранее; ситуация на рынке топлива не позволяет считать волну роста цен исчерпанной — это важный проинфляционный риск.",
+    "kind": "bank_analytics",
+    "page": 1,
+    "source_id": "bank:infl-02",
+    "title": "Инфляция 25–31 августа: основные выводы",
+    "url": null
+   },
+   {
+    "date": "2026-09-11",
+    "doc_id": "rate_2026_09_11",
+    "excerpt": "Инфляционные ожидания населения в августе составили 13,7% (среднее за 2025 г. — 13,2%); консенсус-прогноз инфляции на 2027 г. вырос с 4,9% до 5,2%; ожидания предприятий на 3 месяца — 7,0%.",
+    "kind": "bank_analytics",
+    "page": 1,
+    "source_id": "bank:rate-03",
+    "title": "Ключевая ставка ЦБ РФ: ставка без изменения на 14,0%, риторика стала жестче",
+    "url": null
+   },
+   {
+    "date": "2026-09-11",
+    "doc_id": "rate_2026_09_11",
+    "excerpt": "Прогноз Альфа-Банка: инфляция 7,5% на конец 2026 г. и 5,5% на конец 2027 г.; средняя ставка 14,6% в 2026 г. и 13,0% в 2027 г.; курс 87,2 руб./$ и 13,0 руб./юань на конец 2026 г., 93,0 руб./$ и 13,8 руб./юань на конец 2027 г.",
+    "kind": "bank_analytics",
+    "page": 2,
+    "source_id": "bank:rate-06",
+    "title": "Ключевая ставка ЦБ РФ: ставка без изменения на 14,0%, риторика стала жестче",
+    "url": null
+   },
+   {
+    "date": "2026-09-07",
+    "doc_id": "macro_7m26",
+    "excerpt": "Таблица прогнозов (август 2026): инфляция 7,5% на конец 2026 г.; ставка на конец 2026 г. 13,5%, 2027 г. 12,0%; курс 87,2 руб./$ на конец 2026 г. и 95,0 руб./$ на конец 2027 г.; промпроизводство в августе 0,2% г/г.",
+    "kind": "bank_analytics",
+    "page": 3,
+    "source_id": "bank:m7-08",
+    "title": "Макростатистика 7М26: данные по рынку труда не подтверждают охлаждения экономики",
+    "url": null
+   },
+   {
+    "date": null,
+    "doc_id": null,
+    "excerpt": "24.10 Производство чугуна, стали и ферросплавов; регион Свердловская область",
+    "kind": "client_data",
+    "page": null,
+    "source_id": "client:profile",
+    "title": "Профиль АО «Арматура Судьбы Трейд» (данные кейса)",
+    "url": null
+   },
+   {
+    "date": null,
+    "doc_id": null,
+    "excerpt": "Поставщиков: 8, покупателей: 6",
+    "kind": "client_data",
+    "page": null,
+    "source_id": "client:payments",
+    "title": "Платежи компании (данные кейса)",
+    "url": null
+   }
+  ],
+  "title": "Цены на бензин выросли на 26% за год",
+  "trace": [
+   {
+    "detail": "Обязательные шаги: get_company_profile → get_exposures → get_counterparties → search_bank_analytics → check_forecast_conflicts → get_story_history → get_story_coverage → get_bank_products",
+    "name": "plan",
+    "output": {
+     "steps": [
+      {
+       "tool": "get_company_profile",
+       "why": "контекст компании"
+      },
+      {
+       "tool": "get_exposures",
+       "why": "через какие признаки событие касается компании"
+      },
+      {
+       "tool": "get_counterparties",
+       "why": "событие может прийти через цепочку поставок"
+      },
+      {
+       "tool": "search_bank_analytics",
+       "why": "позиция и прогнозы Альфа-Банка по теме"
+      },
+      {
+       "tool": "check_forecast_conflicts",
+       "why": "сверить прогнозы банка из разных материалов"
+      },
+      {
+       "tool": "get_story_history",
+       "why": "тренд или разовое событие"
+      },
+      {
+       "tool": "get_story_coverage",
+       "why": "сверить факты с другими источниками"
+      },
+      {
+       "tool": "get_bank_products",
+       "why": "релевантные решения банка"
+      }
+     ]
+    },
+    "stage": "plan",
+    "status": "ok",
+    "step": 1
+   },
+   {
+    "detail": "контекст компании: получено",
+    "name": "get_company_profile",
+    "output": {
+     "args": {}
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 2
+   },
+   {
+    "detail": "через какие признаки событие касается компании: найдено связей с компанией: 0",
+    "name": "get_exposures",
+    "output": {
+     "args": {
+      "topics": [
+       "fuel_oil",
+       "inflation"
+      ]
+     }
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 3
+   },
+   {
+    "detail": "событие может прийти через цепочку поставок: поставщиков 8, покупателей 6",
+    "name": "get_counterparties",
+    "output": {
+     "args": {}
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 4
+   },
+   {
+    "detail": "позиция и прогнозы Альфа-Банка по теме: найдено тезисов: 2",
+    "name": "search_bank_analytics",
+    "output": {
+     "args": {
+      "query": "Цены на бензин выросли на 26% за год Розничные цены на бензин выросли на 7% за июнь и на 26% за последние 12 месяцев по состоянию на 27 июля.",
+      "sectors": [
+       "metallurgy",
+       "agriculture_food",
+       "fuel_trade",
+       "retail",
+       "transport"
+      ],
+      "topics": [
+       "fuel_oil",
+       "inflation"
+      ]
+     },
+     "thesis_ids": [
+      "infl-02",
+      "rate-03"
+     ]
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 5
+   },
+   {
+    "detail": "сверить прогнозы банка из разных материалов: расхождения в прогнозах: 1",
+    "name": "check_forecast_conflicts",
+    "output": {
+     "args": {
+      "topics": [
+       "fuel_oil",
+       "inflation"
+      ]
+     }
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 6
+   },
+   {
+    "detail": "тренд или разовое событие: похожих событий раньше не было",
+    "name": "get_story_history",
+    "output": {
+     "args": {
+      "news_id": "seed-fuel-prices"
+     }
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 7
+   },
+   {
+    "detail": "сверить факты с другими источниками: других источников по событию нет",
+    "name": "get_story_coverage",
+    "output": {
+     "args": {
+      "news_id": "seed-fuel-prices"
+     }
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 8
+   },
+   {
+    "detail": "релевантные решения банка: подходящих продуктов: 0",
+    "name": "get_bank_products",
+    "output": {
+     "args": {
+      "topics": [
+       "fuel_oil",
+       "inflation"
+      ]
+     }
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 9
+   },
+   {
+    "detail": "Быстрый разбор: эффект = чувствительность компании × направление события",
+    "name": "rules_compose",
+    "output": null,
+    "stage": "compose",
+    "status": "ok",
+    "step": 10
+   },
+   {
+    "detail": "Все проверки пройдены",
+    "name": "self_check_1",
+    "output": {
+     "checks": [
+      {
+       "name": "completeness",
+       "passed": true
+      },
+      {
+       "name": "sources_linked",
+       "passed": true
+      },
+      {
+       "name": "bank_view_grounded",
+       "passed": true
+      },
+      {
+       "name": "bank_view_found",
+       "passed": true
+      },
+      {
+       "name": "numbers_grounded",
+       "passed": true
+      },
+      {
+       "name": "consistent_with_client",
+       "passed": true
+      },
+      {
+       "name": "personalized",
+       "passed": true
+      },
+      {
+       "name": "evidence_boundaries",
+       "passed": true
+      },
+      {
+       "name": "headline_grounded",
+       "passed": true
+      },
+      {
+       "name": "bank_summary_grounded",
+       "passed": true
+      }
+     ],
+     "claim_errors": {}
+    },
+    "stage": "check",
+    "status": "ok",
+    "step": 11
+   },
+   {
+    "detail": "Быстрый разбор готов, источников: 7",
+    "name": "finalize",
+    "output": {},
+    "stage": "finalize",
+    "status": "ok",
+    "step": 12
+   }
+  ],
+  "what_happened": {
+   "actors": [],
+   "assumptions": [
+    {
+     "features": [],
+     "origin": "ai",
+     "source_ids": [
+      "news:seed-fuel-prices"
+     ],
+     "text": "Масштаб изменения: сильное, в новости — «на 26%»."
+    }
+   ],
+   "dates": [
+    "27 июля"
+   ],
+   "facts": [
+    {
+     "features": [],
+     "origin": "fact",
+     "source_ids": [
+      "news:seed-fuel-prices"
+     ],
+     "text": "Розничные цены на бензин выросли на 7% за июнь и на 26% за последние 12 месяцев по состоянию на 27 июля."
+    },
+    {
+     "features": [],
+     "origin": "fact",
+     "source_ids": [
+      "news:seed-fuel-prices"
+     ],
+     "text": "Около трети месячного роста цен в июне было связано с топливом."
+    },
+    {
+     "features": [],
+     "origin": "fact",
+     "source_ids": [
+      "news:seed-fuel-prices"
+     ],
+     "text": "Производители переносят рост издержек на логистику и топливо в конечные цены, в том числе в продовольственном сегменте."
+    }
+   ],
+   "summary": "Розничные цены на бензин выросли на 7% за июнь и на 26% за последние 12 месяцев по состоянию на 27 июля."
+  },
+  "why_important": [
+   {
+    "features": [
+     "sector"
+    ],
+    "origin": "ai",
+    "source_ids": [
+     "client:profile"
+    ],
+    "text": "Прямых признаков чувствительности компании к теме не найдено. По доступным данным отрасли «Металлургия» нельзя уверенно оценить влияние."
+   }
+  ]
+ },
+ {
+  "actions": [
+   {
+    "features": [],
+    "origin": "ai",
+    "source_ids": [
+     "news:seed-autoloan-limits",
+     "client:profile"
+    ],
+    "text": "Заранее согласовать лимиты финансирования на следующий бюджетный период"
+   }
+  ],
+  "bank_view": {
+   "available": false,
+   "conflicts": [],
+   "summary": null,
+   "theses": []
+  },
+  "company_id": "U_26",
+  "disclaimer": "Прототип для хакатона. Данные о компаниях обезличены, новости демо-ленты пересказывают материалы кейса. Материал не является инвестиционной рекомендацией. Выводы с пометкой «AI» сформированы автоматически.",
+  "effect": "neg",
+  "fallback_reason": null,
+  "features_used": [
+   {
+    "label": "Группа компаний",
+    "name": "group",
+    "value": "3 компаний, выручка 158.3 млрд ₽"
+   },
+   {
+    "label": "Место в отрасли (выборка)",
+    "name": "market",
+    "value": "№1 из 32 по ОКВЭД 24.10"
+   },
+   {
+    "label": "Кредитные продукты",
+    "name": "products.loans",
+    "value": "есть"
+   }
+  ],
+  "headline": "АО «Арматура Судьбы Трейд»: доступ к кредиту и рефинансирование усложняются.",
+  "mode": "rules",
+  "model": null,
+  "news_id": "seed-autoloan-limits",
+  "opportunities": [],
+  "products": [
+   {
+    "product_id": "prod-factoring",
+    "reason": "Связано с темой «Финансы компаний»",
+    "text": "Ускорить оборачиваемость дебиторской задолженности при замедлении спроса.",
+    "title": "Факторинг"
+   },
+   {
+    "product_id": "prod-loan-refi",
+    "reason": "Связано с темой «Ключевая ставка»",
+    "text": "Обсудить с менеджером структуру долга: доля плавающей ставки, ковенанты, лимиты.",
+    "title": "Рефинансирование и кредитная линия с плавающей ставкой"
+   }
+  ],
+  "quality": {
+   "attempts": 1,
+   "checks": [
+    {
+     "detail": "Все разделы заполнены",
+     "name": "completeness",
+     "passed": true
+    },
+    {
+     "detail": "Каждое утверждение ссылается на источник",
+     "name": "sources_linked",
+     "passed": true
+    },
+    {
+     "detail": "Позиция банка опирается только на материалы банка",
+     "name": "bank_view_grounded",
+     "passed": true
+    },
+    {
+     "detail": "Поиск выполнен; материалов банка по теме нет, это явно указано",
+     "name": "bank_view_found",
+     "passed": true
+    },
+    {
+     "detail": "Все числа подтверждены источниками",
+     "name": "numbers_grounded",
+     "passed": true
+    },
+    {
+     "detail": "Противоречий с данными клиента нет",
+     "name": "consistent_with_client",
+     "passed": true
+    },
+    {
+     "detail": "Использовано признаков компании: 3",
+     "name": "personalized",
+     "passed": true
+    },
+    {
+     "detail": "Проверены типы источников, числа в указанных источниках и доступность признаков",
+     "name": "evidence_boundaries",
+     "passed": true
+    },
+    {
+     "detail": "Проверены числа и противоречия в заголовке",
+     "name": "headline_grounded",
+     "passed": true
+    },
+    {
+     "detail": "Резюме банка соответствует проверенному тезису",
+     "name": "bank_summary_grounded",
+     "passed": true
+    }
+   ],
+   "passed": true
+  },
+  "questions": [
+   "Какие лимиты финансирования согласованы на ближайшие 6 месяцев?"
+  ],
+  "relevance": {
+   "reasons": [
+    {
+     "feature": "products.loans",
+     "kind": "exposure",
+     "origin": "client_data",
+     "text": "Есть кредиты: условия кредитования влияют на финансирование",
+     "topic": "credit_market",
+     "weight": 1.2
+    },
+    {
+     "feature": "role",
+     "kind": "role",
+     "origin": "user",
+     "text": "Важная тема для финансового директора",
+     "topic": null,
+     "weight": 1.3
+    }
+   ],
+   "score": 32.9
+  },
+  "risks": [
+   {
+    "features": [
+     "products.loans"
+    ],
+    "origin": "ai",
+    "source_ids": [
+     "news:seed-autoloan-limits",
+     "client:profile"
+    ],
+    "text": "Доступ к кредиту и рефинансирование усложняются: есть кредиты — условия кредитования влияют на финансирование."
+   }
+  ],
+  "role": "cfo",
+  "schema_version": "1.0.0",
+  "sources": [
+   {
+    "date": "2026-08-05",
+    "doc_id": null,
+    "excerpt": "Банк России с 1 октября ужесточает макропруденциальные лимиты по автокредитам.",
+    "kind": "news",
+    "page": null,
+    "source_id": "news:seed-autoloan-limits",
+    "title": "С 1 октября ужесточаются макропруденциальные лимиты по автокредитам",
+    "url": null
+   },
+   {
+    "date": null,
+    "doc_id": null,
+    "excerpt": "24.10 Производство чугуна, стали и ферросплавов; регион Свердловская область",
+    "kind": "client_data",
+    "page": null,
+    "source_id": "client:profile",
+    "title": "Профиль АО «Арматура Судьбы Трейд» (данные кейса)",
+    "url": null
+   },
+   {
+    "date": null,
+    "doc_id": null,
+    "excerpt": "Поставщиков: 8, покупателей: 6",
+    "kind": "client_data",
+    "page": null,
+    "source_id": "client:payments",
+    "title": "Платежи компании (данные кейса)",
+    "url": null
+   },
+   {
+    "date": null,
+    "doc_id": null,
+    "excerpt": "Ускорить оборачиваемость дебиторской задолженности при замедлении спроса.",
+    "kind": "bank_product",
+    "page": null,
+    "source_id": "product:prod-factoring",
+    "title": "Факторинг",
+    "url": null
+   },
+   {
+    "date": null,
+    "doc_id": null,
+    "excerpt": "Обсудить с менеджером структуру долга: доля плавающей ставки, ковенанты, лимиты.",
+    "kind": "bank_product",
+    "page": null,
+    "source_id": "product:prod-loan-refi",
+    "title": "Рефинансирование и кредитная линия с плавающей ставкой",
+    "url": null
+   }
+  ],
+  "title": "С 1 октября ужесточаются макропруденциальные лимиты по автокредитам",
+  "trace": [
+   {
+    "detail": "Обязательные шаги: get_company_profile → get_exposures → get_counterparties → search_bank_analytics → check_forecast_conflicts → get_story_history → get_story_coverage → get_bank_products",
+    "name": "plan",
+    "output": {
+     "steps": [
+      {
+       "tool": "get_company_profile",
+       "why": "контекст компании"
+      },
+      {
+       "tool": "get_exposures",
+       "why": "через какие признаки событие касается компании"
+      },
+      {
+       "tool": "get_counterparties",
+       "why": "событие может прийти через цепочку поставок"
+      },
+      {
+       "tool": "search_bank_analytics",
+       "why": "позиция и прогнозы Альфа-Банка по теме"
+      },
+      {
+       "tool": "check_forecast_conflicts",
+       "why": "сверить прогнозы банка из разных материалов"
+      },
+      {
+       "tool": "get_story_history",
+       "why": "тренд или разовое событие"
+      },
+      {
+       "tool": "get_story_coverage",
+       "why": "сверить факты с другими источниками"
+      },
+      {
+       "tool": "get_bank_products",
+       "why": "релевантные решения банка"
+      }
+     ]
+    },
+    "stage": "plan",
+    "status": "ok",
+    "step": 1
+   },
+   {
+    "detail": "контекст компании: получено",
+    "name": "get_company_profile",
+    "output": {
+     "args": {}
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 2
+   },
+   {
+    "detail": "через какие признаки событие касается компании: найдено связей с компанией: 1",
+    "name": "get_exposures",
+    "output": {
+     "args": {
+      "topics": [
+       "credit_market"
+      ]
+     }
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 3
+   },
+   {
+    "detail": "событие может прийти через цепочку поставок: поставщиков 8, покупателей 6",
+    "name": "get_counterparties",
+    "output": {
+     "args": {}
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 4
+   },
+   {
+    "detail": "позиция и прогнозы Альфа-Банка по теме: материалы не найдены",
+    "name": "search_bank_analytics",
+    "output": {
+     "args": {
+      "query": "С 1 октября ужесточаются макропруденциальные лимиты по автокредитам Банк России с 1 октября ужесточает макропруденциальные лимиты по автокредитам.",
+      "sectors": [
+       "metallurgy",
+       "auto"
+      ],
+      "topics": [
+       "credit_market"
+      ]
+     },
+     "thesis_ids": []
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 5
+   },
+   {
+    "detail": "сверить прогнозы банка из разных материалов: прогнозы не расходятся",
+    "name": "check_forecast_conflicts",
+    "output": {
+     "args": {
+      "topics": [
+       "credit_market"
+      ]
+     }
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 6
+   },
+   {
+    "detail": "тренд или разовое событие: похожих событий раньше не было",
+    "name": "get_story_history",
+    "output": {
+     "args": {
+      "news_id": "seed-autoloan-limits"
+     }
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 7
+   },
+   {
+    "detail": "сверить факты с другими источниками: других источников по событию нет",
+    "name": "get_story_coverage",
+    "output": {
+     "args": {
+      "news_id": "seed-autoloan-limits"
+     }
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 8
+   },
+   {
+    "detail": "релевантные решения банка: подходящих продуктов: 2",
+    "name": "get_bank_products",
+    "output": {
+     "args": {
+      "topics": [
+       "credit_market"
+      ]
+     }
+    },
+    "stage": "tool",
+    "status": "ok",
+    "step": 9
+   },
+   {
+    "detail": "Быстрый разбор: эффект = чувствительность компании × направление события",
+    "name": "rules_compose",
+    "output": null,
+    "stage": "compose",
+    "status": "ok",
+    "step": 10
+   },
+   {
+    "detail": "Все проверки пройдены",
+    "name": "self_check_1",
+    "output": {
+     "checks": [
+      {
+       "name": "completeness",
+       "passed": true
+      },
+      {
+       "name": "sources_linked",
+       "passed": true
+      },
+      {
+       "name": "bank_view_grounded",
+       "passed": true
+      },
+      {
+       "name": "bank_view_found",
+       "passed": true
+      },
+      {
+       "name": "numbers_grounded",
+       "passed": true
+      },
+      {
+       "name": "consistent_with_client",
+       "passed": true
+      },
+      {
+       "name": "personalized",
+       "passed": true
+      },
+      {
+       "name": "evidence_boundaries",
+       "passed": true
+      },
+      {
+       "name": "headline_grounded",
+       "passed": true
+      },
+      {
+       "name": "bank_summary_grounded",
+       "passed": true
+      }
+     ],
+     "claim_errors": {}
+    },
+    "stage": "check",
+    "status": "ok",
+    "step": 11
+   },
+   {
+    "detail": "Быстрый разбор готов, источников: 5",
+    "name": "finalize",
+    "output": {},
+    "stage": "finalize",
+    "status": "ok",
+    "step": 12
+   }
+  ],
+  "what_happened": {
+   "actors": [
+    "Банк России"
+   ],
+   "assumptions": [],
+   "dates": [
+    "1 октября"
+   ],
+   "facts": [
+    {
+     "features": [],
+     "origin": "fact",
+     "source_ids": [
+      "news:seed-autoloan-limits"
+     ],
+     "text": "Банк России с 1 октября ужесточает макропруденциальные лимиты по автокредитам."
+    },
+    {
+     "features": [],
+     "origin": "fact",
+     "source_ids": [
+      "news:seed-autoloan-limits"
+     ],
+     "text": "В июне в России продано 118 тысяч новых легковых автомобилей, что на 30% выше уровня июня 2025 года, однако выдачи автокредитов снижаются."
+    },
+    {
+     "features": [],
+     "origin": "fact",
+     "source_ids": [
+      "news:seed-autoloan-limits"
+     ],
+     "text": "Аналитики ожидают, что годовая динамика продаж автомобилей в ближайшие месяцы уйдет в отрицательную зону."
+    }
+   ],
+   "summary": "Банк России с 1 октября ужесточает макропруденциальные лимиты по автокредитам."
+  },
+  "why_important": [
+   {
+    "features": [
+     "products.loans"
+    ],
+    "origin": "ai",
+    "source_ids": [
+     "news:seed-autoloan-limits",
+     "client:profile"
+    ],
+    "text": "В новости: «Банк России с 1 октября ужесточает макропруденциальные лимиты по автокредитам». Для компании это важно: есть кредиты — условия кредитования влияют на финансирование."
+   },
+   {
+    "features": [
+     "group"
+    ],
+    "origin": "client_data",
+    "source_ids": [
+     "client:profile"
+    ],
+    "text": "Входит в группу из 3 компаний (158.3 млрд ₽; металлургия 67%) — эффект стоит оценивать для всей группы."
+   },
+   {
+    "features": [
+     "market"
+    ],
+    "origin": "client_data",
+    "source_ids": [
+     "client:profile"
+    ],
+    "text": "№1 из 32 по выручке в отрасли (ОКВЭД 24.10), доля 34,3% в выборке."
+   }
+  ]
+ }
+]

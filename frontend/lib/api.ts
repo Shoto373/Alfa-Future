@@ -1,5 +1,5 @@
 import type {
-  Answer, BankDocument, CompanyProfile, CompanySummary, Exposure, FeedItem, Insight, LookupCompany, Member, Membership, Meta, NewsBrief, Role, TopicCount, StoryChip, User, } from "./types";
+  Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, LookupCompany, Member, Membership, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
@@ -54,6 +54,7 @@ const json = (method: string, data: unknown): RequestInit => ({
 });
 
 const cid = encodeURIComponent;
+export const FEED_LIMIT = 500;
 
 export const api = {
   me: (signal?: AbortSignal) => request<User>("/api/v1/auth/me", {}, { signal }),
@@ -79,14 +80,27 @@ export const api = {
   meta: (signal?: AbortSignal) => request<Meta>("/api/v1/meta", {}, { signal }),
   company: (id: string, signal?: AbortSignal) =>
     request<{ profile: CompanyProfile; exposures: Exposure[] }>(`/api/v1/companies/${encodeURIComponent(id)}`, {}, { signal }),
+  companyExtra: (id: string, signal?: AbortSignal) =>
+    request<CompanyExtra>(`/api/v1/companies/${cid(id)}/extra`, {}, { signal }),
+  saveCompanyExtra: (id: string, data: { shares: CompanyExtra["shares"]; notes: string }) =>
+    request<CompanyExtra>(`/api/v1/companies/${cid(id)}/extra`, json("PUT", data)),
+  // Файл — телом запроса (без multipart): сервер сам извлекает из него текст.
+  uploadCompanyFile: (id: string, file: File) =>
+    request<CompanyExtra>(`/api/v1/companies/${cid(id)}/extra/files?name=${encodeURIComponent(file.name)}`,
+      { method: "POST", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file }, { timeoutMs: 120_000 }),
+  deleteCompanyFile: (id: string, fileId: string) =>
+    request<CompanyExtra>(`/api/v1/companies/${cid(id)}/extra/files/${cid(fileId)}`, { method: "DELETE" }),
+  // Всегда вся лента компании (FEED_LIMIT): главная, лента и уведомления считают по одному списку.
   feed: (companyId: string, topic?: string, signal?: AbortSignal, story?: string) =>
-    request<{ items: FeedItem[]; topic_counts: TopicCount[]; stories: StoryChip[] }>(
-      `/api/v1/feed?company_id=${encodeURIComponent(companyId)}${topic ? `&topic=${encodeURIComponent(topic)}` : ""}` +
+    request<FeedPage>(
+      `/api/v1/feed?company_id=${encodeURIComponent(companyId)}&limit=${FEED_LIMIT}${topic ? `&topic=${encodeURIComponent(topic)}` : ""}` +
       `${story ? `&story=${encodeURIComponent(story)}` : ""}`, {}, { signal }),
   // fast: готовая карточка или разбор на правилах без LLM за доли секунды; без fast — версия модели.
-  insight: (companyId: string, newsId: string, opts: { force?: boolean; fast?: boolean } = {}, signal?: AbortSignal) =>
+  // perspective — другой разрез: тот же разбор глазами другой роли (по умолчанию — своя роль).
+  insight: (companyId: string, newsId: string, opts: { force?: boolean; fast?: boolean; perspective?: Role } = {}, signal?: AbortSignal) =>
     request<Insight>("/api/v1/insights", json("POST", {
       company_id: companyId, news_id: newsId, force_refresh: !!opts.force, fast: !!opts.fast,
+      ...(opts.perspective ? { perspective: opts.perspective } : {}),
     }), { signal, timeoutMs: opts.fast ? 30_000 : 180_000 }),
   ask: (insightId: string, question: string) =>
     request<Answer>(`/api/v1/insights/${insightId}/questions`, json("POST", { question }), { timeoutMs: 90_000 }),
@@ -95,7 +109,13 @@ export const api = {
   addNews: (payload: { title?: string; text?: string; url?: string }) =>
     request<{ created: boolean; duplicate_of: string | null; news: NewsBrief }>("/api/v1/news", json("POST", payload), { timeoutMs: 30_000 }),
   analytics: () => request<{ documents: BankDocument[] }>("/api/v1/analytics"),
-  metrics: () => request<Record<string, any>>("/api/v1/metrics"),
-  audit: () => request<{ items: Record<string, any>[] }>("/api/v1/audit?limit=60"),
+  // Сводка для сотрудника банка; интерфейсу нужен только расход бюджета, остальное — для API-клиентов.
+  metrics: () => request<{ ai?: { llm_usage?: LLMBudget } } & Record<string, unknown>>("/api/v1/metrics"),
+  audit: () => request<{ items: Record<string, unknown>[] }>("/api/v1/audit?limit=60"),
+  // Сотрудник банка: выключатель AI без удаления ключа с сервера.
+  llmSwitch: () => request<LLMSwitch>("/api/v1/ops/llm"),
+  setLLMPaused: (paused: boolean) => request<LLMSwitch>("/api/v1/ops/llm", json("POST", { paused })),
+  qualityOverview: (hours: number, signal?: AbortSignal) =>
+    request<QualityOverview>(`/api/v1/metrics/overview?hours=${hours}`, {}, { signal }),
   pdfUrl: (docId: string, page?: number | null) => `${API_BASE_URL}/api/v1/analytics/${docId}/pdf${page ? `#page=${page}` : ""}`,
 };

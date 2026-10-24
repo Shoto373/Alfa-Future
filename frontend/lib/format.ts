@@ -36,5 +36,5 @@ export const ORIGIN_LABEL: Record<string, string> = {
   client_data: "Данные компании",
   bank: "Альфа-Банк",
   ai: "Вывод AI",
-  rules: "Вывод по правилам",
+  rules: "Быстрый разбор",
 };

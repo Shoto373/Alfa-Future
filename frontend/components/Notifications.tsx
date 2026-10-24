@@ -24,18 +24,19 @@ export default function Notifications() {
   const { session } = useSession();
   const companyId = session!.companyId;
   const { read, mark } = useRead(session!.user.user_id, companyId);
-  const [items, setItems] = useState<FeedItem[] | null>(null);
+  // Список привязан к компании: при переключении прежний не показывается.
+  const [loaded, setLoaded] = useState<{ companyId: string; items: FeedItem[] } | null>(null);
+  const items = loaded?.companyId === companyId ? loaded.items : null;
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback((signal?: AbortSignal) => {
     api.feed(companyId, undefined, signal)
-      .then((r) => setItems(r.items.filter((i) => i.relevance.score >= IMPORTANT)))
+      .then((r) => setLoaded({ companyId, items: r.items.filter((i) => i.relevance.score >= IMPORTANT) }))
       .catch(() => { /* оставляем прежний список, повторим при следующем обновлении */ });
   }, [companyId]);
 
   useEffect(() => {
-    setItems(null);
     const c = new AbortController();
     refresh(c.signal);
     const timer = setInterval(() => refresh(c.signal), REFRESH_MS);
@@ -71,7 +72,7 @@ export default function Notifications() {
             )}
           </div>
           <div className={styles.notifBody} role="region" aria-label="Список уведомлений" tabIndex={0}>
-            {items === null && <p className={`${common.muted} ${common.small}`}>Загружаем…</p>}
+            {items === null && <p className={`${common.muted} ${common.small}`} role="status">Загружаем…</p>}
             {items !== null && all.length === 0 && <p className={`${common.muted} ${common.small}`}>Сейчас нет событий с высокой релевантностью.</p>}
             {items !== null && all.length > 0 && unread.length === 0 && <p className={`${common.muted} ${common.small}`}>Новых событий нет. Ниже история.</p>}
             <ul>

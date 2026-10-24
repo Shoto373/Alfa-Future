@@ -55,6 +55,11 @@ jobs:
           python -m unittest discover -s deploy/tests -v
           python -m pytest backend/tests -v
 
+      - name: Architecture (layers, cycles, function size)
+        if: always()
+        working-directory: backend
+        run: python tools/check_imports.py
+
       # Порог качества проверяет tests/test_golden_quality.py; здесь — читаемый отчет по golden set.
       - name: Quality report (golden set, rules)
         if: always()
@@ -82,6 +87,16 @@ jobs:
           bash -n deploy/gitops/alfa-gitops
           bash -n deploy/gitops/install.sh
 
+      # Ключи, .env, материалы кейса и реальные данные клиентов не должны попасть в репозиторий.
+      - name: Repository hygiene
+        run: |
+          if git ls-files | grep -E '(^|/)\.env$|(^|/)\.env\.[^e]|контекст/|phone1|\.(pem|key|docx|pdf)$'; then
+            echo "::error::В репозитории файлы, которых там быть не должно (список выше)"; exit 1
+          fi
+          if git ls-files '*.csv' | grep -v '^data/synthetic/'; then
+            echo "::error::CSV вне data/synthetic — реальные данные не коммитятся"; exit 1
+          fi
+
   frontend:
     runs-on: ubuntu-latest
     steps:
@@ -91,12 +106,53 @@ jobs:
           node-version: "20"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - name: Install, typecheck, build
+      - name: Install, lint, typecheck, build
         working-directory: frontend
         run: |
           npm ci
+          npm run lint
           npm run build
           npm run typecheck
+
+  # Интерфейс в настоящем браузере: сервис поднимается как у жюри (compose.yaml, без ключа LLM — правила),
+  # e2e-тесты Playwright проходят сценарии; при падении — скриншоты и трассы артефактом.
+  ui:
+    needs: [frontend]
+    # Playwright 1.56 ставит браузер и его системные библиотеки только на поддерживаемые версии Ubuntu:
+    # ubuntu-latest уже 26.04, поэтому версия закреплена (обновить вместе с @playwright/test).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start service (compose.yaml)
+        run: docker compose -f compose.yaml up --build -d --wait
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install Playwright
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: UI tests
+        working-directory: frontend
+        run: |
+          mkdir -p ../data/review/acceptance
+          npx playwright test
+      - name: Service logs
+        if: failure()
+        run: docker compose -f compose.yaml logs --tail=200 backend frontend
+      - name: Upload screenshots and traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-results
+          path: |
+            frontend/test-results
+            data/review/acceptance
+          if-no-files-found: ignore
 
   images:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
