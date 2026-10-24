@@ -24,7 +24,7 @@ from pathlib import Path
 import numpy as np
 from sqlalchemy import func, select
 
-from app import config, database, embeddings, vectors
+from app import config, database, embeddings, vector_store, vectors
 from app.models import News
 from app.news import llm_classify, semantic
 from app.news.classifier import classify, tokenize
@@ -261,7 +261,7 @@ def _state_now(db=None, force: bool = False) -> _State:
 
 def _news_vectors(items: list[dict]) -> None:
     """Заголовки в векторном хранилище: по ним агент ищет предыдущие события сюжета."""
-    vectors.sync(vectors.NEWS, [(i["news_id"], i["title"], {
+    vectors.sync(vector_store.NEWS, [(i["news_id"], i["title"], {
         "published_at": i["published_at"], "topics": [t["topic"] for t in i["classification"]["topics"]]})
         for i in items])
 

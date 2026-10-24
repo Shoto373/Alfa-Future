@@ -4,7 +4,7 @@
 from fastapi import APIRouter, Depends, Request, Response
 
 from app import config
-from app.api.errors import ApiError
+from app.errors import ApiError
 from app.api.router import ERRORS, company_or_404
 from app.auth import security, store
 from app.auth.deps import COOKIE, check_origin, client_ip, current_user, member_of, require_admin, require_member

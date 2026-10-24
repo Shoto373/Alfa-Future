@@ -8,12 +8,11 @@ from fastapi.responses import FileResponse
 
 from app import cache, config, embeddings, llm, llm_usage, pipeline, quality, storage, vectors
 from app.agent import audit, orchestrator, qa
-from app.api.errors import ApiError
 from app.auth import store as auth_store
 from app.auth.deps import check_origin, current_user, member_of, require_operator
 from app.companies import profiles
 from app.companies.sectors import SECTOR_NAMES
-from app.errors import AnalysisUnavailable, InvalidAnalysisResult
+from app.errors import AnalysisUnavailable, ApiError, InvalidAnalysisResult
 from app.knowledge import kb
 from app.news import parser, store
 from app.news.taxonomy import TOPICS

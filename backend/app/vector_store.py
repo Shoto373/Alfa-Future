@@ -29,7 +29,7 @@ def enabled() -> bool:
     return config.embeddings_settings()["persist"]
 
 
-def _fits(vec) -> bool:
+def fits(vec) -> bool:
     return getattr(vec, "shape", (len(vec),))[-1] == VECTOR_DIM
 
 
@@ -57,7 +57,7 @@ def load(collection: str, model: str, ids: list[str] | None = None) -> dict[str,
 
 def save(collection: str, model: str, rows: list[tuple[str, str, np.ndarray, dict]]) -> None:
     """Upsert (item_id, text_hash, вектор, payload). Векторы другой размерности не сохраняются."""
-    rows = [r for r in rows if _fits(r[2])]
+    rows = [r for r in rows if fits(r[2])]
     if not enabled() or not rows:
         return
     try:

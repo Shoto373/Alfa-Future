@@ -8,7 +8,7 @@
 from dataclasses import dataclass
 from typing import Callable
 
-from app import embeddings, vectors
+from app import embeddings, vector_store, vectors
 from app.agent import audit
 from app.companies import profiles
 from app.companies.sectors import SECTOR_NAMES
@@ -84,7 +84,7 @@ def _story_by_vectors(current: dict, main: set[str]) -> list[dict] | None:
     query = embeddings.embed([current["title"]])
     if query is None:
         return None
-    found = vectors.nearest(vectors.NEWS, embeddings.as_matrix(query)[0], k=STORY_CANDIDATES,
+    found = vectors.nearest(vector_store.NEWS, embeddings.as_matrix(query)[0], k=STORY_CANDIDATES,
                             exclude=[current["news_id"]], published_before=current["published_at"],
                             topics_any=sorted(main))
     if found is None:

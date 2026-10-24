@@ -5,7 +5,7 @@ import ipaddress
 from fastapi import Cookie, Depends, Request
 
 from app import config
-from app.api.errors import ApiError
+from app.errors import ApiError
 from app.auth import store
 
 COOKIE = "session"

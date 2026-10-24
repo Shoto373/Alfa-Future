@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from sqlalchemy import select
 
-from app import cache, database, embeddings, ranking, vectors
+from app import cache, database, embeddings, ranking, vector_store, vectors
 from app.agent import tools
 from app.models import VECTOR_DIM, News, VectorItem
 from app.news import semantic, store
@@ -52,7 +52,7 @@ def test_vectors_survive_restart_without_recomputing(model):
     first = embeddings.embed(["ключевая ставка", "курс рубля"])
     assert first.shape == (2, VECTOR_DIM) and np.allclose(np.linalg.norm(first, axis=1), 1.0)
     assert model.calls == [["ключевая ставка", "курс рубля"]]
-    assert {r.item_id for r in _rows(vectors.CACHE)} == {vectors.text_hash("ключевая ставка"), vectors.text_hash("курс рубля")}
+    assert {r.item_id for r in _rows(vector_store.CACHE)} == {vector_store.text_hash("ключевая ставка"), vector_store.text_hash("курс рубля")}
 
     embeddings._cache.clear()  # как после рестарта процесса
     again = embeddings.embed(["курс рубля"])
@@ -71,7 +71,7 @@ def test_warm_preloads_stored_vectors(model):
 
 def test_news_titles_are_indexed_and_story_uses_vector_search(model, monkeypatch):
     store.warm()
-    titles = {r.item_id for r in _rows(vectors.NEWS)}
+    titles = {r.item_id for r in _rows(vector_store.NEWS)}
     assert titles == {n["news_id"] for n in store.all_items()}
 
     earlier = store.make_item("ЦБ повысил ключевую ставку до 17%", "Банк России повысил ключевую ставку до 17% годовых.",
@@ -80,9 +80,9 @@ def test_news_titles_are_indexed_and_story_uses_vector_search(model, monkeypatch
                             "Совет директоров регулятора снова принял решение: ставка 18% годовых на фоне инфляции.",
                             "Тест", published_at="2026-10-01T10:00:00+00:00")
     assert store.add(earlier)[1] and store.add(later)[1]
-    assert {earlier["news_id"], later["news_id"]} <= {r.item_id for r in _rows(vectors.NEWS)}
+    assert {earlier["news_id"], later["news_id"]} <= {r.item_id for r in _rows(vector_store.NEWS)}
 
-    found = vectors.nearest(vectors.NEWS, embeddings.embed([later["title"]])[0], k=5, exclude=[later["news_id"]],
+    found = vectors.nearest(vector_store.NEWS, embeddings.embed([later["title"]])[0], k=5, exclude=[later["news_id"]],
                             published_before=later["published_at"], topics_any=["key_rate"])
     assert found and found[0][0] == earlier["news_id"] and found[0][1] > 0.8
 
@@ -95,13 +95,13 @@ def test_news_titles_are_indexed_and_story_uses_vector_search(model, monkeypatch
 def test_thesis_vectors_are_stored_and_pruned(model):
     from app.knowledge import kb
     kb._thesis_vectors.cache_clear()
-    assert kb.warm() == len(_rows(vectors.THESIS))
+    assert kb.warm() == len(_rows(vector_store.THESIS))
     with database.session() as db:
-        db.add(VectorItem(collection=vectors.THESIS, model="test/bag-of-words", item_id="gone", text_hash="x",
+        db.add(VectorItem(collection=vector_store.THESIS, model="test/bag-of-words", item_id="gone", text_hash="x",
                           embedding=np.ones(VECTOR_DIM, dtype=np.float32), payload={}))
     kb._thesis_vectors.cache_clear()
     kb.warm()
-    assert "gone" not in {r.item_id for r in _rows(vectors.THESIS)}
+    assert "gone" not in {r.item_id for r in _rows(vector_store.THESIS)}
     sims = kb._dense("ключевая ставка Банка России")
     assert sims and set(sims) == {t["id"] for t in kb._kb()["theses"]}
 

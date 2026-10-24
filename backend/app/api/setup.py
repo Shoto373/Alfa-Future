@@ -9,7 +9,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import config
-from app.api.errors import ApiError, error_response
+from app.api.errors import error_response
+from app.errors import ApiError
 
 logger = logging.getLogger("app.api")
 

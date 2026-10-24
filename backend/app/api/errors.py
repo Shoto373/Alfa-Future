@@ -2,7 +2,7 @@
 
 from fastapi.responses import JSONResponse
 
-from app.errors import STATUS, ApiError  # noqa: F401 — ApiError и коды живут в базовом слое
+from app.errors import STATUS  # коды и ApiError — в базовом слое app/errors.py
 from app.schemas import ErrorDetail, ErrorResponse
 
 MESSAGES = {

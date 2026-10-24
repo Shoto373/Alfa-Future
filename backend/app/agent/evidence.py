@@ -6,7 +6,7 @@ statements must be exact reviewed theses; uncertain AI claims remain labelled AI
 import json
 import re
 
-from app.text import INSTRUCTION, safe_text  # noqa: F401 — часть интерфейса границ доказательств
+from app.text import INSTRUCTION, safe_text
 
 
 def normalized(text: str) -> str:

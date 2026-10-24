@@ -9,6 +9,7 @@ import re
 
 from app.agent import composer, evidence
 from app.news.store import similarity
+from app.text import INSTRUCTION
 
 _NUM = re.compile(r"\d+(?:[.,]\d+)?")
 _THOUSANDS = re.compile(r"(?<=\d)[  ](?=\d{3}(?!\d))")
@@ -68,7 +69,7 @@ def claim_errors(section: str, c: dict, ctx: dict, source_ids: set[str]) -> set[
         errors.add("numbers")
     if c.get("origin") in ("ai", "client_data") and evidence.contradictions(c["text"], ctx["company"]):
         errors.add("contradictions")
-    if evidence.INSTRUCTION.search(c["text"]):
+    if INSTRUCTION.search(c["text"]):
         errors.add("instruction")
     return errors
 

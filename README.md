@@ -140,11 +140,11 @@ docker compose -f compose.yaml exec backend python -m app.legacy_import --path /
 | core | `config`, `database`, `models`, `cache`, `vector_store`, `embeddings`, `vectors`, `llm`, `llm_usage`, `notify`, `errors`, `schemas`, `text` | Настройки, база и ORM, кэш, хранение векторов, клиент LLM с учетом бюджета, исключения, контракты API, очистка текста |
 | domain | `companies`, `news`, `knowledge`, `auth.store`, `auth.security` | Профили компаний, новости и классификация, аналитика банка, учетные записи |
 | ranking | `ranking` | Релевантность события для компании и роли, лента, оценки тем пользователями |
-| agent | `agent` | `orchestrator` — запуск и один разбор на всех ожидающих; `stages` — этапы plan → collect → draft → verify_and_fix → finalize; `composer` — разбор правилами; `validators`, `review`, `tools`, `qa` |
+| agent | `agent` | `orchestrator` — запуск и один разбор на всех ожидающих; `stages` — этапы plan → collect → draft → verify_and_fix → finalize; `context` — источники, признаки, ответы модели; `composer` — разбор правилами; `validators`, `review`, `tools`, `qa` |
 | services | `storage`, `pipeline`, `warmup`, `quality`, `demo`, `demo_accounts`, `precompute_demo`, `eval_*`, `legacy_import`, `smoke` | Хранение разборов и событий, фоновый конвейер, прогрев, отчеты и инструменты |
 | api | `api`, `auth.deps`, `auth.router`, `main` | HTTP API, права доступа, запуск приложения |
 
-Переработка не меняет поведение: `tests/test_characterization.py` сверяет 24 разбора (металлург и автодилер × 3 роли × 4 новости, режим правил) со снимками в `tests/fixtures/characterization`. Намеренное изменение разборов — `UPDATE_CHARACTERIZATION=1 python -m pytest tests/test_characterization.py` и просмотр diff снимков.
+Переработка не меняет поведение: `tests/test_characterization.py` сверяет со снимками в `tests/fixtures/characterization` 24 разбора на правилах (металлург и автодилер × 3 роли × 4 новости) и 8 разборов с моделью на записанных ответах (план, черновик, исправление, смысловая проверка, откат к правилам) — сеть не вызывается. Намеренное изменение разборов — `UPDATE_CHARACTERIZATION=1 python -m pytest tests/test_characterization.py` и просмотр diff снимков.
 
 ## Отбор событий и достоверность
 

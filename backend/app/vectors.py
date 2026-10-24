@@ -19,12 +19,8 @@ from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import array
 from sqlalchemy.exc import SQLAlchemyError
 
-from app import database, embeddings
+from app import database, embeddings, vector_store
 from app.models import VectorItem
-# Хранение — в vector_store (ниже embeddings); здесь те же имена для вызывающего кода.
-from app.vector_store import (  # noqa: F401
-    CACHE, CHUNK, NEWS, THESIS, _fits, enabled, load, prune, save, text_hash, update_payloads,
-)
 
 logger = logging.getLogger("app.vectors")
 
@@ -37,12 +33,12 @@ def sync(collection: str, items: list[tuple[str, str, dict]], prune_missing: boo
     model = embeddings.model_name()
     if model is None:
         return None
-    existing = load(collection, model, None if prune_missing else [i for i, _, _ in items])
+    existing = vector_store.load(collection, model, None if prune_missing else [i for i, _, _ in items])
     out: dict[str, np.ndarray] = {}
     stale, payloads = [], {}
     for item_id, text_, payload in items:
         row = existing.get(item_id)
-        if row is not None and row[0] == text_hash(text_):
+        if row is not None and row[0] == vector_store.text_hash(text_):
             out[item_id] = row[1]
             if row[2] != payload:
                 payloads[item_id] = payload
@@ -55,11 +51,11 @@ def sync(collection: str, items: list[tuple[str, str, dict]], prune_missing: boo
         rows = []
         for (item_id, text_, payload), vec in zip(stale, vecs):
             out[item_id] = np.asarray(vec, dtype=np.float32)
-            rows.append((item_id, text_hash(text_), out[item_id], payload))
-        save(collection, model, rows)
-    update_payloads(collection, model, payloads)
+            rows.append((item_id, vector_store.text_hash(text_), out[item_id], payload))
+        vector_store.save(collection, model, rows)
+    vector_store.update_payloads(collection, model, payloads)
     if prune_missing:
-        prune(collection, model, {i for i, _, _ in items})
+        vector_store.prune(collection, model, {i for i, _, _ in items})
     return out
 
 
@@ -67,7 +63,7 @@ def nearest(collection: str, vec, k: int = 10, exclude: list[str] | None = None,
             published_before: str | None = None, topics_any: list[str] | None = None) -> list[tuple[str, float, dict]] | None:
     """Ближайшие по косинусу элементы коллекции: [(item_id, сходство, payload)], None — поиск недоступен."""
     model = embeddings.model_name()
-    if model is None or not enabled() or not _fits(vec):
+    if model is None or not vector_store.enabled() or not vector_store.fits(vec):
         return None
     query = np.asarray(vec, dtype=np.float32)
     distance = VectorItem.embedding.cosine_distance(query)
@@ -95,7 +91,7 @@ def nearest(collection: str, vec, k: int = 10, exclude: list[str] | None = None,
 def stats() -> dict[str, int]:
     """Число векторов по коллекциям текущей модели (для /meta и логов прогрева)."""
     model = embeddings.model_name()
-    if model is None or not enabled():
+    if model is None or not vector_store.enabled():
         return {}
     try:
         with database.session() as db:

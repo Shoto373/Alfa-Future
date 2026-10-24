@@ -18,7 +18,7 @@ from pathlib import Path
 from app.news.classifier import tokenize
 import numpy as np
 
-from app import config, database, embeddings, vectors
+from app import config, database, embeddings, vector_store, vectors
 from sqlalchemy import select, func
 from app.models import BankDocument, BankThesis, BankProduct
 
@@ -125,7 +125,7 @@ def _thesis_vectors(signature: str, model: str) -> tuple[list[str], np.ndarray] 
     """Матрица векторов тезисов. Векторы хранятся в коллекции thesis векторного хранилища."""
     theses = _kb()["theses"]
     ids = [t["id"] for t in theses]
-    stored = vectors.sync(vectors.THESIS, [(t["id"], t["text"], {
+    stored = vectors.sync(vector_store.THESIS, [(t["id"], t["text"], {
         "doc_id": t["doc_id"], "topics": t["topics"], "sectors": t["sectors"], "stale": t["stale"]}) for t in theses],
         prune_missing=True)
     if stored is None:  # хранилище недоступно — векторы только в памяти
