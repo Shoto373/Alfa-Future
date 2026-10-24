@@ -191,7 +191,7 @@ def _counterparties(insight: dict, company: dict, runner: ToolRunner) -> dict:
     claims += rules["claims"]
     text = " ".join(c["text"] for c in claims if c["source_ids"] == ["client:graph"])
     answer = ("Событие касается вашей цепочки поставок:" if chains else
-              "В новости не названы ваши контрагенты. Структура цепочки по платежам:")
+              "В новости не названы ваши контрагенты. Структура платежей и цепочки поставок по данным кейса:")
     return {"answer": answer, "claims": claims, "refused": False, "evidence": {"client:graph": text}}
 
 

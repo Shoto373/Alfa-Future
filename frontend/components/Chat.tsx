@@ -28,6 +28,7 @@ export default function Chat({ insightId, suggestions }: { insightId: string; su
     if (!open || loaded.current) return;
     loaded.current = true;
     api.dialog(insightId).then((turns) => {
+      if (!Array.isArray(turns)) return;  // неожиданный ответ — чат работает без истории, а не падает
       setHistory((h) => (h.length ? h : turns));
       setRated(Object.fromEntries(turns.filter((t) => t.rating).map((t) => [t.turn_id, t.rating as 1 | -1])));
     }).catch(() => { /* без истории диалог работает как раньше */ });
