@@ -1,9 +1,9 @@
 """Прогрев при старте: все тяжелое делается до приема запросов.
 
-Порядок важен: модель и ее векторы из хранилища → база знаний (векторы тезисов) →
-описания тем → новости (переклассификация при смене словарей и векторы заголовков) →
-готовые ленты привязанных компаний. Старт дольше, зато первый запрос пользователя
-не ждет загрузки модели, пересчета векторов и ранжирования.
+API (role="api"): профили, модель и ее векторы из хранилища, база знаний (векторы тезисов), описания тем,
+новости — в память. Тяжелое и общее для всех экземпляров делает воркер (role="worker"): переклассификация
+новостей при смене словарей, векторы заголовков и готовые ленты привязанных компаний в общем кэше.
+Поэтому второй экземпляр API стартует быстро и ничего не пересчитывает повторно.
 """
 
 import logging
@@ -36,15 +36,18 @@ def _feeds() -> int:
     return len(pairs)
 
 
-def run() -> dict:
-    report: dict = {}
+def run(role: str = "api") -> dict:
+    report: dict = {"role": role}
     started = time.perf_counter()
     _step(report, "profiles", lambda: profiles.meta()["profiles"])
     _step(report, "embeddings", embeddings.warm)
     _step(report, "knowledge", kb.warm)
     _step(report, "topics", semantic.warm)
-    _step(report, "news", store.warm)
-    _step(report, "feeds", _feeds)
+    if role == "worker":
+        _step(report, "news", store.warm)
+        _step(report, "feeds", _feeds)
+    else:
+        _step(report, "news", store.load)
     report["vectors"] = vectors.stats()
     logger.info("warmup done in %.1fs: %s", time.perf_counter() - started, report)
     return report

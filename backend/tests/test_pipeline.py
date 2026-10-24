@@ -176,36 +176,26 @@ def test_stale_running_mark_is_released(raw_client):
     assert pipeline.claim(15) is not None, "процесс упал посреди цикла — отметка не блокирует навсегда"
 
 
-def test_loop_is_cancelled_on_shutdown(raw_client, monkeypatch):
-    monkeypatch.setenv("PIPELINE_START_DELAY_SECONDS", "0")
-    entered = threading.Event()
-
-    async def slow_cycle(started_at=None):
-        entered.set()
-        await asyncio.sleep(3600)
-
-    monkeypatch.setattr(pipeline, "cycle", slow_cycle)
-
-    async def scenario():
-        task = asyncio.create_task(pipeline.loop(15))
-        while not entered.is_set():
-            await asyncio.sleep(0.01)
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        return task
-
-    task = asyncio.run(asyncio.wait_for(scenario(), timeout=30))
-    assert task.cancelled(), "отмена задачи не глотается циклом"
-
-
-def test_loop_is_not_started_when_disabled(raw_client):
+def test_api_does_not_start_background_pipeline(raw_client):
+    """Фоновые задачи — у воркера (app/worker): API их не запускает, даже со включенным конвейером."""
     from app.main import app
 
-    assert app.state.pipeline is None, "RSS_REFRESH_MINUTES=0 — конвейер не запускается"
+    assert not hasattr(app.state, "pipeline")
     assert raw_client.get("/api/v1/meta").json()["pipeline"]["state"] == "disabled"
+
+
+def test_run_cycle_marks_failure_and_reraises(raw_client, monkeypatch):
+    """Задача воркера news_cycle: сбой — в статусе цикла и наружу, чтобы очередь повторила задачу."""
+    async def broken(started_at=None):
+        raise RuntimeError("rss down")
+
+    monkeypatch.setattr(pipeline, "cycle", broken)
+    try:
+        pipeline.run_cycle(15)
+        raise AssertionError("сбой должен пробрасываться")
+    except RuntimeError:
+        pass
+    assert pipeline.status()["error"] == "RuntimeError"
 
 
 def test_optional_steps_do_not_break_cycle_and_report_sees_results(client, company, monkeypatch):

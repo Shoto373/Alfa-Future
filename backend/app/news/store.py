@@ -19,7 +19,7 @@ import re
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -50,6 +50,8 @@ _WORD = re.compile(r"[A-Za-zА-ЯЁа-яё][\w-]*")
 _ROMAN = re.compile(r"[IVXLC]+")  # «III квартал» — не компания
 STORY_LABELS_KEY = "story_labels"
 VERSION_KEY, REV_KEY = "news_seed", "news_rev"
+# Дельта кэша: записи, измененные после прошлой проверки, с запасом на транзакции, завершившиеся не по порядку.
+DELTA_OVERLAP = timedelta(seconds=30)
 NEWS_LOCK = 72810403
 
 _lock = threading.RLock()
@@ -59,6 +61,7 @@ _lock = threading.RLock()
 class _State:
     items: dict[str, dict]
     rev: int
+    seen: datetime | None = None  # самое позднее updated_at среди загруженных записей
     checked: float = field(default_factory=time.monotonic)
     ordered: list[dict] = field(default_factory=list)
     shingles: dict[str, set[str]] = field(default_factory=dict)
@@ -264,8 +267,18 @@ def _reclassify(db, version: str) -> None:
     logger.info("news reclassified: seed=%d stored=%d", len(seed), len(records))
 
 
-def _read_all(db) -> dict[str, dict]:
-    return {p["news_id"]: p for p in db.scalars(select(News.payload))}
+def _read_all(db) -> tuple[dict[str, dict], datetime | None]:
+    rows = db.execute(select(News.payload, News.updated_at)).all()
+    return {p["news_id"]: p for p, _ in rows}, max((u for _, u in rows), default=None)
+
+
+def _read_changed(db, state: _State) -> tuple[dict[str, dict], datetime | None]:
+    """Новости, измененные после прошлой загрузки: API не перечитывает весь набор при каждом изменении."""
+    if state.seen is None:
+        return _read_all(db)
+    rows = db.execute(select(News.payload, News.updated_at).where(News.updated_at >= state.seen - DELTA_OVERLAP)).all()
+    items = dict(state.items) | {p["news_id"]: p for p, _ in rows}
+    return items, max([state.seen, *(u for _, u in rows)])
 
 
 def _state_now(db=None, force: bool = False) -> _State:
@@ -282,12 +295,14 @@ def _state_now(db=None, force: bool = False) -> _State:
         version = _version()
         if database.state(VERSION_KEY, db) != version:
             _reclassify(db, version)
-        _state = _State(_read_all(db), int(database.state(REV_KEY, db) or 0))
+        items, seen = _read_all(db)
+        _state = _State(items, int(database.state(REV_KEY, db) or 0), seen)
         return _state
     rev = int(database.state(REV_KEY, db) or 0)
     if rev != _state.rev:
         # Тексты записей не меняются (объединение дописывает только источники) — шинглы переиспользуются.
-        _state = _State(_read_all(db), rev, shingles=_state.shingles)
+        items, seen = _read_changed(db, _state)
+        _state = _State(items, rev, seen, shingles=_state.shingles)
     _state.checked = time.monotonic()
     return _state
 
@@ -299,8 +314,14 @@ def _news_vectors(items: list[dict]) -> None:
         for i in items])
 
 
+def load() -> int:
+    """Загрузка в память (API): переклассификацию при смене словарей обычно уже сделал воркер."""
+    with _lock:
+        return len(_state_now(force=True).items)
+
+
 def warm() -> int:
-    """Старт сервиса: переклассификация при необходимости, загрузка в память и векторы заголовков."""
+    """Воркер: переклассификация при необходимости, загрузка в память и векторы заголовков."""
     with _lock:
         state = _state_now(force=True)
         items = list(state.ordered)
@@ -329,7 +350,11 @@ def all_items() -> list[dict]:
 
 def get(news_id: str) -> dict | None:
     with _lock:
-        return _state_now().items.get(news_id)
+        item = _state_now().items.get(news_id)
+        if item is None:
+            # Новость могли только что добавить через другой экземпляр API: не ждать плановой перепроверки.
+            item = _state_now(force=True).items.get(news_id)
+        return item
 
 
 def story(news_id: str) -> dict | None:

@@ -67,7 +67,9 @@ class News(Base, Payload):
     news_id: Mapped[str] = mapped_column(Text, primary_key=True)
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     kind: Mapped[str] = mapped_column(Text)
-    __table_args__ = (Index("news_published_idx", published_at.desc()),)
+    # Время последнего изменения записи: API подгружает только изменившиеся новости (дельта), а не весь набор.
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    __table_args__ = (Index("news_published_idx", published_at.desc()), Index("news_updated_idx", "updated_at"))
 
 
 class Insight(Base, Payload):
@@ -226,3 +228,30 @@ class VectorItem(Base, Payload):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     __table_args__ = (Index("vector_items_embedding_idx", embedding, postgresql_using="hnsw",
                             postgresql_ops={"embedding": "vector_cosine_ops"}),)
+
+
+class Job(Base):
+    """Задача фонового воркера (app/worker): очередь в PostgreSQL без отдельного брокера.
+
+    Выборка — SELECT … FOR UPDATE SKIP LOCKED: два воркера не берут одну задачу. Упавшая задача
+    повторяется с экспоненциальной задержкой; после max_attempts — status=dead (dead-letter).
+    dedupe_key не дает поставить в очередь одну и ту же плановую задачу дважды.
+    """
+    __tablename__ = "jobs"
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    kind: Mapped[str] = mapped_column(Text)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default="{}")
+    status: Mapped[str] = mapped_column(Text, server_default="queued")
+    run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    attempts: Mapped[int] = mapped_column(Integer, server_default="0")
+    max_attempts: Mapped[int] = mapped_column(Integer, server_default="5")
+    locked_by: Mapped[str | None] = mapped_column(Text)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error: Mapped[str | None] = mapped_column(Text)
+    dedupe_key: Mapped[str | None] = mapped_column(Text, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        CheckConstraint("status IN ('queued', 'running', 'done', 'dead')", name="jobs_status_check"),
+        Index("jobs_ready_idx", "run_at", postgresql_where="status = 'queued'"),
+    )

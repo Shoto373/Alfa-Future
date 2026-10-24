@@ -29,4 +29,5 @@ COPY data/synthetic /app/data/synthetic
 RUN mkdir -p /app/runtime
 EXPOSE 8000
 
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# ROLE=api (по умолчанию) — HTTP API на 8000, ROLE=worker — фоновый воркер (app/run.py).
+CMD ["python", "-m", "app.run"]

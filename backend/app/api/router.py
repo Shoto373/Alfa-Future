@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -19,6 +20,8 @@ from app.knowledge import kb
 from app.news import parser, store
 from app.news.taxonomy import TOPICS
 from app.ranking import ROLES, company_feed
+from app.worker import queue as jobs
+from app.worker import runner as worker
 from app.schemas import (AISettingsRequest, Answer, CompanyExtraRequest, ErrorResponse, FeedbackRequest, Insight, InsightRequest,
                          LLMSwitchRequest,
                          NewsCreateRequest, QuestionRequest)
@@ -91,6 +94,18 @@ def _news_brief(n: dict) -> dict:
             "duplicates": len(n["duplicates"])}
 
 
+def _worker_status() -> dict:
+    """Пульс фонового воркера и очередь задач: API отвечает и без воркера, но новости тогда не обновляются."""
+    beat = worker.status() or {}
+    try:
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(beat["at"])).total_seconds()
+    except (KeyError, TypeError, ValueError):
+        age = None
+    return {"alive": age is not None and age < 120, "workers": beat.get("workers", 0), "last_seen": beat.get("at"),
+            "last_job": beat.get("last_job"),
+            "queue": jobs.stats()}
+
+
 @router.get("/meta", responses=ERRORS)
 def meta() -> dict:
     try:
@@ -103,6 +118,7 @@ def meta() -> dict:
         "news": len(store.all_items()),
         "search": {"embeddings": embeddings.signature() != "emb:off", "vectors": vectors.stats(), "redis": cache.ping()},
         "pipeline": pipeline.status(),
+        "worker": _worker_status(),
         # Расходы банка на LLM — не публичные данные: только сотрудникам банка в /metrics.
         "llm": {"connected": llm.available(), "allowed_models": list(config.ALLOWED_MODELS)},
         "roles": [{"role": k, "name": v["name"]} for k, v in ROLES.items()],

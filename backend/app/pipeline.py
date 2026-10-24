@@ -14,8 +14,9 @@
    не потратил долю PIPELINE_LLM_SHARE дневного лимита LLM: остальное — пользователям.
 5. Ежедневный отчет о качестве в Telegram (app/quality.py), если настроен бот.
 
-Несколько воркеров uvicorn: цикл занимается под pg_advisory_xact_lock с отметкой в app_state,
-поэтому за интервал его проходит ровно один процесс. Статус цикла общий для всех воркеров (/meta).
+Цикл запускает фоновый воркер (app/worker, задача news_cycle), а не API. Цикл занимается под
+pg_advisory_xact_lock с отметкой в app_state, поэтому за интервал его проходит ровно один процесс,
+даже если воркеров несколько. Статус цикла общий для всех процессов (/meta).
 Сбой одного источника, шага, пары «компания — роль» или разбора не останавливает остальные.
 """
 
@@ -228,18 +229,15 @@ def claim(minutes: int) -> str | None:
     return started_at
 
 
-async def loop(minutes: int) -> None:
-    await asyncio.sleep(config.pipeline_start_delay())  # сначала сервис отвечает пользователям
-    while True:
-        started_at = None
-        try:
-            started_at = await asyncio.to_thread(claim, minutes)
-            if started_at:
-                await cycle(started_at)
-        except Exception as exc:  # сбой цикла не должен останавливать сервис
-            logger.exception("pipeline cycle failed")
-            if started_at:
-                with contextlib.suppress(Exception):  # база недоступна — отметка снимется через 2 интервала
-                    await asyncio.to_thread(_save, {"state": "idle", "started_at": started_at,
-                                                    "error": type(exc).__name__})
-        await asyncio.sleep(minutes * 60)
+def run_cycle(minutes: int) -> dict | None:
+    """Задача воркера news_cycle: занять цикл, пройти его и сохранить статус. None — цикл уже проходит
+    или недавно прошел другой воркер. Сбой отмечается в статусе и пробрасывается — очередь повторит задачу."""
+    started_at = claim(minutes)
+    if not started_at:
+        return None
+    try:
+        return asyncio.run(cycle(started_at))
+    except Exception as exc:
+        with contextlib.suppress(Exception):  # база недоступна — отметка снимется через 2 интервала
+            _save({"state": "idle", "started_at": started_at, "error": type(exc).__name__})
+        raise

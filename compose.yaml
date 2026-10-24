@@ -28,16 +28,19 @@ services:
       retries: 20
     restart: unless-stopped
 
+  # Два экземпляра API за nginx (сервис nginx ниже), фоновые задачи — отдельный worker (SPR3-01).
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    ports:
-      - "127.0.0.1:${API_PORT:-8000}:8000"
+    image: alfa-backend
+    deploy:
+      replicas: ${API_REPLICAS:-2}
     env_file:
       - path: .env
         required: false
-    environment:
+    environment: &backend-env
+      ROLE: api
       DATABASE_URL: ""
       PGHOST: postgres
       PGDATABASE: alfa
@@ -56,7 +59,7 @@ services:
       # Пароль известен всем — поэтому только локально; в docker-compose.yml этих переменных нет.
       DEMO_ACCOUNTS: ${DEMO_ACCOUNTS:-1}
       DEMO_PASSWORD: ${DEMO_PASSWORD:-alfa-demo-2026}
-    volumes:
+    volumes: &backend-volumes
       # Реальные CSV кейса: CASE_DATA_DIR=./контекст/data docker compose up (по умолчанию — синтетика)
       - ${CASE_DATA_DIR:-./data/synthetic}:/data/case:ro
       - ${BANK_PDF_HOST_DIR:-./data/materials/an}:/data/bank_pdf:ro
@@ -78,6 +81,47 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  # Фоновый воркер: сбор новостей, предрасчет разборов, переклассификация, очистка резервов LLM.
+  # Остановка воркера не мешает API: новости просто не обновляются, пока он не запущен снова.
+  worker:
+    image: alfa-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      <<: *backend-env
+      ROLE: worker
+    volumes: *backend-volumes
+    healthcheck:
+      test: ["CMD", "python", "-c", "from app.worker.runner import healthy; raise SystemExit(0 if healthy() else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+    restart: unless-stopped
+
+  # Вход в API для браузера и интерфейса: распределяет запросы по экземплярам backend.
+  nginx:
+    image: nginx:1.27.5-alpine
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:80"
+    volumes:
+      - ./nginx/local.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
 
   tests:
     profiles: [test]

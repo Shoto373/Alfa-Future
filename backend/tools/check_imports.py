@@ -7,8 +7,8 @@
   domain   — companies, news, knowledge, учетные записи (auth.store, auth.security, auth.schemas)
   ranking  — ranking
   agent    — agent
-  services — storage, pipeline, warmup, quality, демо, оценка качества, перенос данных, smoke
-  api      — api, auth.deps, auth.router, main
+  services — storage, pipeline, warmup, quality, worker, демо, оценка качества, перенос данных, smoke
+  api      — api, auth.deps, auth.router, main, run
 Импорт внутри функции скрывает зависимость и цикл — разрешен только для необязательной библиотеки
 с пометкой «# optional» в той же строке. Тесты — tests/test_architecture.py.
 """
@@ -29,8 +29,9 @@ LAYERS = [
     ("ranking", ["app.ranking"]),
     ("agent", ["app.agent"]),
     ("services", ["app.storage", "app.pipeline", "app.warmup", "app.quality", "app.demo", "app.demo_accounts",
-                  "app.precompute_demo", "app.eval_quality", "app.eval_classify", "app.legacy_import", "app.smoke"]),
-    ("api", ["app.api", "app.auth.deps", "app.auth.router", "app.main"]),
+                  "app.precompute_demo", "app.eval_quality", "app.eval_classify", "app.legacy_import", "app.smoke",
+                  "app.worker"]),
+    ("api", ["app.api", "app.auth.deps", "app.auth.router", "app.main", "app.run"]),
 ]
 PACKAGES = {"app", "app.agent", "app.api", "app.auth", "app.companies", "app.knowledge", "app.news"}  # пустые __init__
 

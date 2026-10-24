@@ -28,7 +28,7 @@ demo:
 smoke:
 	docker compose -f compose.yaml exec -e SMOKE_EMAIL=demo@alfa.test -e SMOKE_OPERATOR_EMAIL=operator@alfa.test \
 	  -e SMOKE_PASSWORD="$${DEMO_PASSWORD:-alfa-demo-2026}" -e SMOKE_OPERATOR_PASSWORD="$${DEMO_PASSWORD:-alfa-demo-2026}" \
-	  backend python -m app.smoke --front http://frontend:3000
+	  backend python -m app.smoke --base-url http://nginx --front http://frontend:3000
 
 # Перед выгрузкой: все backend-тесты и проверка запущенного сервиса.
 check: test smoke
