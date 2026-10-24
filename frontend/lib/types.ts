@@ -111,7 +111,7 @@ export interface QualityOverview {
   totals: {
     content: { insights: number; first_pass_rate: number; claims_with_sources: number; checks_pass_rate: Record<string, number> };
     personalization: { by_section: Record<string, { up: number; down: number }> };
-    ai: { llm_connected: boolean; llm_usage?: { tokens: number; limit: number; cost: number; cost_limit: number } };
+    ai: { llm_connected: boolean; llm_usage?: { tokens: number; limit: number | null; cost: number; cost_limit: number } };
   };
   findings: { level: "ok" | "warn" | "info"; text: string }[];
   check_labels: Record<string, string>;

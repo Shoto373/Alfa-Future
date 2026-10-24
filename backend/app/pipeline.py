@@ -94,7 +94,8 @@ def _llm_budget_left() -> bool:
     u = llm_usage.usage()
     share = config.pipeline_llm_share()
     # С резервом идущих вызовов: доля конвейера не съедает бюджет, уже обещанный запросам пользователей.
-    return u["tokens"] + u["reserved_tokens"] < u["limit"] * share and u["cost"] + u["reserved_cost"] < u["cost_limit"] * share
+    tokens_ok = not u["limit"] or u["tokens"] + u["reserved_tokens"] < u["limit"] * share
+    return tokens_ok and u["cost"] + u["reserved_cost"] < u["cost_limit"] * share
 
 
 async def _analyze(company: dict, role: str, news: dict, use_llm: bool) -> dict | None:
