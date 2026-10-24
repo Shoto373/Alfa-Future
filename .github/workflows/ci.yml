@@ -82,6 +82,16 @@ jobs:
           bash -n deploy/gitops/alfa-gitops
           bash -n deploy/gitops/install.sh
 
+      # Ключи, .env, материалы кейса и реальные данные клиентов не должны попасть в репозиторий.
+      - name: Repository hygiene
+        run: |
+          if git ls-files | grep -E '(^|/)\.env$|(^|/)\.env\.[^e]|контекст/|phone1|\.(pem|key|docx|pdf)$'; then
+            echo "::error::В репозитории файлы, которых там быть не должно (список выше)"; exit 1
+          fi
+          if git ls-files '*.csv' | grep -v '^data/synthetic/'; then
+            echo "::error::CSV вне data/synthetic — реальные данные не коммитятся"; exit 1
+          fi
+
   frontend:
     runs-on: ubuntu-latest
     steps:
