@@ -414,6 +414,11 @@ def metrics_token() -> str:
     return secret("METRICS_TOKEN")
 
 
+def ranking_weights_file() -> str:
+    """Другой файл весов ранжирования (кандидат калибровки); пусто — app/ranking_weights.json."""
+    return os.environ.get("RANKING_WEIGHTS_FILE", "").strip()
+
+
 def story_similarity() -> float:
     """Порог смысловой близости заголовков для объединения новостей в сюжет."""
     return float(_env("STORY_SIMILARITY", "0.78"))

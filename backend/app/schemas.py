@@ -82,6 +82,15 @@ class KbDraftPatch(Strict):
     forecast_values: dict[str, float] | None = None
 
 
+class LabelRequest(Strict):
+    """Оценка аналитика для пары «новость × компания × роль» (SPR3-06)."""
+    news_id: str = Field(..., min_length=1, max_length=64)
+    company_id: str = Field(..., min_length=1, max_length=64)
+    role: Literal["owner", "ceo", "cfo", "accountant", "treasurer", "clevel"]
+    grade: int = Field(..., ge=0, le=3)
+    reason: str = Field("", max_length=500)
+
+
 class KbApproveRequest(Strict):
     supersedes: str | None = Field(None, max_length=64)
 

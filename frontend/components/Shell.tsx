@@ -23,6 +23,7 @@ const NAV: (NavItem | "divider")[] = [
   { href: "/pulse/analytics", label: "Аналитика банка", icon: "doc" },
   { href: "/quality", label: "Качество", icon: "shield", operatorOnly: true },
   { href: "/admin/kb", label: "Тезисы аналитики", icon: "check", operatorOnly: true },
+  { href: "/admin/labeling", label: "Разметка ленты", icon: "list", operatorOnly: true },
 ];
 
 // Нижняя навигация на телефоне: главные разделы под большим пальцем, боковое меню — за кнопкой.

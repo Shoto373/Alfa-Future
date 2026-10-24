@@ -85,6 +85,21 @@ class ThesisDraft(Base, Payload):
                       Index("thesis_drafts_doc_idx", "doc_id", "page"))
 
 
+class RankingLabel(Base):
+    """Экспертная оценка релевантности пары «новость × компания × роль» (SPR3-06): 0–3 и причина."""
+    __tablename__ = "ranking_labels"
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=False), primary_key=True)
+    news_id: Mapped[str] = mapped_column(Text)
+    company_id: Mapped[str] = mapped_column(Text)
+    role: Mapped[str] = mapped_column(Text)
+    grade: Mapped[int] = mapped_column(Integer)
+    reason: Mapped[str] = mapped_column(Text, server_default="")
+    annotator: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (UniqueConstraint("news_id", "company_id", "role", "annotator", name="ranking_labels_pair_uq"),
+                      CheckConstraint("grade BETWEEN 0 AND 3", name="ranking_labels_grade_check"))
+
+
 class BankProduct(Base, Payload):
     __tablename__ = "bank_products"
     product_id: Mapped[str] = mapped_column(Text, primary_key=True)

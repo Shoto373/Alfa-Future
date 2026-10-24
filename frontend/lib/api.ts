@@ -1,5 +1,5 @@
 import type {
-  AISettings, Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, KbDocument, KbDraft, KbUploadItem, LookupCompany, Member, Membership, Mention, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
+  AISettings, Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, KbDocument, KbDraft, KbUploadItem, LabelingState, LookupCompany, Member, Membership, Mention, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
@@ -145,5 +145,8 @@ export const api = {
   kbApprove: (draftId: string, supersedes?: string | null) =>
     request<{ thesis: { id: string } }>(`/api/v1/admin/kb/drafts/${cid(draftId)}/approve`, json("POST", { supersedes: supersedes ?? null })),
   kbReject: (draftId: string, reason: string) => request<KbDraft>(`/api/v1/admin/kb/drafts/${cid(draftId)}/reject`, json("POST", { reason })),
+  labelingNext: (signal?: AbortSignal) => request<LabelingState>("/api/v1/admin/labeling/next", {}, { signal }),
+  labelingSave: (label: { news_id: string; company_id: string; role: Role; grade: number; reason: string }) =>
+    request<LabelingState>("/api/v1/admin/labeling/labels", json("POST", label)),
   pdfUrl: (docId: string, page?: number | null) => `${API_BASE_URL}/api/v1/analytics/${docId}/pdf${page ? `#page=${page}` : ""}`,
 };

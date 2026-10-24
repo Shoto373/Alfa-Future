@@ -277,3 +277,21 @@ export interface KbDocument extends Omit<KbUploadItem, "drafts" | "created_at"> 
   topics: Record<string, string>;
   drafts: KbDraft[];
 }
+
+// Разметка релевантности (SPR3-06): пара без оценки системы и прогресс.
+export interface LabelPair {
+  news_id: string;
+  company_id: string;
+  role: Role;
+  role_name: string;
+  overlap: boolean;
+  news: { title: string | null; lead: string | null; source: string | null; published_at: string | null; topics: string[] };
+  company: { name: string | null; sector: string | null; region: string | null; revenue: number | null;
+             countries: string[]; suppliers: string[]; customers: string[] };
+}
+
+export interface LabelingState {
+  pair: LabelPair | null;
+  stats: { planned: number; labeled_pairs: number; labels: number; overlap_planned: number; overlap_done: number;
+           kappa: number | null; annotators: Record<string, number> };
+}

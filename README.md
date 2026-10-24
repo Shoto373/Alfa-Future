@@ -195,6 +195,10 @@ docker compose -f compose.yaml exec backend python -m app.legacy_import --path /
 
 `make up-monitoring` поднимает Grafana (http://localhost:3001: дашборды «Сервис», «Агент и LLM», «Воркер»), Prometheus с пятью алертами (бюджет LLM > 80%, p95 разбора > 30 с, 5xx > 1%, лаг новостей > 30 мин, бэкап старше 26 ч), Alertmanager (алерты уходят в Telegram-канал команды через backend), Tempo (трассы этапов агента) и сервис бэкапов: ежедневный `pg_dump` с ротацией 14 дней и еженедельная проверка восстановления (`make restore-test`). Логи — JSON с `request_id`, псевдонимом пользователя и `company_id`, без текстов новостей и профилей. Метрики каждого экземпляра API — `GET /metrics`; `trace_id` разбора — в `Insight.trace[*].output`. Что делать при каждом алерте — `docs/runbook.md`.
 
+### Качество ленты: разметка и калибровка весов
+
+Веса признаков релевантности лежат в `backend/app/ranking_weights.json` (с версией; подпись — в ключе кэша ленты). Сотрудник банка размечает пары «новость × компания × роль» оценкой 0–3 на экране «Разметка ленты» (`/admin/labeling`, 300 пар, 60 — двумя разметчиками для κ). `python scripts/eval_ranking.py --labels …` считает nDCG@10, precision@10 и долю нерелевантных в топ-3 по отраслям и ролям. `python scripts/fit_ranking.py --cv companies` подбирает веса попарной логистической регрессией с проверкой на отложенных компаниях. Отчет и порядок приемки весов — `docs/ranking-2026-11.md`.
+
 ### Воркер и очередь задач
 
 Один образ backend, два процесса: `ROLE=api` — HTTP API, `ROLE=worker` — фоновый воркер (`python -m app.run`; воркер — также `python -m app.worker`).
