@@ -99,7 +99,17 @@ def status() -> dict | None:
         beats = list(db.scalars(select(AppState.payload).where(AppState.key.startswith(STATE_PREFIX))))
     if not beats:
         return None
-    return max(beats, key=lambda b: b.get("at") or "") | {"workers": len(beats)}
+    # Живые — с пульсом не старше ALIVE_SECONDS: записи удаленных контейнеров остаются в базе, но не считаются.
+    now = datetime.now(timezone.utc)
+    alive = sum(1 for b in beats if _beat_age(b, now) is not None and _beat_age(b, now) < ALIVE_SECONDS)
+    return max(beats, key=lambda b: b.get("at") or "") | {"workers": alive}
+
+
+def _beat_age(beat: dict, now: datetime) -> float | None:
+    try:
+        return (now - datetime.fromisoformat(beat["at"])).total_seconds()
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def healthy() -> bool:

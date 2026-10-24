@@ -4,14 +4,15 @@ import logging
 
 from fastapi import FastAPI
 
-from app import database, demo_accounts, legacy_import, warmup
+from app import database, demo_accounts, legacy_import, observability, warmup
 from app.api.admin_kb import router as admin_kb_router
+from app.api.prometheus import router as metrics_router
 from app.api.router import router
 from app.api.setup import configure_api
 from app.auth.router import router as auth_router
 from app.schemas import SCHEMA_VERSION
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+observability.configure_logging()
 logger = logging.getLogger("app")
 
 
@@ -46,6 +47,7 @@ configure_api(app)
 app.include_router(router)
 app.include_router(auth_router)
 app.include_router(admin_kb_router)
+app.include_router(metrics_router)
 
 
 @app.get("/healthz")

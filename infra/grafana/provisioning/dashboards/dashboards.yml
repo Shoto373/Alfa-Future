@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: alfa
+    folder: Альфа.Пульс
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

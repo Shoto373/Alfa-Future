@@ -1,0 +1,45 @@
+# Пять алертов спринта (SPR3-05). Показатели из базы одинаковы во всех экземплярах API — берется max().
+groups:
+  - name: alfa
+    rules:
+      - alert: LLMBudgetOver80
+        expr: max(alfa_llm_budget_spent_ratio) > 0.8
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: "Потрачено {{ $value | humanizePercentage }} дневного бюджета LLM: у края лимита разборы уходят в правила"
+          runbook: "docs/runbook.md#бюджет-llm"
+
+      - alert: InsightsSlowP95
+        expr: histogram_quantile(0.95, sum by (le) (rate(alfa_http_request_duration_seconds_bucket{route="/api/v1/insights"}[10m]))) > 30
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "p95 POST /insights {{ $value | humanizeDuration }} — выше 30 с"
+          runbook: "docs/runbook.md#медленные-разборы"
+
+      - alert: HTTP5xxOver1Percent
+        expr: >
+          sum(rate(alfa_http_requests_total{status=~"5.."}[5m]))
+          / clamp_min(sum(rate(alfa_http_requests_total[5m])), 0.001) > 0.01
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "Доля ответов 5xx {{ $value | humanizePercentage }} — выше 1%"
+          runbook: "docs/runbook.md#ошибки-5xx"
+
+      - alert: NewsLagOver30m
+        expr: max(alfa_news_lag_seconds) > 1800
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Источники новостей не отвечали успешно {{ $value | humanizeDuration }} — лента не обновляется"
+          runbook: "docs/runbook.md#лента-не-обновляется"
+
+      - alert: BackupOlderThan26h
+        expr: time() - max(alfa_backup_last_success_timestamp_seconds) > 26 * 3600 or absent(alfa_backup_last_success_timestamp_seconds)
+        for: 15m
+        labels: {severity: critical}
+        annotations:
+          summary: "Последний успешный бэкап старше 26 часов"
+          runbook: "docs/runbook.md#бэкап"

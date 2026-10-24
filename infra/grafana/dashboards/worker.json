@@ -1,0 +1,215 @@
+{
+ "uid": "alfa-worker",
+ "title": "Воркер",
+ "schemaVersion": 39,
+ "version": 1,
+ "refresh": "30s",
+ "time": {
+  "from": "now-6h",
+  "to": "now"
+ },
+ "tags": [
+  "alfa"
+ ],
+ "panels": [
+  {
+   "id": 1,
+   "type": "timeseries",
+   "title": "Очередь задач",
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max by (status) (alfa_jobs)",
+     "legendFormat": "{{status}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 2,
+   "type": "timeseries",
+   "title": "Возраст старейшей готовой задачи",
+   "gridPos": {
+    "x": 12,
+    "y": 0,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max(alfa_jobs_oldest_ready_seconds)",
+     "legendFormat": ""
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 3,
+   "type": "stat",
+   "title": "Пульс воркера (сек назад)",
+   "gridPos": {
+    "x": 0,
+    "y": 8,
+    "w": 6,
+    "h": 5
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max(alfa_worker_heartbeat_age_seconds)",
+     "legendFormat": ""
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 4,
+   "type": "stat",
+   "title": "Лаг новостей (алерт > 30 мин)",
+   "gridPos": {
+    "x": 6,
+    "y": 8,
+    "w": 6,
+    "h": 5
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max(alfa_news_lag_seconds)",
+     "legendFormat": ""
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 5,
+   "type": "timeseries",
+   "title": "Ошибки источников",
+   "gridPos": {
+    "x": 12,
+    "y": 8,
+    "w": 12,
+    "h": 5
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max by (source) (alfa_source_errors_total)",
+     "legendFormat": "{{source}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 6,
+   "type": "timeseries",
+   "title": "Время ответа источников",
+   "gridPos": {
+    "x": 0,
+    "y": 13,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max by (source) (alfa_source_latency_ms)",
+     "legendFormat": "{{source}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 7,
+   "type": "timeseries",
+   "title": "От публикации до ленты",
+   "gridPos": {
+    "x": 12,
+    "y": 13,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max by (source) (alfa_source_publish_lag_seconds)",
+     "legendFormat": "{{source}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s"
+    },
+    "overrides": []
+   },
+   "options": {}
+  }
+ ]
+}

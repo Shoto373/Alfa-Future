@@ -13,7 +13,7 @@ import time
 
 import redis
 
-from app import config
+from app import config, observability
 
 logger = logging.getLogger("app.cache")
 
@@ -51,15 +51,18 @@ def get(key: str):
     with _lock:
         hit = _local.get(key)
         if hit and hit[0] > now:
+            observability.cache_lookup(True)
             return hit[1]
     client = _redis()
     if client is None:
+        observability.cache_lookup(False)
         return None
     try:
         raw = client.get(PREFIX + key)
     except Exception as exc:  # redis.RedisError, OSError
         _failed(exc)
         return None
+    observability.cache_lookup(raw is not None)
     if raw is None:
         return None
     value = json.loads(raw)

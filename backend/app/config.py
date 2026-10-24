@@ -404,6 +404,16 @@ def licensed_feed_dir() -> Path | None:
     return Path(value) if value else None
 
 
+def otlp_endpoint() -> str:
+    """Локальный коллектор трасс OTLP/HTTP (Tempo из профиля monitoring); пусто — трассы не экспортируются."""
+    return os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip().rstrip("/")
+
+
+def metrics_token() -> str:
+    """Токен для /metrics и приемника алертов; пусто — /metrics открыт (в production nginx его не публикует)."""
+    return secret("METRICS_TOKEN")
+
+
 def story_similarity() -> float:
     """Порог смысловой близости заголовков для объединения новостей в сюжет."""
     return float(_env("STORY_SIMILARITY", "0.78"))

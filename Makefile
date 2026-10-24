@@ -1,4 +1,4 @@
-.PHONY: up down up-local down-local up-prod down-prod db migrate test demo smoke check up-auth
+.PHONY: up down up-local down-local up-prod down-prod db migrate test demo smoke check up-auth up-monitoring restore-test
 
 up up-local:
 	docker compose -f compose.yaml up -d --build
@@ -34,6 +34,13 @@ smoke:
 check: test smoke
 
 # Вход через Альфа-ID (демо-IdP Keycloak, OIDC): тот же стенд + keycloak, кнопка «Войти через Альфа-ID».
+# Наблюдаемость: Grafana http://localhost:3001 (admin / GRAFANA_ADMIN_PASSWORD), Prometheus, алерты, трассы, бэкапы.
+up-monitoring:
+	OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318 docker compose -f compose.yaml --profile monitoring up -d --build
+
+restore-test:
+	bash infra/backup/restore_test.sh
+
 up-auth:
 	OIDC_ISSUER=http://localhost:8180/realms/alfa OIDC_INTERNAL_ISSUER=http://keycloak:8080/realms/alfa \
 	  docker compose -f compose.yaml --profile auth up -d --build

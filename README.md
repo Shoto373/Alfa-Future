@@ -191,6 +191,10 @@ docker compose -f compose.yaml exec backend python -m app.legacy_import --path /
 
 Для демо и тестов записаны ответы модели на синтетический обзор `backend/app/knowledge/recorded/demo_review.pdf` (`KB_RECORDED_DIR`): конвейер проходит без вызова модели. В одном черновике записана ошибка распознавания числа, чтобы проверка «числа есть на странице» была видна на экране.
 
+### Наблюдаемость, алерты и бэкапы
+
+`make up-monitoring` поднимает Grafana (http://localhost:3001: дашборды «Сервис», «Агент и LLM», «Воркер»), Prometheus с пятью алертами (бюджет LLM > 80%, p95 разбора > 30 с, 5xx > 1%, лаг новостей > 30 мин, бэкап старше 26 ч), Alertmanager (алерты уходят в Telegram-канал команды через backend), Tempo (трассы этапов агента) и сервис бэкапов: ежедневный `pg_dump` с ротацией 14 дней и еженедельная проверка восстановления (`make restore-test`). Логи — JSON с `request_id`, псевдонимом пользователя и `company_id`, без текстов новостей и профилей. Метрики каждого экземпляра API — `GET /metrics`; `trace_id` разбора — в `Insight.trace[*].output`. Что делать при каждом алерте — `docs/runbook.md`.
+
 ### Воркер и очередь задач
 
 Один образ backend, два процесса: `ROLE=api` — HTTP API, `ROLE=worker` — фоновый воркер (`python -m app.run`; воркер — также `python -m app.worker`).

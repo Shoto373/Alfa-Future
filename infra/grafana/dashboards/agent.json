@@ -1,0 +1,227 @@
+{
+ "uid": "alfa-agent",
+ "title": "Агент и LLM",
+ "schemaVersion": 39,
+ "version": 1,
+ "refresh": "30s",
+ "time": {
+  "from": "now-6h",
+  "to": "now"
+ },
+ "tags": [
+  "alfa"
+ ],
+ "panels": [
+  {
+   "id": 1,
+   "type": "gauge",
+   "title": "Бюджет LLM за день (алерт > 80%)",
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 6,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max(alfa_llm_budget_spent_ratio)",
+     "legendFormat": ""
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 2,
+   "type": "timeseries",
+   "title": "Расход и резерв, ₽",
+   "gridPos": {
+    "x": 6,
+    "y": 0,
+    "w": 18,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max(alfa_llm_cost_rub)",
+     "legendFormat": "расход"
+    },
+    {
+     "refId": "B",
+     "expr": "max(alfa_llm_reserved_cost_rub)",
+     "legendFormat": "резерв"
+    },
+    {
+     "refId": "C",
+     "expr": "max(alfa_llm_cost_limit_rub)",
+     "legendFormat": "лимит"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "currencyRUB"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 3,
+   "type": "timeseries",
+   "title": "Разборы по режиму и причине отката",
+   "gridPos": {
+    "x": 0,
+    "y": 8,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (mode, fallback) (increase(alfa_insights_total[1h]))",
+     "legendFormat": "{{mode}} / {{fallback}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 4,
+   "type": "timeseries",
+   "title": "p95 этапов агента",
+   "gridPos": {
+    "x": 12,
+    "y": 8,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "histogram_quantile(0.95, sum by (le, stage) (rate(alfa_agent_stage_duration_seconds_bucket[15m])))",
+     "legendFormat": "{{stage}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 5,
+   "type": "timeseries",
+   "title": "Непройденные проверки черновика",
+   "gridPos": {
+    "x": 0,
+    "y": 16,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (check) (increase(alfa_agent_check_failures_total[1h]))",
+     "legendFormat": "{{check}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 6,
+   "type": "timeseries",
+   "title": "Вызовы, ошибки и отказы по бюджету за день",
+   "gridPos": {
+    "x": 12,
+    "y": 16,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max(alfa_llm_calls)",
+     "legendFormat": "вызовы"
+    },
+    {
+     "refId": "B",
+     "expr": "max(alfa_llm_errors)",
+     "legendFormat": "ошибки"
+    },
+    {
+     "refId": "C",
+     "expr": "max(alfa_llm_rejected_by_budget)",
+     "legendFormat": "отказы"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 7,
+   "type": "table",
+   "title": "Трассы разборов (Tempo)",
+   "gridPos": {
+    "x": 0,
+    "y": 24,
+    "w": 24,
+    "h": 8
+   },
+   "datasource": {
+    "type": "tempo",
+    "uid": "tempo"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "queryType": "traceql",
+     "query": "{ name = \"insight\" }",
+     "limit": 20
+    }
+   ]
+  }
+ ]
+}

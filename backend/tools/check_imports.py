@@ -3,7 +3,8 @@
     cd backend && python tools/check_imports.py      # код выхода 1 и список нарушений, если они есть
 
 Слои снизу вверх; модуль может импортировать только свой или нижние слои:
-  core     — config, database, models, cache, vector_store, embeddings, vectors, llm, llm_usage, notify, errors, schemas, text
+  core     — config, database, models, cache, vector_store, embeddings, vectors, llm, llm_usage, notify, errors, schemas, text,
+             ratelimit, observability
   domain   — companies, news, knowledge, учетные записи (auth.store, auth.security, auth.schemas)
   ranking  — ranking
   agent    — agent
@@ -24,7 +25,8 @@ MAX_FUNCTION_LINES = 80
 
 LAYERS = [
     ("core", ["app.config", "app.database", "app.models", "app.cache", "app.vector_store", "app.embeddings", "app.vectors",
-              "app.llm", "app.llm_usage", "app.notify", "app.errors", "app.schemas", "app.text", "app.ratelimit"]),
+              "app.llm", "app.llm_usage", "app.notify", "app.errors", "app.schemas", "app.text", "app.ratelimit",
+              "app.observability"]),
     ("domain", ["app.companies", "app.news", "app.knowledge", "app.auth.store", "app.auth.security", "app.auth.schemas",
                 "app.auth.oidc"]),
     ("ranking", ["app.ranking"]),

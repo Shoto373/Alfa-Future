@@ -1,0 +1,246 @@
+{
+ "uid": "alfa-service",
+ "title": "Сервис",
+ "schemaVersion": 39,
+ "version": 1,
+ "refresh": "30s",
+ "time": {
+  "from": "now-6h",
+  "to": "now"
+ },
+ "tags": [
+  "alfa"
+ ],
+ "panels": [
+  {
+   "id": 1,
+   "type": "timeseries",
+   "title": "Запросы в секунду по маршруту",
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (route) (rate(alfa_http_requests_total[5m]))",
+     "legendFormat": "{{route}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "reqps"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 2,
+   "type": "timeseries",
+   "title": "Доля 5xx",
+   "gridPos": {
+    "x": 12,
+    "y": 0,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(rate(alfa_http_requests_total{status=~\"5..\"}[5m])) / clamp_min(sum(rate(alfa_http_requests_total[5m])), 0.001)",
+     "legendFormat": ""
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 3,
+   "type": "timeseries",
+   "title": "p95 времени ответа по маршруту",
+   "gridPos": {
+    "x": 0,
+    "y": 8,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "histogram_quantile(0.95, sum by (le, route) (rate(alfa_http_request_duration_seconds_bucket[5m])))",
+     "legendFormat": "{{route}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 4,
+   "type": "timeseries",
+   "title": "p95 POST /insights (алерт > 30 с)",
+   "gridPos": {
+    "x": 12,
+    "y": 8,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "histogram_quantile(0.95, sum by (le) (rate(alfa_http_request_duration_seconds_bucket{route=\"/api/v1/insights\"}[10m])))",
+     "legendFormat": ""
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 5,
+   "type": "stat",
+   "title": "Попадания в кэш",
+   "gridPos": {
+    "x": 0,
+    "y": 16,
+    "w": 6,
+    "h": 5
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(rate(alfa_cache_requests_total{result=\"hit\"}[5m])) / clamp_min(sum(rate(alfa_cache_requests_total[5m])), 0.001)",
+     "legendFormat": ""
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 6,
+   "type": "stat",
+   "title": "Экземпляров API",
+   "gridPos": {
+    "x": 6,
+    "y": 16,
+    "w": 6,
+    "h": 5
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "count(up{job=\"alfa-api\"} == 1)",
+     "legendFormat": ""
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 7,
+   "type": "stat",
+   "title": "Последний бэкап",
+   "gridPos": {
+    "x": 12,
+    "y": 16,
+    "w": 6,
+    "h": 5
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max(alfa_backup_last_success_timestamp_seconds) * 1000",
+     "legendFormat": ""
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "dateTimeFromNow"
+    },
+    "overrides": []
+   },
+   "options": {}
+  },
+  {
+   "id": 8,
+   "type": "stat",
+   "title": "Проверка восстановления",
+   "gridPos": {
+    "x": 18,
+    "y": 16,
+    "w": 6,
+    "h": 5
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max(alfa_restore_test_last_success_timestamp_seconds) * 1000",
+     "legendFormat": ""
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "dateTimeFromNow"
+    },
+    "overrides": []
+   },
+   "options": {}
+  }
+ ]
+}

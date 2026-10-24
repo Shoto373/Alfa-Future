@@ -1,0 +1,14 @@
+# Alertmanager: алерты уходят в backend (/internal/alerts), он пересылает их в Telegram-канал команды
+# (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID). Внешние SaaS не используются.
+route:
+  receiver: team
+  group_by: [alertname]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: team
+    webhook_configs:
+      - url: http://backend:8000/internal/alerts
+        send_resolved: true

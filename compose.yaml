@@ -55,6 +55,8 @@ services:
       # Заглушка лицензированных лент Интерфакс/ПРАЙМ (SPR3-02): демо-новости о компаниях профилей
       # и их контрагентах. Реальные ленты подключаются только по договору — в docker-compose.yml ее нет.
       LICENSED_FEED_DIR: ${LICENSED_FEED_DIR-/app/app/news/sources/demo}
+      # Трассы этапов агента — в локальный Tempo (профиль monitoring: make up-monitoring); пусто — не экспортируются.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT-}
       # Локальная проверка: демо-сотрудник банка видит метрики, расходы и аудит (/metrics, /audit).
       # Только для локального запуска — в production (docker-compose.yml) значения по умолчанию нет.
       OPERATOR_EMAILS: ${OPERATOR_EMAILS:-operator@alfa.test}
@@ -192,6 +194,75 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # Наблюдаемость (SPR3-05), профиль monitoring: make up-monitoring. Grafana — http://localhost:3001
+  # (дашборды «Сервис», «Агент и LLM», «Воркер»), Prometheus с пятью алертами, Alertmanager → Telegram через backend,
+  # Tempo — трассы разборов, backup — ежедневный pg_dump с ротацией 14 дней и еженедельной проверкой восстановления.
+  prometheus:
+    profiles: [monitoring]
+    image: prom/prometheus:v2.55.1
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=30d"]
+    volumes:
+      - ./infra/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    restart: unless-stopped
+
+  alertmanager:
+    profiles: [monitoring]
+    image: prom/alertmanager:v0.27.0
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+    volumes:
+      - ./infra/alertmanager:/etc/alertmanager:ro
+    restart: unless-stopped
+
+  tempo:
+    profiles: [monitoring]
+    image: grafana/tempo:2.6.1
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    volumes:
+      - ./infra/tempo:/etc/tempo:ro
+      - tempo_data:/var/tempo
+    restart: unless-stopped
+
+  grafana:
+    profiles: [monitoring]
+    image: grafana/grafana:11.3.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-alfa-demo-2026}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3001:3000"
+    depends_on: [prometheus, tempo]
+    restart: unless-stopped
+
+  backup:
+    profiles: [monitoring]
+    image: pgvector/pgvector:0.8.1-pg17-trixie
+    entrypoint: ["bash", "/infra/backup/run.sh"]
+    environment:
+      PGHOST: postgres
+      PGDATABASE: alfa
+      PGUSER: alfa
+      PGPASSWORD: ${POSTGRES_PASSWORD:-alfa-local}
+      BACKUP_DIR: /backups
+      BACKUP_KEEP_DAYS: "14"
+    volumes:
+      - ./infra/backup:/infra/backup:ro
+      - backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   runtime:
   postgres_data:
+  prometheus_data:
+  tempo_data:
+  backups:

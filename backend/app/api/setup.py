@@ -1,15 +1,17 @@
 """Глобальные обработчики ошибок, CORS, лимит тела и журналирование."""
 
+import json
 import logging
 import re
 import time
 import uuid
+from urllib.parse import parse_qs
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
-from app import config
+from app import config, observability
 from app.api.errors import error_response
 from app.errors import ApiError
 from app.schemas import SCHEMA_VERSION
@@ -64,6 +66,9 @@ class RequestContextMiddleware:
 
         request_id = new_request_id()
         scope.setdefault("state", {})["request_id"] = request_id
+        ctx = observability.start_request(request_id)
+        query = parse_qs(scope.get("query_string", b"").decode("latin-1"))
+        observability.set_company((query.get("company_id") or [None])[0])
         started = time.perf_counter()
         status_holder = {"status": None}
 
@@ -77,15 +82,15 @@ class RequestContextMiddleware:
         try:
             await self._handle(scope, receive, send_logged, request_id)
         finally:
-            # Только метаданные: без тел запросов, профилей и заголовков.
-            logger.info(
-                "request_id=%s method=%s path=%s status=%s duration_ms=%.1f",
-                request_id,
-                scope.get("method"),
-                scope.get("path"),
-                status_holder["status"],
-                (time.perf_counter() - started) * 1000,
-            )
+            seconds = time.perf_counter() - started
+            # Шаблон маршрута (/api/v1/insights/{insight_id}), а не путь: метки метрик не растут без предела.
+            route = getattr(scope.get("route"), "path", None) or "unmatched"
+            status = status_holder["status"] or 500
+            observability.observe_request(scope.get("method", ""), route, status, seconds)
+            # Только метаданные: без тел запросов, профилей и заголовков; псевдоним пользователя и компания — из ctx.
+            logger.info("request", extra={"request_id": request_id, "method": scope.get("method"), "path": scope.get("path"), "route": route,
+                                          "status": status, "duration_ms": round(seconds * 1000, 1),
+                                          **{k: ctx[k] for k in ("user", "company_id", "trace_id") if k in ctx}})
 
     async def _handle(self, scope, receive, send, request_id):
         headers = dict(scope.get("headers") or [])
@@ -117,6 +122,7 @@ class RequestContextMiddleware:
             return
 
         body = b"".join(chunks)
+        _company_from_body(body, headers)
         replayed = False
 
         async def replay():
@@ -127,6 +133,18 @@ class RequestContextMiddleware:
             return await receive()
 
         await self.app(scope, replay, send)
+
+
+def _company_from_body(body: bytes, headers: dict) -> None:
+    """company_id из JSON-тела (разбор, вопросы) — в контекст запроса для логов."""
+    if b"json" not in headers.get(b"content-type", b"") or len(body) > 64 * 1024:
+        return
+    try:
+        data = json.loads(body)
+    except ValueError:
+        return
+    if isinstance(data, dict) and isinstance(data.get("company_id"), str):
+        observability.set_company(data["company_id"])
 
 
 def _openapi_without_422(app: FastAPI):
