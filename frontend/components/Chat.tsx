@@ -51,6 +51,16 @@ export default function Chat({ insightId, suggestions }: { insightId: string; su
     log.current?.scrollTo({ top: log.current.scrollHeight, behavior: "smooth" });
   }, [history.length, busy]);
 
+  // Поле заблокировано на время ответа — курсор возвращается, когда разблокировка уже отрисована.
+  // Отложенный фокус (следующий кадр) на медленной машине срабатывал раньше и не ставился на заблокированное поле.
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (!busy && refocus.current) {
+      refocus.current = false;
+      input.current?.focus();
+    }
+  }, [busy]);
+
   const ask = async (question: string, suggested = false) => {
     if (!question.trim() || busy) return;
     setBusy(true);
@@ -64,9 +74,8 @@ export default function Chat({ insightId, suggestions }: { insightId: string; su
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Не удалось получить ответ");
     } finally {
+      refocus.current = true;
       setBusy(false);
-      // Поле было заблокировано на время ответа — курсор возвращается для следующего вопроса.
-      requestAnimationFrame(() => input.current?.focus());
     }
   };
 
