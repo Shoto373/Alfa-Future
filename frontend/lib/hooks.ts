@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AbortedError, ApiError, api } from "./api";
+import { query, useQuery, withSignal, type QueryState } from "./query";
 import type { CompanyProfile, Exposure, FeedItem, FeedPage } from "./types";
 
-export type Load<T> = { data: T | null; error: ApiError | null; loading: boolean; reload: () => void };
+export type Load<T> = QueryState<T>;
 type Result<T> = { key: string; data: T | null; error: ApiError | null };
 
-/** Загрузка по ключу из deps: результат другого ключа не показывается — при смене компании или роли
- *  старые данные исчезают сразу, а ответ на устаревший запрос отбрасывается. */
+/** Загрузка без кэша по ключу из deps (настройки, формы): результат другого ключа не показывается —
+ *  при смене компании старые данные исчезают сразу, а ответ на устаревший запрос отбрасывается. */
 export function useLoad<T>(fn: (signal: AbortSignal, reloaded: boolean) => Promise<T>, deps: unknown[]): Load<T> {
   const [result, setResult] = useState<Result<T> | null>(null);
   const [tick, setTick] = useState(0);
@@ -31,15 +32,27 @@ export function useLoad<T>(fn: (signal: AbortSignal, reloaded: boolean) => Promi
            reload: useCallback(() => setTick((t) => t + 1), []) };
 }
 
+/** Ключ ленты в кэше: все ленты компании начинаются с feed:<companyId>. */
+export const feedKey = (companyId: string, topic?: string, story?: string) =>
+  `feed:${companyId}:${topic ?? ""}:${story ?? ""}`;
+
+/** Лента из общего кэша: страница и уведомления в шапке получают один ответ; fresh — новый запрос. */
+export function loadFeed(companyId: string, opts: { topic?: string; story?: string; fresh?: boolean; signal?: AbortSignal } = {}) {
+  const promise = query(feedKey(companyId, opts.topic, opts.story), () => api.feed(companyId, opts.topic, opts.story),
+                        { fresh: opts.fresh });
+  return withSignal(promise, opts.signal);
+}
+
 export function useFeed(companyId: string, topic?: string): Load<FeedItem[]> {
-  return useLoad((s, reloaded) => api.feed(companyId, topic, s, undefined, reloaded).then((r) => r.items), [companyId, topic]);
+  const page = useFeedWithTopics(companyId, topic);
+  return { ...page, data: page.data?.items ?? null };
 }
 
 /** Лента вместе со счетчиками тем по всей ленте компании (для фильтра тем). */
 export function useFeedWithTopics(companyId: string, topic?: string, story?: string): Load<FeedPage> {
-  return useLoad((s, reloaded) => api.feed(companyId, topic, s, story, reloaded), [companyId, topic, story]);
+  return useQuery(feedKey(companyId, topic, story), () => api.feed(companyId, topic, story));
 }
 
 export function useCompany(companyId: string): Load<{ profile: CompanyProfile; exposures: Exposure[] }> {
-  return useLoad((s) => api.company(companyId, s), [companyId]);
+  return useQuery(`company:${companyId}`, () => api.company(companyId), { staleMs: 5 * 60_000 });
 }

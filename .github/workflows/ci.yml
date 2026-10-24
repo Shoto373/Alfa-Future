@@ -121,6 +121,14 @@ jobs:
           npm run lint
           npm run build
           npm run typecheck
+      # Unit-тесты слоя данных, клиента API, сессии и компонентов разбора; покрытие lib/ ≥ 70% (vitest.config.mts).
+      - name: Unit tests with coverage
+        working-directory: frontend
+        run: npm run test:coverage
+      # Бюджет главной: JS для «/» ≤ 200 КБ gzip (scripts/bundle-budget.mjs, по результатам сборки выше).
+      - name: Bundle budget
+        working-directory: frontend
+        run: npm run budget
 
   # Интерфейс в настоящем браузере: сервис поднимается как у жюри (compose.yaml, без ключа LLM — правила),
   # e2e-тесты Playwright проходят сценарии; при падении — скриншоты и трассы артефактом.

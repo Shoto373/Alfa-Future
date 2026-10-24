@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { useSession } from "@/lib/session";
+import AccessDenied from "./AccessDenied";
 import CompanySwitcher from "./CompanySwitcher";
 import Notifications from "./Notifications";
 import { AlfaMark, Icon } from "./ui";
@@ -21,6 +22,14 @@ const NAV: (NavItem | "divider")[] = [
   { href: "/pulse", label: "Альфа.Пульс", icon: "pulse", accent: true },
   { href: "/pulse/analytics", label: "Аналитика банка", icon: "doc" },
   { href: "/quality", label: "Качество", icon: "shield", operatorOnly: true },
+];
+
+// Нижняя навигация на телефоне: главные разделы под большим пальцем, боковое меню — за кнопкой.
+const BOTTOM_NAV: NavItem[] = [
+  { href: "/", label: "Главная", icon: "home" },
+  { href: "/pulse", label: "Пульс", icon: "pulse" },
+  { href: "/pulse/analytics", label: "Аналитика", icon: "doc" },
+  { href: "/profile", label: "Профиль", icon: "users" },
 ];
 
 export default function Shell({ children }: { children: ReactNode }) {
@@ -96,8 +105,41 @@ export default function Shell({ children }: { children: ReactNode }) {
             </button>
           </div>
         </header>
-        <main className={styles.content}>{children}</main>
+        <main className={styles.content}>
+          <Suspense fallback={null}><CompanyGate>{children}</CompanyGate></Suspense>
+        </main>
       </div>
+      <nav className={styles.bottomNav} aria-label="Разделы">
+        {BOTTOM_NAV.map((item) => (
+          <Link key={item.href} href={item.href} className={active(item.href) ? styles.active : undefined}
+            aria-current={active(item.href) ? "page" : undefined}>
+            <Icon name={item.icon} size={22} />
+            <span>{item.label}</span>
+          </Link>
+        ))}
+      </nav>
     </div>
   );
+}
+
+// Ссылка на страницу конкретной компании (?company=…, например из письма или уведомления):
+// своя компания становится активной, чужая — экран «нет доступа» вместо данных.
+function CompanyGate({ children }: { children: ReactNode }) {
+  const params = useSearchParams();
+  const path = usePathname();
+  const router = useRouter();
+  const { session, setActiveCompany } = useSession();
+  const wanted = params.get("company");
+  const member = Boolean(wanted) && session!.memberships.some((m) => m.company_id === wanted);
+
+  useEffect(() => {
+    if (!wanted || !member) return;
+    setActiveCompany(wanted);
+    const rest = new URLSearchParams(params);
+    rest.delete("company");
+    router.replace(rest.size ? `${path}?${rest}` : path);
+  }, [wanted, member, params, path, router, setActiveCompany]);
+
+  if (wanted && !member) return <AccessDenied backHref={path} />;
+  return children;
 }

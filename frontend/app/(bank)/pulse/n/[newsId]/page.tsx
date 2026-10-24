@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import AccessDenied from "@/components/AccessDenied";
 import InsightView from "@/components/InsightView";
 import { ErrorState, Icon, Skeleton } from "@/components/ui";
 import { AbortedError, ApiError, api } from "@/lib/api";
@@ -107,7 +108,7 @@ function NewsInsight({ newsId }: { newsId: string }) {
           <Skeleton lines={4} />
         </div>
       )}
-      {error && <ErrorState error={error} onRetry={() => load()} />}
+      {error && (error.code === "FORBIDDEN" ? <AccessDenied /> : <ErrorState error={error} onRetry={() => load()} />)}
       {insight && <InsightView insight={insight} onRefresh={() => load(true)} refreshing={loading}
         upgrading={upgrading} upgradeFailed={upgradeFailed}
         perspective={perspective} ownRole={session!.role} onPerspective={setPerspective} />}

@@ -176,9 +176,10 @@
 }
 
 @include breakpoints.down(breakpoints.$mobile) {
+  // Над нижней навигацией (Shell, ~64px): кнопка и панель не закрывают разделы.
   .assistantFab {
     right: 16px;
-    bottom: 16px;
+    bottom: calc(76px + env(safe-area-inset-bottom));
     width: 54px;
     height: 54px;
   }
@@ -188,8 +189,8 @@
   .assistantPanel {
     right: 16px;
     left: 16px;
-    bottom: 16px;
+    bottom: calc(76px + env(safe-area-inset-bottom));
     width: auto;
-    height: calc(100dvh - 88px);
+    height: calc(100dvh - 148px - env(safe-area-inset-bottom));
   }
 }

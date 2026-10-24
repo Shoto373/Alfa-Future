@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { loadFeed } from "@/lib/hooks";
 import { IMPORTANT_SCORE as IMPORTANT } from "@/lib/format";
 import { useRead } from "@/lib/notifications";
 import { useSession } from "@/lib/session";
@@ -31,7 +31,7 @@ export default function Notifications() {
   const box = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback((signal?: AbortSignal) => {
-    api.feed(companyId, undefined, signal)
+    loadFeed(companyId, { signal })
       .then((r) => setLoaded({ companyId, items: r.items.filter((i) => i.relevance.score >= IMPORTANT) }))
       .catch(() => { /* оставляем прежний список, повторим при следующем обновлении */ });
   }, [companyId]);
