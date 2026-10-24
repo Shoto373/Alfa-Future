@@ -124,10 +124,14 @@ cp "$APP_DIR/docker-compose.yml" "$STATE_DIR/prev/" 2>/dev/null
 cp "$APP_DIR/nginx/nginx.conf" "$STATE_DIR/prev/" 2>/dev/null
 cp "$APP_DIR/release.env" "$STATE_DIR/prev/" 2>/dev/null
 cp "$APP_DIR/release.json" "$STATE_DIR/prev/" 2>/dev/null
-for f in docker-compose.yml nginx/nginx.conf release.env release.json; do
+for f in docker-compose.yml release.env release.json; do
   install -m 0644 -o "$(stat -c %u "$APP_DIR")" -g "$(stat -c %g "$APP_DIR")" "$REPO_DIR/$f" "$APP_DIR/$f" \
     || fail "в релизе нет файла $f"
 done
+# nginx.conf смонтирован в контейнер файлом: новый файл (install, mv) контейнер не увидит — он держит
+# прежний inode, и reload перечитает старый конфиг. Поэтому содержимое пишется поверх того же файла.
+[ -f "$REPO_DIR/nginx/nginx.conf" ] || fail "в релизе нет файла nginx/nginx.conf"
+cat "$REPO_DIR/nginx/nginx.conf" > "$APP_DIR/nginx/nginx.conf" || fail "не удалось записать nginx.conf"
 
 # --- 3. образы и запуск --------------------------------------------------------
 compose pull --quiet 2>"$STATE_DIR/pull.err" || fail "не удалось скачать образы: $(head -c 200 "$STATE_DIR/pull.err" | esc)" rollback
