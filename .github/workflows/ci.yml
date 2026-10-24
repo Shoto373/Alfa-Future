@@ -113,7 +113,9 @@ jobs:
   # e2e-тесты Playwright проходят сценарии; при падении — скриншоты и трассы артефактом.
   ui:
     needs: [frontend]
-    runs-on: ubuntu-latest
+    # Playwright 1.56 ставит браузер и его системные библиотеки только на поддерживаемые версии Ubuntu:
+    # ubuntu-latest уже 26.04, поэтому версия закреплена (обновить вместе с @playwright/test).
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
