@@ -156,7 +156,7 @@ def golden_company(base: dict, spec: dict) -> dict:
 
 def observed_effect(ins: dict) -> str:
     """Знак влияния по итоговым разделам — тот же, что метка effect в разборе и ленте."""
-    return composer.overall_effect(ins)
+    return ins.get("effect") or composer.overall_effect(ins)
 
 
 def golden_metrics(case: dict, news: dict, ins: dict) -> dict:

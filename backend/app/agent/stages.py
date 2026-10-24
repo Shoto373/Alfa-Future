@@ -18,7 +18,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from app import llm
+from app import config, llm
 from app.agent import composer, context, prompts, review, validators
 from app.agent.tools import ToolError, ToolRunner
 from app.errors import AnalysisUnavailable
@@ -58,6 +58,7 @@ class Run:
     ctx: dict
     started: float
     trace: Trace = field(default_factory=Trace)
+    effect: str | None = None  # знак эффекта по правилам (метка в ленте и шапке)
     draft: dict = field(default_factory=dict)
     mode: str = "rules"
     model: str | None = None
@@ -87,7 +88,7 @@ def plan(run: Run) -> tuple[list[dict], asyncio.Task | None]:
     """Обязательные шаги сразу; модель-исследователь параллельно придумывает уточняющие запросы."""
     t0 = time.perf_counter()
     steps = context.rules_plan(run.news, run.company)
-    planner = asyncio.create_task(asyncio.to_thread(context.llm_queries, run.news, run.company, run.role)) if run.use_llm else None
+    planner = asyncio.create_task(asyncio.to_thread(context.llm_queries, run.news, run.company, run.role))         if run.use_llm and config.llm_extra_queries() else None
     if planner:  # разбор может прерваться раньше, чем дождется планировщика: ошибку все равно забираем
         planner.add_done_callback(lambda t: t.cancelled() or t.exception())
     run.trace.add("plan", "plan", "Обязательные шаги: " + " → ".join(s["tool"] for s in steps), "ok",
@@ -164,13 +165,20 @@ async def draft(run: Run) -> None:
     """Черновик правилами; с моделью — ее разделы поверх правил (при сбое модели остаются правила)."""
     t0 = time.perf_counter()
     run.draft = composer.compose(run.ctx)
+    # Знак эффекта для метки — по правилу «чувствительность компании × направление события»: модель почти всегда
+    # пишет и риски, и возможности, и по ее разделам метка была бы «и риск, и возможность» у любой новости.
+    run.effect = composer.overall_effect(run.draft)
+    run.ctx["rules_effect"] = run.effect
     if run.use_llm:
         try:
             data, meta = await asyncio.to_thread(llm.chat_json, prompts.COMPOSE_SYSTEM,
                                                  prompts.compose_user(run.ctx, context.sources(run.ctx)), "compose", 8000)
+            rules_facts = run.draft["what_happened"]["facts"]
             run.draft = context.merge_llm(run.draft, data)
+            notes = context.tidy_llm(run.draft, rules_facts, run.ctx)
             run.mode, run.model = "llm", meta["model"]
-            run.trace.add("compose", "llm_compose", f"Черновик модели {meta['model']}, токенов {meta['tokens']}", "ok", meta["duration_ms"])
+            run.trace.add("compose", "llm_compose", f"Черновик модели {meta['model']}, токенов {meta['tokens']}"
+                          + (f"; {'; '.join(notes)}" if notes else ""), "ok", meta["duration_ms"])
         except llm.LLMError as exc:
             if isinstance(exc, llm.BudgetError):
                 run.fallback_reason = "company_budget" if exc.scope == "company" else "budget"
@@ -350,7 +358,7 @@ def finalize(run: Run) -> dict:
         "company_id": company["company_id"], "role": run.role, "news_id": run.news["news_id"],
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "mode": run.mode, "model": run.model, "fallback_reason": run.fallback_reason if run.mode == "rules" else None,
-        "title": draft["title"], "headline": draft["headline"], "effect": composer.overall_effect(draft),
+        "title": draft["title"], "headline": draft["headline"], "effect": run.effect or composer.overall_effect(draft),
         "what_happened": draft["what_happened"], "why_important": draft["why_important"], "risks": draft["risks"],
         "opportunities": draft["opportunities"], "actions": draft["actions"], "questions": draft["questions"],
         "bank_view": draft["bank_view"], "products": draft["products"], "features_used": context.features_used(run.ctx, draft),

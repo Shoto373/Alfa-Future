@@ -33,12 +33,14 @@ from sqlalchemy import func, select
 from app import config, database, llm, llm_usage, quality, ranking, storage
 from app.agent import orchestrator, prompts
 from app.auth import store as auth_store
+from app.companies import ai_settings as company_ai
 from app.companies import profiles
 from app.news import parser, store
 
 logger = logging.getLogger("app.pipeline")
 
 STATE_KEY = "pipeline"
+MAX_PRECOMPUTE = 30  # больше важных новостей на пару за цикл заранее не готовим
 LOCK_ID = 72810402  # 72810401 занят миграциями (database.migrate)
 _OWNER = f"{os.getpid()}:{uuid.uuid4().hex[:8]}"
 
@@ -139,10 +141,15 @@ async def _optional(step, name: str, default):
 
 
 async def _build_rules(report: dict, company_id: str, role: str, upgrade: list) -> None:
-    """Разборы на правилах для лучших новостей ленты одной пары; кандидаты на AI-версию — в upgrade."""
+    """Быстрые разборы для лучших новостей ленты одной пары; кандидаты на AI-версию — в upgrade.
+
+    AI-версию заранее готовят, только если компания это включила (профиль → «AI-разборы заранее»),
+    и только для новостей с оценкой не ниже ее порога."""
     company = profiles.get(company_id)
-    top = config.pipeline_rules_top()
-    feed = (await asyncio.to_thread(ranking.company_feed, company_id, role, 500))[:top]
+    settings = await asyncio.to_thread(company_ai.get, company_id)
+    everything = await asyncio.to_thread(ranking.company_feed, company_id, role, 500)
+    important = sum(1 for r in everything if r["relevance"]["score"] >= settings["threshold"]) if settings["enabled"] else 0
+    feed = everything[:max(config.pipeline_rules_top(), min(important, MAX_PRECOMPUTE))]
     cached = await asyncio.to_thread(storage.cached_insights, company_id, role, [r["news"]["news_id"] for r in feed])
     for item in feed:
         news = item["news"]
@@ -150,7 +157,7 @@ async def _build_rules(report: dict, company_id: str, role: str, upgrade: list) 
         if insight is None:
             insight = await _analyze(company, role, news, use_llm=False)
             report["rules_built"] += insight is not None
-        if insight is not None and insight["mode"] == "rules" and not storage.llm_attempted(insight):
+        if insight is not None and insight["mode"] == "rules" and not storage.llm_attempted(insight)                 and settings["enabled"] and item["relevance"]["score"] >= settings["threshold"]:
             upgrade.append((item["relevance"]["score"], company, role, news))
 
 

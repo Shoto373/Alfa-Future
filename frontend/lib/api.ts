@@ -1,5 +1,5 @@
 import type {
-  Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, LookupCompany, Member, Membership, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
+  AISettings, Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, LookupCompany, Member, Membership, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
@@ -103,6 +103,10 @@ export const api = {
   meta: (signal?: AbortSignal) => request<Meta>("/api/v1/meta", {}, { signal }),
   company: (id: string, signal?: AbortSignal) =>
     request<{ profile: CompanyProfile; exposures: Exposure[] }>(`/api/v1/companies/${encodeURIComponent(id)}`, {}, { signal }),
+  aiSettings: (id: string, signal?: AbortSignal) =>
+    request<AISettings>(`/api/v1/companies/${cid(id)}/ai-settings`, {}, { signal }),
+  saveAISettings: (id: string, data: { enabled: boolean; threshold: number }) =>
+    request<AISettings>(`/api/v1/companies/${cid(id)}/ai-settings`, json("PUT", data)),
   companyExtra: (id: string, signal?: AbortSignal) =>
     request<CompanyExtra>(`/api/v1/companies/${cid(id)}/extra`, {}, { signal }),
   saveCompanyExtra: (id: string, data: { shares: CompanyExtra["shares"]; notes: string }) =>

@@ -139,13 +139,18 @@ def chat_json(system: str, user: str, model_kind: str = "compose", max_tokens: i
         "max_tokens": max_tokens,
         "response_format": {"type": "json_object"},
     }
-    if s["reasoning_effort"] and any(m in model for m in s["reasoning_effort_models"]):
+    reasoning = s["reasoning"].get(model_kind, "")
+    if reasoning == "off":
+        payload["reasoning"] = {"enabled": False}
+    elif reasoning in ("low", "medium", "high"):
+        payload["reasoning"] = {"effort": reasoning}
+    elif s["reasoning_effort"] and any(m in model for m in s["reasoning_effort_models"]):
         payload["reasoning_effort"] = s["reasoning_effort"]
     started = time.perf_counter()
     committed = False
     try:
         resp = _post(payload, s)
-        for optional in ("response_format", "reasoning_effort"):
+        for optional in ("response_format", "reasoning_effort", "reasoning"):
             if resp.status_code == 400 and optional in resp.text and optional in payload:
                 payload.pop(optional)
                 resp = _post(payload, s)

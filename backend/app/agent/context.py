@@ -215,3 +215,42 @@ def merge_llm(draft: dict, data: dict) -> dict:
     if isinstance(data.get("questions"), list):
         draft["questions"] = [str(q)[:300] for q in data["questions"]][:4]
     return draft
+
+
+def tidy_llm(draft: dict, rules_facts: list[dict], ctx: dict) -> list[str]:
+    """Нарушения формы в черновике модели исправляются без второго вызова модели (быстрее и предсказуемее):
+    пересказ под меткой «факт» — это вывод AI; признаки — только из профиля компании;
+    «Что произошло» — только дословные предложения новости (пересказ заменяют факты быстрого разбора).
+    Числа без источника так не исправить — их по-прежнему правит модель. Возвращает описание для трассы."""
+    texts = evidence.source_texts(ctx)
+    allowed = evidence.valid_features(ctx["company"])
+
+    def verbatim(c: dict, prefix: str) -> bool:
+        return any(s.startswith(prefix) and evidence.normalized(c["text"]) in evidence.normalized(texts.get(s, ""))
+                   for s in c["source_ids"])
+
+    relabeled = features = 0
+    facts = [c for c in draft["what_happened"]["facts"] if c["origin"] == "fact" and verbatim(c, "news:")]
+    replaced = len(draft["what_happened"]["facts"]) - len(facts)
+    draft["what_happened"]["facts"] = facts or rules_facts
+    claims = [c for sec in ("why_important", "risks", "opportunities", "actions") for c in draft[sec]]
+    claims += draft["what_happened"]["assumptions"]
+    for c in claims:
+        # «Позиция банка» не переименовывается: выдуманная позиция банка («банк гарантирует…») под меткой AI
+        # прошла бы дальше — такой вывод проверка отбрасывает или исправляет модель.
+        fact_ok = c["origin"] != "fact" or verbatim(c, "news:")
+        client_ok = c["origin"] != "client_data" or any(s.startswith("client:") for s in c["source_ids"])
+        if not (fact_ok and client_ok):
+            c["origin"] = "ai"
+            relabeled += 1
+        kept = [f for f in c.get("features", []) if f in allowed]
+        features += len(c.get("features", [])) - len(kept)
+        c["features"] = kept
+    notes = []
+    if replaced:
+        notes.append(f"пересказанных фактов заменено дословными: {replaced}")
+    if relabeled:
+        notes.append(f"пересказ помечен как вывод AI: {relabeled}")
+    if features:
+        notes.append(f"убрано несуществующих признаков: {features}")
+    return notes
