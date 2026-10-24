@@ -427,6 +427,11 @@ def smtp_settings() -> dict:
             "password": secret("SMTP_PASSWORD"), "tls": _env("SMTP_TLS", "0") == "1"}
 
 
+def pilot_companies() -> set[str]:
+    """Компании пилота (SPR4-07): для них фичефлаги включены принудительно, независимо от процента раскатки."""
+    return {c.strip() for c in os.environ.get("PILOT_COMPANIES", "").split(",") if c.strip()}
+
+
 def public_api_url() -> str:
     """Адрес API для ссылок в письмах (отписка в один клик)."""
     return _env("PUBLIC_API_URL", "http://localhost:8000").rstrip("/")

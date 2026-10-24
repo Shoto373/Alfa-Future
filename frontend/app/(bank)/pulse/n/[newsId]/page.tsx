@@ -11,6 +11,7 @@ import ScenarioPanel from "@/components/ScenarioPanel";
 import { ErrorState, Icon, Skeleton } from "@/components/ui";
 import { AbortedError, ApiError, api } from "@/lib/api";
 import { markRead } from "@/lib/notifications";
+import { openSource, track } from "@/lib/track";
 import { useSession } from "@/lib/session";
 import type { Insight, Role, ScenarioKind } from "@/lib/types";
 import common from "@/styles/common.module.scss";
@@ -35,9 +36,12 @@ export default function InsightPage() {
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     const id = Number(q.get("d"));
-    if ((q.get("from") === "digest" || q.get("from") === "alert") && Number.isInteger(id) && id > 0) {
+    const from = q.get("from");
+    if ((from === "digest" || from === "alert") && Number.isInteger(id) && id > 0) {
       api.notificationOpened(id).catch(() => { /* аналитика не мешает чтению */ });
     }
+    // Источник перехода для воронки (SPR4-07): сводка, алерт, лента, главная или прямая ссылка.
+    track("insight_open", { source: openSource(from) });
   }, [newsId]);
   // Смена компании или новости — разбор с чистого листа; ответ на старый запрос игнорируется.
   return (

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ApiError, api } from "@/lib/api";
+import { track } from "@/lib/track";
 import type { Answer } from "@/lib/types";
 import { ErrorState, Icon, OriginTag } from "./ui";
 import common from "@/styles/common.module.scss";
@@ -49,13 +50,14 @@ export default function Chat({ insightId, suggestions }: { insightId: string; su
     log.current?.scrollTo({ top: log.current.scrollHeight, behavior: "smooth" });
   }, [history.length, busy]);
 
-  const ask = async (question: string) => {
+  const ask = async (question: string, suggested = false) => {
     if (!question.trim() || busy) return;
     setBusy(true);
     setError(null);
     try {
       const a = await api.ask(insightId, question.trim());
       setHistory((h) => [...h, a]);
+      track("question_ask", { intent: a.intent, suggested });
       setNext(a.suggestions);
       setQ("");
     } catch (e) {
@@ -82,7 +84,7 @@ export default function Chat({ insightId, suggestions }: { insightId: string; su
           </header>
           <div className={`${styles.assistantBody} ${styles.chat}`} ref={log} aria-live="polite">
             <div className={styles.chips}>
-              {(next ?? suggestions).map((s) => <button key={s} className={styles.chip} onClick={() => ask(s)} disabled={busy}>{s}</button>)}
+              {(next ?? suggestions).map((s) => <button key={s} className={styles.chip} onClick={() => ask(s, true)} disabled={busy}>{s}</button>)}
             </div>
             {history.map((a, i) => (
               <div key={i} data-testid="chat-turn">

@@ -13,6 +13,7 @@ from app.api.router import router
 from app.api.manager import router as manager_router
 from app.api.notifications import public as notifications_public
 from app.api.notifications import router as notifications_router
+from app.api.product import router as product_router
 from app.api.stream import router as stream_router
 from app.api.setup import configure_api
 from app.auth.router import router as auth_router
@@ -59,6 +60,7 @@ app.include_router(admin_config_router)
 app.include_router(admin_labeling_router)
 app.include_router(notifications_router)
 app.include_router(manager_router)
+app.include_router(product_router)
 app.include_router(notifications_public)
 app.include_router(metrics_router)
 

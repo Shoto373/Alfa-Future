@@ -1,5 +1,5 @@
 import type {
-  AISettings, Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, ConfigPreview, ConfigState, ConfigTexts, ConfigIssue, BankOffer, CounterpartiesView, DialogTurn, Lead, ManagerClient, Inbox, NotificationSettings, ScenarioKind, ScenarioResponse, KbDocument, KbDraft, KbUploadItem, LabelingState, LookupCompany, Member, Membership, Mention, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
+  AISettings, Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, ConfigPreview, ConfigState, ConfigTexts, ConfigIssue, BankOffer, CounterpartiesView, DialogTurn, FlagSetting, ProductReport, Lead, ManagerClient, Inbox, NotificationSettings, ScenarioKind, ScenarioResponse, KbDocument, KbDraft, KbUploadItem, LabelingState, LookupCompany, Member, Membership, Mention, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
@@ -183,6 +183,13 @@ export const api = {
   scenario: (body: { company_id: string; scenario: ScenarioKind; shock: number; debt?: number; floating_share?: number;
     fx_revenue_share?: number; import_share?: number; exposure?: number }) =>
     request<ScenarioResponse>("/api/v1/scenarios", json("POST", body)),
+  // Продуктовая аналитика (SPR4-07): флаги пользователя, отчет пилота и настройка флагов (оператор).
+  flags: (companyId: string | null) =>
+    request<{ flags: Record<string, { enabled: boolean; variant: string | null }> }>(`/api/v1/flags${companyId ? `?company_id=${cid(companyId)}` : ""}`),
+  productReport: (days: number, signal?: AbortSignal) => request<ProductReport>(`/api/v1/admin/product?days=${days}`, {}, { signal }),
+  flagSettings: (signal?: AbortSignal) => request<{ flags: Record<string, FlagSetting> }>("/api/v1/admin/flags", {}, { signal }),
+  saveFlag: (key: string, body: { percent?: number; companies?: string[] }) =>
+    request<FlagSetting>(`/api/v1/admin/flags/${cid(key)}`, json("PUT", body)),
   // Связь с банком (SPR4-06): предложения по потребности, заявка с согласия, кабинет менеджера.
   insightOffers: (insightId: string, signal?: AbortSignal) =>
     request<{ offers: BankOffer[]; leads: Lead[]; consent_text: string }>(`/api/v1/insights/${cid(insightId)}/offers`, {}, { signal }),

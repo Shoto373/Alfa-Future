@@ -376,6 +376,23 @@ export interface CounterpartiesView {
   events: CounterpartyEvent[];
 }
 
+// Продуктовая аналитика (SPR4-07).
+export interface Interval { rate: number | null; low: number | null; high: number | null; n: number }
+
+export interface ProductReport {
+  days: number;
+  wau: number;
+  wau_by_role: Record<string, number>;
+  wau_weeks: { week_end: string; users: number }[];
+  useful: Interval;
+  retention_d7: Interval;
+  funnel: { step: string; label: string; users: number }[];
+  events: Record<string, number>;
+  experiments: { key: string; description: string; variants: { variant: string; users: number; opens: number; useful: Interval }[] }[];
+}
+
+export interface FlagSetting { description: string; percent: number; companies: string[]; variants?: string[] }
+
 // Связь с банком (SPR4-06).
 export interface BankOffer { offer_id: string; title: string; text: string; need: string; reason: string; label: string }
 

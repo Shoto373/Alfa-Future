@@ -168,6 +168,18 @@ class ManagerAssignRequest(Strict):
     company_id: str = Field(..., min_length=1, max_length=64)
 
 
+class ProductEventRequest(Strict):
+    """Событие воронки (SPR4-07): свойства — только коды-перечисления, проверяются по белому списку на сервере."""
+    kind: str = Field(..., min_length=3, max_length=40)
+    company_id: str | None = Field(None, max_length=64)
+    props: dict[str, str | int | bool] = Field(default_factory=dict, max_length=6)
+
+
+class FlagUpdateRequest(Strict):
+    percent: int | None = Field(None, ge=0, le=100)
+    companies: list[str] | None = Field(None, max_length=200)
+
+
 class KbApproveRequest(Strict):
     supersedes: str | None = Field(None, max_length=64)
 

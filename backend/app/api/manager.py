@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 
-from app import ranking, storage
+from app import flags, ranking, storage
 from app.api.router import ERRORS, _company
 from app.auth import store as auth_store
 from app.auth.deps import check_origin, current_user, member_of, require_operator
@@ -40,7 +40,8 @@ def _offers(ins: dict) -> list[dict]:
 def insight_offers(insight_id: str, user: dict = Depends(current_user)) -> dict:
     """Предложения банка к разбору: только при потребности; плюс уже отправленные пользователем заявки."""
     ins, _ = _insight_for(insight_id, user)
-    return {"offers": _offers(ins), "leads": leads.of_user(user["user_id"], insight_id), "consent_text": leads.CONSENT_TEXT}
+    on = flags.evaluate(user["user_id"], ins["company_id"])["bank_offers"]["enabled"]  # раскатка SPR4-07
+    return {"offers": _offers(ins) if on else [], "leads": leads.of_user(user["user_id"], insight_id), "consent_text": leads.CONSENT_TEXT}
 
 
 @router.post("/leads", responses=ERRORS, status_code=201)

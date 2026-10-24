@@ -262,6 +262,25 @@ class Event(Base, Payload, Timestamped):
     __table_args__ = (Index("events_kind_idx", "kind"),)
 
 
+class ProductEvent(Base, Payload, Timestamped):
+    """Событие продуктовой воронки (SPR4-07): псевдоним пользователя, компания, роль и свойства-перечисления — без ПДн."""
+    __tablename__ = "product_events"
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    kind: Mapped[str] = mapped_column(Text)
+    user_hash: Mapped[str] = mapped_column(Text)
+    company_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    role: Mapped[str | None] = mapped_column(Text, nullable=True)
+    __table_args__ = (Index("product_events_kind_idx", "kind", "created_at"),
+                      Index("product_events_user_idx", "user_hash", "created_at"))
+
+
+class FeatureFlag(Base, Payload):
+    """Настройка фичефлага или эксперимента (SPR4-07): процент раскатки и компании пилота поверх значений по умолчанию."""
+    __tablename__ = "feature_flags"
+    key: Mapped[str] = mapped_column(Text, primary_key=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class ToolAudit(Base, Payload, Timestamped):
     __tablename__ = "tool_audit"
     id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)

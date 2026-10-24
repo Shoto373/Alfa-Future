@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { errorText } from "@/lib/errors";
 import { useLoad } from "@/lib/hooks";
+import { track } from "@/lib/track";
 import type { BankOffer } from "@/lib/types";
 import styles from "@/components/InsightView.module.scss";
 import common from "@/styles/common.module.scss";
@@ -28,6 +29,7 @@ export default function BankOffers({ insightId }: { insightId: string }) {
     setStatus(null);
     try {
       const r = await api.createLead({ insight_id: insightId, offer_id: offer.offer_id, consent: true, comment: comment.trim() || null });
+      track("offer_click", { offer_id: offer.offer_id, step: "sent" });
       setStatus(r.managers ? "Заявка отправлена — менеджер свяжется с вами." : "Заявка сохранена — ее увидит закрепленный за компанией менеджер.");
       setAsking(null);
       reload();
@@ -61,7 +63,7 @@ export default function BankOffers({ insightId }: { insightId: string }) {
               </div>
             ) : (
               <button type="button" className={`${common.btn} ${common.btnSecondary} ${common.btnSm} ${styles.offerAsk}`}
-                onClick={() => { setAsking(o.offer_id); setConsent(false); setComment(""); }}>Обсудить с менеджером</button>
+                onClick={() => { setAsking(o.offer_id); setConsent(false); setComment(""); track("offer_click", { offer_id: o.offer_id, step: "open" }); }}>Обсудить с менеджером</button>
             )}
         </div>
       ))}

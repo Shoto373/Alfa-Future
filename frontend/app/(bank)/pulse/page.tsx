@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import AddNews from "@/components/AddNews";
 import NewsCard from "@/components/NewsCard";
 import TopicChips from "@/components/TopicChips";
@@ -9,6 +9,7 @@ import { Card, ErrorState, Icon, Loading } from "@/components/ui";
 import { useFeedWithTopics } from "@/lib/hooks";
 import { useRead } from "@/lib/notifications";
 import { useSession } from "@/lib/session";
+import { track } from "@/lib/track";
 import type { FeedItem, TopicCount } from "@/lib/types";
 import common from "@/styles/common.module.scss";
 import styles from "@/app/(bank)/pulse/page.module.scss";
@@ -60,6 +61,7 @@ function PulseFeed() {
   const { read } = useRead(session!.user.user_id, session!.companyId);
   const feed = { ...page, data: page.data ? sorted(page.data.items, sort, read) : null };
   const companyId = session!.companyId;
+  useEffect(() => track("feed_view", topic ? { topic } : {}), [companyId, topic]);
   // Новый фильтр, порядок или компания — снова первые 30 новостей.
   const [shown, setShown] = useState(PAGE_SIZE);
   const pageKey = `${companyId}|${topic ?? ""}|${sort}`;

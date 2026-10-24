@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 
-from app import database
+from app import database, flags
 from app.companies import profiles
 from app.models import Delivery
 from app.notifications import delivery, rules, settings as subscriptions
@@ -41,10 +41,14 @@ def digest_for(member: dict, now: datetime, key: str) -> list[int]:
     items = rules.digest_items(member["company_id"], member["role"], member["settings"])
     if not items:
         return []
+    # Эксперимент SPR4-07 «формат сводки»: контроль — до 5 событий, вариант compact — 3 главных.
+    fmt = flags.evaluate(member["user_id"], member["company_id"])["digest_format"]["variant"]
+    if fmt == "compact":
+        items = items[:3]
     day = rules.local(now, member["settings"])
     title = f"Сводка на {day.day} {MONTHS[day.month - 1]}: {len(items)} события для {_company_name(member['company_id'])}"
     return delivery.create(member["user_id"], member["company_id"], "digest", key, _channels(member),
-                           _payload(member, title, items))
+                           _payload(member, title, items, format=fmt))
 
 
 def alerts_for(member: dict, now: datetime) -> list[int]:
