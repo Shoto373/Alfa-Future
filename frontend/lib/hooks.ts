@@ -9,14 +9,14 @@ type Result<T> = { key: string; data: T | null; error: ApiError | null };
 
 /** Загрузка по ключу из deps: результат другого ключа не показывается — при смене компании или роли
  *  старые данные исчезают сразу, а ответ на устаревший запрос отбрасывается. */
-export function useLoad<T>(fn: (signal: AbortSignal) => Promise<T>, deps: unknown[]): Load<T> {
+export function useLoad<T>(fn: (signal: AbortSignal, reloaded: boolean) => Promise<T>, deps: unknown[]): Load<T> {
   const [result, setResult] = useState<Result<T> | null>(null);
   const [tick, setTick] = useState(0);
   const key = JSON.stringify([...deps, tick]);
 
   useEffect(() => {
     const controller = new AbortController();
-    fn(controller.signal)
+    fn(controller.signal, tick > 0)
       .then((data) => { if (!controller.signal.aborted) setResult({ key, data, error: null }); })
       .catch((e) => {
         if (e instanceof AbortedError || controller.signal.aborted) return;
@@ -32,12 +32,12 @@ export function useLoad<T>(fn: (signal: AbortSignal) => Promise<T>, deps: unknow
 }
 
 export function useFeed(companyId: string, topic?: string): Load<FeedItem[]> {
-  return useLoad((s) => api.feed(companyId, topic, s).then((r) => r.items), [companyId, topic]);
+  return useLoad((s, reloaded) => api.feed(companyId, topic, s, undefined, reloaded).then((r) => r.items), [companyId, topic]);
 }
 
 /** Лента вместе со счетчиками тем по всей ленте компании (для фильтра тем). */
 export function useFeedWithTopics(companyId: string, topic?: string, story?: string): Load<FeedPage> {
-  return useLoad((s) => api.feed(companyId, topic, s, story), [companyId, topic, story]);
+  return useLoad((s, reloaded) => api.feed(companyId, topic, s, story, reloaded), [companyId, topic, story]);
 }
 
 export function useCompany(companyId: string): Load<{ profile: CompanyProfile; exposures: Exposure[] }> {

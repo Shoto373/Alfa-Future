@@ -56,6 +56,29 @@ const json = (method: string, data: unknown): RequestInit => ({
 const cid = encodeURIComponent;
 export const FEED_LIMIT = 500;
 
+// Лента компании нужна сразу нескольким частям экрана (страница, уведомления в шапке): один и тот же
+// запрос за FEED_SHARE_MS не повторяется — все получают один ответ. Отмена одного потребителя не отменяет запрос.
+const FEED_SHARE_MS = 20_000;
+const feedShared = new Map<string, { at: number; promise: Promise<FeedPage> }>();
+
+function sharedFeed(path: string, signal?: AbortSignal, fresh = false): Promise<FeedPage> {
+  const now = Date.now();
+  let entry = feedShared.get(path);
+  if (fresh || !entry || now - entry.at > FEED_SHARE_MS) {
+    const promise = request<FeedPage>(path);
+    entry = { at: now, promise };
+    feedShared.set(path, entry);
+    promise.catch(() => { if (feedShared.get(path)?.promise === promise) feedShared.delete(path); });
+  }
+  if (!signal) return entry.promise;
+  if (signal.aborted) return Promise.reject(new AbortedError());
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(new AbortedError());
+    signal.addEventListener("abort", onAbort, { once: true });
+    entry.promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
+}
+
 export const api = {
   me: (signal?: AbortSignal) => request<User>("/api/v1/auth/me", {}, { signal }),
   login: (email: string, password: string) => request<User>("/api/v1/auth/login", json("POST", { email, password })),
@@ -91,10 +114,11 @@ export const api = {
   deleteCompanyFile: (id: string, fileId: string) =>
     request<CompanyExtra>(`/api/v1/companies/${cid(id)}/extra/files/${cid(fileId)}`, { method: "DELETE" }),
   // Всегда вся лента компании (FEED_LIMIT): главная, лента и уведомления считают по одному списку.
-  feed: (companyId: string, topic?: string, signal?: AbortSignal, story?: string) =>
-    request<FeedPage>(
+  // fresh — не брать общий недавний ответ («Повторить», добавленная новость).
+  feed: (companyId: string, topic?: string, signal?: AbortSignal, story?: string, fresh = false) =>
+    sharedFeed(
       `/api/v1/feed?company_id=${encodeURIComponent(companyId)}&limit=${FEED_LIMIT}${topic ? `&topic=${encodeURIComponent(topic)}` : ""}` +
-      `${story ? `&story=${encodeURIComponent(story)}` : ""}`, {}, { signal }),
+      `${story ? `&story=${encodeURIComponent(story)}` : ""}`, signal, fresh),
   // fast: готовая карточка или разбор на правилах без LLM за доли секунды; без fast — версия модели.
   // perspective — другой разрез: тот же разбор глазами другой роли (по умолчанию — своя роль).
   insight: (companyId: string, newsId: string, opts: { force?: boolean; fast?: boolean; perspective?: Role } = {}, signal?: AbortSignal) =>
