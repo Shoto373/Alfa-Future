@@ -112,6 +112,15 @@ def rss_full_text() -> bool:
     return _env("RSS_FULL_TEXT", "1").lower() not in ("0", "false", "no", "off")
 
 
+def demo_accounts() -> bool:
+    """Готовые учетные записи для локальной проверки (app/demo_accounts.py); только локальный compose.yaml."""
+    return _env("DEMO_ACCOUNTS", "0") == "1"
+
+
+def demo_password() -> str:
+    return _env("DEMO_PASSWORD", "alfa-demo-2026")
+
+
 def rss_refresh_minutes() -> int:
     """Период автоматического конвейера (сбор RSS и разборы); 0 — выключен."""
     return int(_env("RSS_REFRESH_MINUTES", "15"))

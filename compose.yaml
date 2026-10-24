@@ -52,6 +52,10 @@ services:
       # Локальная проверка: демо-сотрудник банка видит метрики, расходы и аудит (/metrics, /audit).
       # Только для локального запуска — в production (docker-compose.yml) значения по умолчанию нет.
       OPERATOR_EMAILS: ${OPERATOR_EMAILS:-operator@alfa.test}
+      # Готовые учетные записи для проверки (demo@alfa.test, demo-ceo@alfa.test, operator@alfa.test).
+      # Пароль известен всем — поэтому только локально; в docker-compose.yml этих переменных нет.
+      DEMO_ACCOUNTS: ${DEMO_ACCOUNTS:-1}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-alfa-demo-2026}
     volumes:
       # Реальные CSV кейса: CASE_DATA_DIR=./контекст/data docker compose up (по умолчанию — синтетика)
       - ${CASE_DATA_DIR:-./data/synthetic}:/data/case:ro
