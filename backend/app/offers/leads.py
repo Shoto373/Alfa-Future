@@ -103,3 +103,14 @@ def to_csv(items: list[dict]) -> str:
     writer.writeheader()
     writer.writerows({k: _cell(v) for k, v in item.items()} for item in items)
     return buf.getvalue()
+
+
+def crm_stub(lead_id: int) -> str:
+    """Вебхук в CRM банка — заглушка (SPR4-06): заявка не уходит наружу, в ней отмечается, что ее подхватила бы CRM.
+    Настоящая интеграция заменит эту функцию; формат — тот же, что в выгрузке CSV."""
+    with database.session() as db:
+        row = db.get(Lead, lead_id)
+        if row is None:
+            return "missing"
+        row.payload = {**row.payload, "crm": {"status": "stub", "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}}
+        return "stub"

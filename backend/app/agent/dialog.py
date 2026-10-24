@@ -187,7 +187,7 @@ def _counterparties(insight: dict, company: dict, runner: ToolRunner) -> dict:
                              ["client:graph"]))
     if second:
         claims.append(_claim("Второй уровень цепочки: " + "; ".join(n["text"] for n in second), "client_data", ["client:graph"]))
-    rules = qa.rules_answer(insight, company, "контрагенты")
+    rules = qa.rules_answer(insight, company, "контрагенты", runner)
     claims += rules["claims"]
     text = " ".join(c["text"] for c in claims if c["source_ids"] == ["client:graph"])
     answer = ("Событие касается вашей цепочки поставок:" if chains else
@@ -198,7 +198,7 @@ def _counterparties(insight: dict, company: dict, runner: ToolRunner) -> dict:
 def _bank(insight: dict, company: dict, question: str, runner: ToolRunner) -> dict:
     topics = [r["topic"] for r in insight["relevance"]["reasons"] if r.get("topic")] or []
     found, _ = runner.call("search_bank_analytics", query=question, topics=topics, sectors=[company["sector"]])
-    rules = qa.rules_answer(insight, company, "позиция банка")
+    rules = qa.rules_answer(insight, company, "позиция банка", runner)
     claims = rules["claims"] + [_claim(t["text"], "bank", [f"bank:{t['id']}"]) for t in found[:2]]
     return {"answer": rules["answer"], "claims": claims, "refused": False, "extra_sources": [qa.source_of(t) for t in found[:2]],
             "theses": found}
@@ -248,7 +248,11 @@ def answer(insight: dict, company: dict, question: str, user_id: str, role: str)
                             "контрагенты, позиция банка. Попробуйте один из вопросов ниже.", "claims": [], "sources": [], "refused": True,
                   "mode": "rules"}
     elif intent == "explain":
-        result = qa.answer(insight, company, question)
+        try:
+            result = qa.answer(insight, company, question, runner)
+        except ToolError:  # бюджет вызовов инструментов исчерпан — отказ с подсказкой, а не ошибка 500
+            result = {"answer": "Не удалось получить данные для ответа. Попробуйте переформулировать вопрос.", "claims": [],
+                      "sources": [], "mode": "rules", "refused": True}
     else:
         try:
             step = {"quantify": lambda: _quantify(insight, company, question, turns, runner),

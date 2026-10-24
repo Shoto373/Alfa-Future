@@ -78,6 +78,9 @@ def test_lead_needs_consent_and_is_visible_only_to_own_manager(client, company, 
     assert client.post("/api/v1/leads", json=body | {"consent": True, "offer_id": "nope"}).status_code == 400
     created = client.post("/api/v1/leads", json=body | {"consent": True, "comment": "=HYPERLINK(1)"})
     assert created.status_code == 201 and created.json()["created"] and created.json()["status"] == "new"
+    from app.worker import queue, tasks
+    job = queue.claim("test")
+    assert job["kind"] == "lead_crm" and tasks.HANDLERS["lead_crm"](job["payload"]) == {"status": "stub"}, "CRM — заглушка через очередь"
     again = client.post("/api/v1/leads", json=body | {"consent": True}).json()
     assert again["created"] is False and again["id"] == created.json()["id"], "повтор не плодит заявки"
     assert client.get(f"/api/v1/insights/{ins['insight_id']}/offers").json()["leads"][0]["offer_id"] == offer["offer_id"]

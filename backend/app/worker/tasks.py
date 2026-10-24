@@ -10,6 +10,7 @@ from app.domain_config import preview as config_preview
 from app.knowledge import ingest
 from app.news import store
 from app.notifications import delivery, service
+from app.offers import leads
 from app.worker import queue
 
 logger = logging.getLogger("app.worker")
@@ -66,6 +67,11 @@ def notify_deliver(payload: dict) -> dict:
     return {"status": delivery.deliver(payload["id"])}
 
 
+def lead_crm(payload: dict) -> dict:
+    """Заявка «обсудить с менеджером» — в CRM банка (SPR4-06). Пока заглушка: наружу ничего не отправляется."""
+    return {"status": leads.crm_stub(payload["id"])}
+
+
 def warm_feeds(payload: dict) -> dict:
     """Ленты привязанных компаний — в общий кэш (Redis): первое открытие ленты в любом экземпляре API быстрое."""
     pairs = pipeline.audience()
@@ -92,6 +98,7 @@ HANDLERS: dict[str, Callable[[dict], dict]] = {
     "counterparty_monitor": counterparty_monitor,
     "notify_tick": notify_tick,
     "notify_deliver": notify_deliver,
+    "lead_crm": lead_crm,
     "domain_config_preview": domain_config_preview,
     "warm_feeds": warm_feeds,
     "llm_sweep": llm_sweep,

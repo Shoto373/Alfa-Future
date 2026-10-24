@@ -27,6 +27,7 @@ from app.agent.tools import ToolError, ToolRunner
 from app.errors import AnalysisUnavailable
 from app.knowledge import kb
 from app.news.taxonomy import TOPICS
+from app.offers import needs
 from app.ranking import ROLES, score
 from app.schemas import SCHEMA_VERSION, Insight
 
@@ -367,7 +368,6 @@ def _used_sources(run: Run) -> list[dict]:
     draft, ctx = run.draft, run.ctx
     used_ids = {s for sec in ("why_important", "risks", "opportunities", "actions") for c in draft[sec] for s in c["source_ids"]}
     used_ids |= {s for c in draft["bank_view"]["theses"] + draft["what_happened"]["facts"] for s in c["source_ids"]}
-    used_ids |= {f"product:{p['product_id']}" for p in draft["products"]}
     used_ids |= {"client:profile", "client:payments"}
     used_ids |= {f"bank:{item['id']}" for conflict in ctx["forecast_conflicts"] for item in conflict["items"]}
     existing_theses = {t["id"] for t in ctx["theses"]}
@@ -381,12 +381,20 @@ def _used_sources(run: Run) -> list[dict]:
     return [s for s in context.sources(ctx) if s["source_id"] in used_ids]
 
 
+def _offers(run: Run, effect: str) -> list[dict]:
+    """Предложения банка в разборе — только при выявленной потребности (SPR4-06, правила в доменной конфигурации),
+    а не все продукты по теме новости. Тот же расчет, что у блока «Реклама банка» под разбором."""
+    return [{"product_id": o["offer_id"], "title": o["title"], "text": o["text"], "reason": f"{o['need']}: {o['reason']}"}
+            for o in needs.offers_for({"effect": effect}, run.company, run.news)]
+
+
 def finalize(run: Run) -> dict:
     """Карточка разбора по схеме Insight: разделы, признаки, релевантность, источники, проверки и трасса."""
     draft, company = run.draft, run.company
     quality = {"passed": all(r["passed"] for r in run.final_checks), "attempts": run.attempts,
                "checks": [{"name": r["name"], "passed": r["passed"], "detail": r["detail"]} for r in run.final_checks]}
     sources = _used_sources(run)
+    effect = run.effect or composer.overall_effect(draft)
     relevance = score(run.news, company["company_id"], run.role)
     run.trace.add("finalize", "finalize", f"{'AI-разбор' if run.mode == 'llm' else 'Быстрый разбор'} готов, источников: {len(sources)}",
                   output={"total_duration_ms": round((time.perf_counter() - run.started) * 1000, 1)})
@@ -395,10 +403,10 @@ def finalize(run: Run) -> dict:
         "company_id": company["company_id"], "role": run.role, "news_id": run.news["news_id"],
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "mode": run.mode, "model": run.model, "fallback_reason": run.fallback_reason if run.mode == "rules" else None,
-        "title": draft["title"], "headline": draft["headline"], "effect": run.effect or composer.overall_effect(draft),
+        "title": draft["title"], "headline": draft["headline"], "effect": effect,
         "what_happened": draft["what_happened"], "why_important": draft["why_important"], "risks": draft["risks"],
         "opportunities": draft["opportunities"], "actions": draft["actions"], "questions": draft["questions"],
-        "bank_view": draft["bank_view"], "products": draft["products"], "features_used": context.features_used(run.ctx, draft),
+        "bank_view": draft["bank_view"], "products": _offers(run, effect), "features_used": context.features_used(run.ctx, draft),
         "relevance": {"score": relevance["score"], "reasons": [
             {k: r.get(k) for k in ("kind", "feature", "origin", "weight", "text", "topic")} for r in relevance["reasons"]]},
         "sources": sources, "quality": quality, "trace": run.trace.steps, "disclaimer": DISCLAIMER,

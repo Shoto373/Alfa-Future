@@ -226,14 +226,16 @@ def _chain_claims(ctx: dict, news_src: str) -> list[dict]:
     return out
 
 
-def _scenario_claims(ctx: dict, news_src: str) -> list[dict]:
-    """Чувствительность по формуле (SPR4-02): «каждый +1 п.п. ставки — ≈ X млн ₽ в год» со ссылкой на расчет."""
+def _scenario_claims(ctx: dict, news_src: str, gain: bool = False) -> list[dict]:
+    """Чувствительность по формуле (SPR4-02) со ссылкой на расчет: рост ставки — риск (+X млн ₽ расходов),
+    снижение — возможность (−X млн ₽ расходов). gain=False — утверждения для рисков, True — для возможностей."""
     out = []
     for sc in ctx.get("scenarios") or []:
-        if sc["scenario"] == "key_rate" and sc["effect_rub"] < 0:
-            out.append(_claim(f"Чувствительность к ставке: каждый {sc['shock']:+g} п.п. — это ≈ {scenario_mln(sc['effect_rub'])} "
-                              f"процентных расходов в год (оценка: {sc['formula']})", "client_data",
-                              [news_src, f"client:scenario:{sc['scenario']}"]))
+        if sc["scenario"] != "key_rate" or not sc["effect_rub"] or (sc["effect_rub"] > 0) != gain:
+            continue
+        what = "процентных расходов в год" if not gain else "экономии на процентных расходах в год"
+        out.append(_claim(f"Чувствительность к ставке: каждый {sc['shock']:+g} п.п. — это ≈ {scenario_mln(sc['effect_rub'])} "
+                          f"{what} (оценка: {sc['formula']})", "client_data", [news_src, f"client:scenario:{sc['scenario']}"]))
     return out
 
 
@@ -273,7 +275,7 @@ def compose(ctx: dict) -> dict:
                           "assumptions": _assumptions(ctx, cls, news_src)},
         "why_important": (_chain_claims(ctx, news_src) + _why_important(exposures, company, event, news_src))[:WHY_MAX],
         "risks": (_scenario_claims(ctx, news_src) + _dedupe(risks))[:4],
-        "opportunities": _dedupe(opps)[:4],
+        "opportunities": (_scenario_claims(ctx, news_src, gain=True) + _dedupe(opps))[:4],
         "actions": _actions(topics, role, company, theses, news_src),
         "questions": [QUESTIONS[t] for t in topics if t in QUESTIONS][:3],
         "bank_view": _bank_view(ctx, theses),

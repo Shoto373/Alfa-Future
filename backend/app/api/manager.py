@@ -19,6 +19,7 @@ from app.errors import ApiError
 from app.news import store
 from app.offers import leads, needs
 from app.schemas import LeadRequest, LeadStatusRequest, ManagerAssignRequest
+from app.worker import queue as jobs
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(check_origin)])
 PRIORITY_FORMULA = "оценка события × (0,7 + 0,06 × порядок выручки сверх 1 млн ₽)"
@@ -53,7 +54,8 @@ def create_lead(payload: LeadRequest, user: dict = Depends(current_user)) -> dic
     company = _company(ins["company_id"])
     lead, created = leads.create(user, membership["role"], ins, offer, company["display_name"], payload.comment)
     if created:
-        storage.log_event("lead_created", offer_id=offer["offer_id"])  # вебхук CRM — заглушка: заявка только в кабинете
+        storage.log_event("lead_created", offer_id=offer["offer_id"])
+        jobs.enqueue("lead_crm", {"id": lead["id"]}, dedupe_key=f"lead_crm:{lead['id']}")  # вебхук CRM — заглушка
     return {**lead, "created": created, "managers": len(leads.managers_of(ins["company_id"]))}
 
 

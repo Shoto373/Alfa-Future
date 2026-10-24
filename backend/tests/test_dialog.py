@@ -118,3 +118,15 @@ def test_history_summary_after_ten_turns(client, insight):
     for i in range(11):
         last = _ask(client, insight, f"Какие риски это несет для компании? ({i})")
     assert last["history_summary"].startswith("explain:"), "реплики старше десяти свернуты в резюме"
+
+
+def test_explain_uses_tool_runner_with_audit(client, insight):
+    """Пояснение ищет в аналитике банка через ToolRunner: вызов попадает в журнал инструментов (SPR4-05)."""
+    from sqlalchemy import select
+
+    from app import database
+    from app.models import ToolAudit
+    _ask(client, insight, "Как это связано с инфляцией?")
+    with database.session() as db:
+        tools = [r.payload.get("tool") for r in db.scalars(select(ToolAudit).order_by(ToolAudit.id.desc()).limit(5))]
+    assert "search_bank_analytics" in tools

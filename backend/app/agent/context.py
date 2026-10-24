@@ -24,6 +24,23 @@ FEATURE_LABELS = {
 MAX_EXTRA_QUERIES = 3
 
 
+def _rate_scenario(news: dict, company: dict) -> list[dict]:
+    """Расчет ставки (SPR4-02) — только если у компании есть долг, и в направлении события: снижение ставки — −1 п.п.
+
+    Без кредитов (по данным кейса или со слов компании) процентных расходов от ставки нет: отраслевая оценка долга
+    дала бы риск там, где у компании скорее возможность (депозиты)."""
+    cls = news["classification"]
+    if "key_rate" not in [t["topic"] for t in cls["topics"]][:2]:
+        return []
+    shares = ((company_extra.get(company["company_id"]) or {}).get("shares") or {})
+    if not company["products"].get("loans") and not shares.get("floating_debt_share"):
+        return []
+    direction = (cls.get("topic_directions") or {}).get("key_rate") or cls.get("direction")
+    shock = -1.0 if direction == "down" else 1.0
+    return [{"tool": "scenario_simulate", "args": {"company_id": company["company_id"], "scenario": "key_rate", "shock": shock},
+             "why": "во что обходится компании каждый процентный пункт ставки"}]
+
+
 def rules_plan(news: dict, company: dict) -> list[dict]:
     """Обязательные шаги: без них разбор не опирается на данные компании, контрагентов и банка."""
     topics = [t["topic"] for t in news["classification"]["topics"]]
@@ -43,8 +60,7 @@ def rules_plan(news: dict, company: dict) -> list[dict]:
         {"tool": "get_bank_products", "args": {"company_id": cid, "topics": topics}, "why": "релевантные решения банка"},
     ] + ([{"tool": "lookup_counterparty_chain", "args": {"company_id": cid, "news_id": news["news_id"]},
            "why": "в новости названы организации — проверить, не контрагенты ли это (до второго уровня)"}]
-         if any(e["company_id"] for e in entities.of_news(news)) else [])         + ([{"tool": "scenario_simulate", "args": {"company_id": cid, "scenario": "key_rate", "shock": 1.0},
-             "why": "во что обходится компании каждый процентный пункт ставки"}] if "key_rate" in topics[:2] else [])
+         if any(e["company_id"] for e in entities.of_news(news)) else []) + _rate_scenario(news, company)
 
 
 def llm_queries(news: dict, company: dict, role: str) -> tuple[list[dict], dict]:
