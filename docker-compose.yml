@@ -53,7 +53,8 @@ services:
     restart: unless-stopped
     expose:
       - "8000"
-    environment:
+    environment: &backend-env
+      ROLE: api
       DATABASE_URL: ""
       PGHOST: postgres
       PGDATABASE: alfa
@@ -70,7 +71,7 @@ services:
     env_file:
       - path: .env
         required: false
-    volumes:
+    volumes: &backend-volumes
       # На сервере данные кейса лежат вне репозитория: ~/case-data/{csv,pdf}
       - ${CASE_DATA_DIR:-./case-data/csv}:/data/case:ro
       - ${BANK_PDF_HOST_DIR:-./case-data/pdf}:/data/bank_pdf:ro
@@ -81,6 +82,36 @@ services:
       timeout: 3s
       retries: 3
       # При старте прогреваются модель, векторы, новости и ленты — первый запуск дольше.
+      start_period: 300s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    networks:
+      - app-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Фоновый воркер (SPR3-01): сбор новостей, предрасчет разборов, переклассификация, очистка резервов LLM.
+  # API фоновых задач не запускает. Второй экземпляр API на сервере — см. «Масштабирование» в README.
+  worker:
+    image: ${BACKEND_IMAGE:-alfa-backend:local}
+    container_name: alfa-worker
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+      ROLE: worker
+    env_file:
+      - path: .env
+        required: false
+    volumes: *backend-volumes
+    healthcheck:
+      test: ["CMD", "python", "-c", "from app.worker.runner import healthy; raise SystemExit(0 if healthy() else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
       start_period: 300s
     logging:
       driver: json-file
