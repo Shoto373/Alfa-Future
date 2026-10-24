@@ -26,7 +26,10 @@ export default function Shell({ children }: { children: ReactNode }) {
   const { session, ready, logout } = useSession();
   const router = useRouter();
   const path = usePathname();
-  const [menuOpen, setMenuOpen] = useState(false);
+  // Меню открыто для страницы, где его открыли: переход на другую страницу его закрывает.
+  const [menuPath, setMenuPath] = useState<string | null>(null);
+  const menuOpen = menuPath === path;
+  const setMenuOpen = (open: boolean) => setMenuPath(open ? path : null);
 
   // Без компаний доступны только регистрация компании и профиль.
   const noCompanyOk = path === "/company/register" || path === "/profile";
@@ -37,8 +40,6 @@ export default function Shell({ children }: { children: ReactNode }) {
     if (!session) router.replace("/login");
     else if (needCompany) router.replace("/company/register");
   }, [ready, session, needCompany, router]);
-
-  useEffect(() => setMenuOpen(false), [path]);
 
   if (!ready || !session || needCompany) {
     return <div className={styles.boot}><span className={ui.spinner} aria-label="Загрузка" /></div>;
@@ -78,7 +79,7 @@ export default function Shell({ children }: { children: ReactNode }) {
 
       <div className={styles.main}>
         <header className={styles.topbar}>
-          <button className={`${common.iconBtn} ${styles.menuBtn}`} onClick={() => setMenuOpen((v) => !v)} aria-label="Меню">
+          <button className={`${common.iconBtn} ${styles.menuBtn}`} onClick={() => setMenuOpen(!menuOpen)} aria-label="Меню">
             <Icon name="menu" />
           </button>
           <div className={styles.topbarRight}>

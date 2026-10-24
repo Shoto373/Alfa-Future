@@ -52,11 +52,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [activeId, setActiveId] = useState<string | null>(null);
 
   useEffect(() => {
-    setActiveId(readActive());
+    // Выбранная компания из localStorage — вместе с ответом сервера: до него интерфейс ее не показывает.
     api.me()
-      .then(setUser)
+      .then((u) => { setActiveId(readActive()); setUser(u); })
       .catch((e) => {
         if (!(e instanceof ApiError && e.status === 401)) console.warn("auth/me failed", e);
+        setActiveId(readActive());
         setUser(null);
       })
       .finally(() => setReady(true));

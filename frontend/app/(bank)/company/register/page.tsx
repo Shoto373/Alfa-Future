@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { CompanyTile, ErrorBox, Loading } from "@/components/ui";
+import { CompanyTile, EmptyState, ErrorState, Loading } from "@/components/ui";
 import { AbortedError, ApiError, api } from "@/lib/api";
 import { errorText } from "@/lib/errors";
 import { ROLE_NAMES, useSession } from "@/lib/session";
@@ -11,7 +11,6 @@ import type { LookupCompany, Role } from "@/lib/types";
 import common from "@/styles/common.module.scss";
 import styles from "@/app/(bank)/company/register/page.module.scss";
 import forms from "@/styles/forms.module.scss";
-import ui from "@/components/ui.module.scss";
 
 const PAGE = 20;
 const LIMIT = 5;
@@ -22,10 +21,13 @@ export default function CompanyRegisterPage() {
   const [q, setQ] = useState("");
   const [items, setItems] = useState<LookupCompany[]>([]);
   const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [more, setMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  // Результат поиска относится к своему запросу: пока ответ на новый запрос не пришел — идет загрузка.
+  const searchKey = JSON.stringify([q, attempt]);
+  const [found, setFound] = useState<{ key: string; error: unknown } | null>(null);
+  const loading = found?.key !== searchKey;
+  const error = loading ? null : found.error;
   const [picking, setPicking] = useState<string | null>(null);
   const [role, setRole] = useState<Role>("cfo");
   const [busy, setBusy] = useState(false);
@@ -35,21 +37,19 @@ export default function CompanyRegisterPage() {
 
   useEffect(() => {
     const c = new AbortController();
-    setLoading(true);
-    setError(null);
     const t = setTimeout(() => {
       api.lookupCompanies(q.trim(), PAGE, 0, c.signal)
-        .then((r) => { setItems(r.items); setTotal(r.total); setLoading(false); })
-        .catch((e) => { if (e instanceof AbortedError) return; setError(errorText(e)); setLoading(false); });
+        .then((r) => { setItems(r.items); setTotal(r.total); setFound({ key: searchKey, error: null }); })
+        .catch((e) => { if (!(e instanceof AbortedError)) setFound({ key: searchKey, error: e }); });
     }, 250);
     return () => { clearTimeout(t); c.abort(); };
-  }, [q, attempt]);
+  }, [q, searchKey]);
 
   const loadMore = () => {
     setMore(true);
     api.lookupCompanies(q.trim(), PAGE, items.length)
       .then((r) => { setItems((prev) => [...prev, ...r.items]); setTotal(r.total); })
-      .catch((e) => setError(errorText(e)))
+      .catch((e) => setFound({ key: searchKey, error: e }))
       .finally(() => setMore(false));
   };
 
@@ -91,10 +91,10 @@ export default function CompanyRegisterPage() {
           <label htmlFor="company-q">Поиск компании</label>
           <input className={forms.input} id="company-q" type="search" placeholder="Название, ИНН, отрасль или регион" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
-        {claimError && <div className={ui.errorBox} role="alert"><span>{claimError}</span></div>}
-        {error && <ErrorBox message={error} onRetry={() => setAttempt((a) => a + 1)} />}
+        {claimError && <ErrorState error={claimError} />}
+        {error !== null && <ErrorState error={error} onRetry={() => setAttempt((a) => a + 1)} />}
         {loading && <Loading text="Ищем компании…" />}
-        {!loading && !error && items.length === 0 && <p className={styles.muted}>Ничего не найдено. Измените запрос.</p>}
+        {!loading && error === null && items.length === 0 && <EmptyState className={styles.muted}>Ничего не найдено. Измените запрос.</EmptyState>}
         {!loading && items.length > 0 && (
           <>
             <ul className={styles.lookupList}>

@@ -30,7 +30,7 @@
 .insightHead {
   border-radius: 28px;
   padding: 28px;
-  color: #fff;
+  color: var(--white);
   background: radial-gradient(55% 120% at 92% 120%, rgba(239, 49, 36, .6), transparent 70%), var(--dark);
 
   h1 {
@@ -45,7 +45,7 @@
 
   .btnSecondary {
     background: rgba(255, 255, 255, .1);
-    color: #fff;
+    color: var(--white);
   }
 
   .btnSecondary:hover:not(:disabled) {
@@ -231,7 +231,7 @@
 
 .srcClientData {
   background: var(--blue-soft);
-  color: #1f4fae;
+  color: var(--link);
 }
 
 .trace {
@@ -330,7 +330,7 @@
 }
 
 .insightHead {
-  --score-color: #fff;
+  --score-color: var(--white);
   --score-track: rgba(255, 255, 255, .15);
 }
 

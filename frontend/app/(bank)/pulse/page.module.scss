@@ -44,7 +44,7 @@
   }
 
   .chip:not(.on):not(.chipMore):hover {
-    background: #e6e8eb;
+    background: var(--bg-hover);
   }
 }
 

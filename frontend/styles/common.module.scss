@@ -47,7 +47,7 @@
   height: 34px;
   border-radius: 50%;
   background: var(--ink);
-  color: #fff;
+  color: var(--white);
   display: grid;
   place-items: center;
   font-weight: 700;
@@ -66,7 +66,7 @@
   justify-content: center;
   gap: 8px;
   border: 0;
-  border-radius: 14px;
+  border-radius: var(--radius-sm);
   padding: 12px 20px;
   font-weight: 600;
   cursor: pointer;
@@ -82,7 +82,7 @@
 
 .btnPrimary {
   background: var(--red);
-  color: #fff;
+  color: var(--white);
 
   &:hover:not(:disabled) {
     background: var(--red-dark);
@@ -94,12 +94,12 @@
   color: var(--ink);
 
   &:hover:not(:disabled) {
-    background: #e6e8eb;
+    background: var(--bg-hover);
   }
 }
 
 .btnWhite {
-  background: #fff;
+  background: var(--white);
   color: var(--ink);
 }
 
@@ -154,7 +154,7 @@
 
   &.on {
     background: var(--dark);
-    color: #fff;
+    color: var(--white);
   }
 
   &:disabled {
@@ -292,12 +292,12 @@
 
 .countRed {
   background: var(--red);
-  color: #fff;
+  color: var(--white);
 }
 
 .badgeGreen {
   background: var(--green-acid);
-  color: #fff;
+  color: var(--white);
   font-size: 10px;
   font-weight: 800;
   padding: 2px 7px;
@@ -371,7 +371,7 @@
 }
 
 .pageHead .btnSecondary:hover:not(:disabled) {
-  background: #fff;
+  background: var(--white);
   box-shadow: var(--shadow-pop);
 }
 

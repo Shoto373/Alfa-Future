@@ -4,37 +4,24 @@
 // выключатель AI без удаления ключа с сервера и расход общего дневного бюджета.
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, api } from "@/lib/api";
-import type { LLMSwitch } from "@/lib/types";
+import type { LLMBudget, LLMSwitch } from "@/lib/types";
 import { Icon } from "./ui";
 import styles from "@/components/OperatorPanel.module.scss";
 import common from "@/styles/common.module.scss";
-
-interface Budget {
-  cost: number;
-  cost_limit: number;
-  reserved_cost: number;
-  rejected_by_budget: number;
-}
 
 const rub = (v: number) => `${v.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} ₽`;
 
 export default function OperatorPanel() {
   const [state, setState] = useState<LLMSwitch | null>(null);
-  const [budget, setBudget] = useState<Budget | null>(null);
+  const [budget, setBudget] = useState<LLMBudget | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const [sw, metrics] = await Promise.all([api.llmSwitch(), api.metrics()]);
-      setState(sw);
-      setBudget(metrics.ai?.llm_usage ?? null);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Не удалось загрузить состояние AI");
-    }
-  }, []);
+  const load = useCallback(() => Promise.all([api.llmSwitch(), api.metrics()]).then(
+    ([sw, metrics]) => { setState(sw); setBudget(metrics.ai?.llm_usage ?? null); setError(null); },
+    (e) => setError(e instanceof ApiError ? e.message : "Не удалось загрузить состояние AI"),
+  ), []);
 
   useEffect(() => { void load(); }, [load]);
 

@@ -1,5 +1,5 @@
 import type {
-  Answer, BankDocument, CompanyProfile, CompanySummary, Exposure, FeedItem, Insight, LLMSwitch, LookupCompany, Member, Membership, Meta, NewsBrief, Role, TopicCount, StoryChip, User, } from "./types";
+  Answer, BankDocument, CompanyProfile, Exposure, FeedItem, Insight, LLMBudget, LLMSwitch, LookupCompany, Member, Membership, Meta, NewsBrief, Role, TopicCount, StoryChip, User, } from "./types";
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
@@ -95,8 +95,9 @@ export const api = {
   addNews: (payload: { title?: string; text?: string; url?: string }) =>
     request<{ created: boolean; duplicate_of: string | null; news: NewsBrief }>("/api/v1/news", json("POST", payload), { timeoutMs: 30_000 }),
   analytics: () => request<{ documents: BankDocument[] }>("/api/v1/analytics"),
-  metrics: () => request<Record<string, any>>("/api/v1/metrics"),
-  audit: () => request<{ items: Record<string, any>[] }>("/api/v1/audit?limit=60"),
+  // Сводка для сотрудника банка; интерфейсу нужен только расход бюджета, остальное — для API-клиентов.
+  metrics: () => request<{ ai?: { llm_usage?: LLMBudget } } & Record<string, unknown>>("/api/v1/metrics"),
+  audit: () => request<{ items: Record<string, unknown>[] }>("/api/v1/audit?limit=60"),
   // Сотрудник банка: выключатель AI без удаления ключа с сервера.
   llmSwitch: () => request<LLMSwitch>("/api/v1/ops/llm"),
   setLLMPaused: (paused: boolean) => request<LLMSwitch>("/api/v1/ops/llm", json("POST", { paused })),

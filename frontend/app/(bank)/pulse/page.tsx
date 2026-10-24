@@ -1,10 +1,10 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 import AddNews from "@/components/AddNews";
 import NewsCard from "@/components/NewsCard";
-import { Card, ErrorBox, Icon, Loading } from "@/components/ui";
+import { Card, ErrorState, Icon, Loading } from "@/components/ui";
 import { useFeedWithTopics } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import type { StoryChip, TopicCount } from "@/lib/types";
@@ -41,12 +41,14 @@ function PulseFeed() {
 
   // Только темы, по которым у компании есть новости; первые 10 видны сразу, остальные — по кнопке.
   // Счетчики приходят с сервером и не меняются при выборе темы, поэтому список не «прыгает».
-  const [topics, setTopics] = useState<TopicCount[]>([]);
-  useEffect(() => { if (page.data) setTopics(page.data.topic_counts); }, [page.data]);
-  useEffect(() => setTopics([]), [session!.companyId]);
-  const [stories, setStories] = useState<StoryChip[]>([]);
-  useEffect(() => { if (page.data) setStories(page.data.stories ?? []); }, [page.data]);
-  useEffect(() => setStories([]), [session!.companyId]);
+  // Пока грузится лента по новому фильтру, остаются прежние чипы этой же компании.
+  const companyId = session!.companyId;
+  const [chips, setChips] = useState<{ source: object; companyId: string; topics: TopicCount[]; stories: StoryChip[] } | null>(null);
+  if (page.data && chips?.source !== page.data) {
+    setChips({ source: page.data, companyId, topics: page.data.topic_counts, stories: page.data.stories ?? [] });
+  }
+  const topics = chips?.companyId === companyId ? chips.topics : [];
+  const stories = chips?.companyId === companyId ? chips.stories : [];
   const visibleTopics = allTopics ? topics : topics.filter((t, i) => i < TOPICS_SHOWN || t.topic === topic);
   const hiddenCount = topics.length - topics.filter((t, i) => i < TOPICS_SHOWN || t.topic === topic).length;
 
@@ -95,7 +97,7 @@ function PulseFeed() {
 
       <div className={styles.feed}>
         {feed.loading && <Loading text="Подбираем новости под компанию…" />}
-        {feed.error && <ErrorBox message={feed.error.message} onRetry={feed.reload} />}
+        {feed.error && <ErrorState error={feed.error} onRetry={feed.reload} />}
         {feed.data?.length === 0 && <Card><p>По этой теме новостей нет. Выберите другую тему или добавьте новость.</p></Card>}
         {feed.data?.map((item) => <NewsCard key={item.news.news_id} item={item} />)}
       </div>

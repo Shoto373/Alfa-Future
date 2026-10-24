@@ -229,3 +229,11 @@ export interface BankDocument {
   pdf_available: boolean;
   theses: { id: string; page: number; text: string; topics: string[]; stance?: string; stale?: boolean }[];
 }
+
+/** Расход дневного бюджета LLM (/metrics → ai.llm_usage), для блока «Сервис банка». */
+export interface LLMBudget {
+  cost: number;
+  cost_limit: number;
+  reserved_cost: number;
+  rejected_by_budget: number;
+}

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import CompanyPanel from "@/components/CompanyPanel";
-import { Card, ErrorBox, Skeleton } from "@/components/ui";
+import { Card, ErrorState, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useCompany } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
@@ -27,7 +27,7 @@ export default function CompanyPage() {
         </div>
       </div>
       {company.loading && <Card title="Профиль компании"><Skeleton lines={8} /></Card>}
-      {company.error && <ErrorBox message={company.error.message} onRetry={company.reload} />}
+      {company.error && <ErrorState error={company.error} onRetry={company.reload} />}
       {company.data && (
         <CompanyPanel title="Профиль компании" profile={company.data.profile} exposures={company.data.exposures} sectors={sectors} />
       )}

@@ -4,31 +4,31 @@ import { useCallback, useEffect, useState } from "react";
 import { AbortedError, ApiError, api } from "./api";
 import type { CompanyProfile, Exposure, FeedItem, TopicCount, StoryChip } from "./types";
 
-type Load<T> = { data: T | null; error: ApiError | null; loading: boolean; reload: () => void };
+export type Load<T> = { data: T | null; error: ApiError | null; loading: boolean; reload: () => void };
+type Result<T> = { key: string; data: T | null; error: ApiError | null };
 
-function useLoad<T>(fn: (signal: AbortSignal) => Promise<T>, deps: unknown[]): Load<T> {
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState<ApiError | null>(null);
-  const [loading, setLoading] = useState(true);
+/** Загрузка по ключу из deps: результат другого ключа не показывается — при смене компании или роли
+ *  старые данные исчезают сразу, а ответ на устаревший запрос отбрасывается. */
+export function useLoad<T>(fn: (signal: AbortSignal) => Promise<T>, deps: unknown[]): Load<T> {
+  const [result, setResult] = useState<Result<T> | null>(null);
   const [tick, setTick] = useState(0);
+  const key = JSON.stringify([...deps, tick]);
 
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-    setData(null); // смена компании/роли — старые данные не показываем
     fn(controller.signal)
-      .then((d) => { if (!controller.signal.aborted) setData(d); })
+      .then((data) => { if (!controller.signal.aborted) setResult({ key, data, error: null }); })
       .catch((e) => {
         if (e instanceof AbortedError || controller.signal.aborted) return;
-        setError(e instanceof ApiError ? e : new ApiError("Непредвиденная ошибка", "CLIENT", true));
-      })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+        setResult({ key, data: null, error: e instanceof ApiError ? e : new ApiError("Непредвиденная ошибка", "CLIENT", true) });
+      });
     return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, tick]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fn меняется на каждой отрисовке, зависимости — в key
+  }, [key]);
 
-  return { data, error, loading, reload: useCallback(() => setTick((t) => t + 1), []) };
+  const current = result?.key === key ? result : null;
+  return { data: current?.data ?? null, error: current?.error ?? null, loading: current === null,
+           reload: useCallback(() => setTick((t) => t + 1), []) };
 }
 
 export function useFeed(companyId: string, topic?: string): Load<FeedItem[]> {

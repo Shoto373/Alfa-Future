@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ErrorBox, Icon, Loading } from "@/components/ui";
-import { ApiError, api } from "@/lib/api";
+import { useEffect, useRef, useState } from "react";
+import { ErrorState, Icon, Loading } from "@/components/ui";
+import { api } from "@/lib/api";
+import { useLoad } from "@/lib/hooks";
 import { date } from "@/lib/format";
 import type { BankDocument } from "@/lib/types";
 import styles from "@/app/(bank)/pulse/analytics/page.module.scss";
@@ -54,7 +55,7 @@ function DocRow({ d, open, inline, onToggle }: { d: BankDocument; open: boolean;
   const forecasts = d.theses.filter((t) => t.stance === "forecast").length;
   return (
     <div className={open && inline ? `${styles.docItem} ${styles.isOpen}` : styles.docItem}>
-      <button className={styles.docRow} onClick={onToggle} aria-expanded={open}>
+      <button type="button" className={styles.docRow} onClick={onToggle} aria-expanded={open}>
         <span className={styles.docDate}>{date(d.date)}</span>
         <span className={styles.docRowMain}>
           <span className={styles.docRowTitle}>{d.title}</span>
@@ -73,15 +74,22 @@ function DocRow({ d, open, inline, onToggle }: { d: BankDocument; open: boolean;
 }
 
 function DocDrawer({ d, onClose }: { d: BankDocument; onClose: () => void }) {
+  const close = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+  // Модальное окно: фокус — внутрь, на «Закрыть»; после закрытия — обратно на строку документа.
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    close.current?.focus();
+    return () => opener?.focus({ preventScroll: true });
+  }, []);
   return (
     <div className={styles.drawerBackdrop} onClick={onClose}>
       <aside className={styles.drawer} role="dialog" aria-modal="true" aria-label={d.title} onClick={(e) => e.stopPropagation()}>
-        <button className={styles.drawerClose} onClick={onClose} aria-label="Закрыть"><Icon name="close" size={20} /></button>
+        <button ref={close} type="button" className={styles.drawerClose} onClick={onClose} aria-label="Закрыть"><Icon name="close" size={20} /></button>
         <div className={styles.docMeta}>
           <span className={styles.docDate}>{date(d.date)}</span>
           <span className={styles.docAuthor}>{d.author}</span>
@@ -95,17 +103,11 @@ function DocDrawer({ d, onClose }: { d: BankDocument; onClose: () => void }) {
 }
 
 export default function AnalyticsPage() {
-  const [docs, setDocs] = useState<BankDocument[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [tick, setTick] = useState(0);
+  const { data: docs, error, reload } = useLoad(
+    () => api.analytics().then((r) => [...r.documents].sort((a, b) => b.date.localeCompare(a.date))), []);
   const [activeId, setActiveId] = useState<string | null>(null);
   const desktop = useDesktop();
   const active = docs?.find((d) => d.doc_id === activeId) ?? null;
-
-  useEffect(() => {
-    setError(null);
-    api.analytics().then((r) => setDocs([...r.documents].sort((a, b) => b.date.localeCompare(a.date)))).catch((e) => setError(e instanceof ApiError ? e.message : "Ошибка"));
-  }, [tick]);
 
   return (
     <div className={common.page}>
@@ -115,7 +117,7 @@ export default function AnalyticsPage() {
           <h1>Аналитика Альфа-Банка</h1>
         </div>
       </div>
-      {error && <ErrorBox message={error} onRetry={() => setTick((t) => t + 1)} />}
+      {error && <ErrorState error={error} onRetry={reload} />}
       {!docs && !error && <Loading text="Загружаем материалы…" />}
       <div className={styles.docs}>
         {docs?.map((d) => (
