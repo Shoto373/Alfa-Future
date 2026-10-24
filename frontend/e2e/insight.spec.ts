@@ -48,7 +48,7 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844
 
     await page.goto(`/pulse/n/${encodeURIComponent(newsId)}`);
     await expect(page.getByRole("heading", { name: "Быстрый разбор готов", exact: true })).toBeVisible();
-    await expect(page.getByRole("status")).toContainText("AI-модель дополняет выводы");
+    await expect(page.getByRole("status").filter({ hasText: "AI-модель дополняет выводы" })).toBeVisible();
     await expect(page.getByText("Быстрый разбор", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Пересчитать", exact: true })).toBeDisabled();
     const sources = page.getByRole("button", { name: /6\. На чем основан вывод/ });
