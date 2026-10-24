@@ -14,7 +14,8 @@ test("аналитик: загрузка PDF, проверка черновик�
   await expect(page.getByRole("heading", { name: "Тезисы аналитики" })).toBeVisible();
   // Демо-обзор собирает сервер (PDF в репозитории не хранятся); свой PDF загружается тем же путем.
   await page.getByRole("button", { name: "Загрузить демо-обзор" }).click();
-  await expect(page.getByRole("status")).toContainText(/поставлен на распознавание|уже загружен/);
+  // Список документов в это время может еще загружаться (заглушка — тоже role=status): ищем именно сообщение загрузки.
+  await expect(page.getByRole("status").filter({ hasText: /поставлен на распознавание|уже загружен/ })).toBeVisible();
 
   // Распознавание — задача воркера; список обновляется сам.
   const doc = page.getByRole("link", { name: /ДЕМО\. Макроэкономический обзор/ });
