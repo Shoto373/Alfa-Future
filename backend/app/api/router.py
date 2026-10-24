@@ -17,7 +17,8 @@ from app.companies import profiles
 from app.companies.sectors import SECTOR_NAMES
 from app.errors import AnalysisUnavailable, ApiError, InvalidAnalysisResult
 from app.knowledge import kb
-from app.news import parser, store
+from app.news import entities, parser, store
+from app.news.sources import registry as sources
 from app.news.taxonomy import TOPICS
 from app.ranking import ROLES, company_feed
 from app.worker import queue as jobs
@@ -100,6 +101,12 @@ def _news_brief(n: dict) -> dict:
             "kind": n["kind"], "published_at": n["published_at"], "topics": [{"topic": t["topic"], "name": t["name"]} for t in cls["topics"]],
             "sectors": cls["sectors"], "countries": cls["countries"], "direction": cls["direction"],
             "duplicates": len(n["duplicates"])}
+
+
+def _mentions(n: dict, company_id: str) -> dict:
+    """Организации в новости и признак «упоминается ваша компания или ее контрагент» (SPR3-02)."""
+    found = entities.mentions(n, company_id)
+    return {"mentions": found, "mentions_company": any(m["relation"] != "other" for m in found)}
 
 
 def _worker_status() -> dict:
@@ -265,7 +272,7 @@ def news_feed(company_id: str, topic: str | None = Query(None, max_length=40),
             "topic_counts": sorted(counts.values(), key=lambda c: (-c["count"], c["name"])), "stories": stories, "items": [
         # Склеенные похожие новости других источников добавляются к счетчику «+N источников».
         {"news": {**_news_brief(r["news"]), "duplicates": len(r["news"]["duplicates"]) + r.get("story_size", 0),
-                  "story_id": r.get("story_id")},
+                  "story_id": r.get("story_id"), **_mentions(r["news"], company_id)},
          "relevance": r["relevance"],
          # Знак эффекта — из готового разбора: метка «скорее риск / возможность» в карточке ленты.
          "cached_insight_id": cached.get(r["news"]["news_id"], (None, None))[0],
@@ -273,9 +280,14 @@ def news_feed(company_id: str, topic: str | None = Query(None, max_length=40),
         for r in ranked]}
 
 
-@router.get("/news/{news_id}", responses=ERRORS, dependencies=[Depends(current_user)])
-def news(news_id: str) -> dict:
-    return _news(news_id)
+@router.get("/news/{news_id}", responses=ERRORS)
+def news(news_id: str, company_id: str | None = Query(None, max_length=64), user: dict = Depends(current_user)) -> dict:
+    """Новость с организациями в тексте; с company_id — и их отношение к компании (своя, поставщик, покупатель)."""
+    n = _news(news_id)
+    if company_id is None:
+        return {**n, "entities": entities.of_news(n)}
+    member_of(user, company_id)
+    return {**n, "entities": entities.of_news(n), **_mentions(n, company_id)}
 
 
 @router.post("/news", responses=ERRORS, dependencies=[Depends(limited("news"))])
@@ -301,7 +313,7 @@ def add_news(payload: NewsCreateRequest) -> dict:
 
 @router.post("/news/refresh", responses=ERRORS, dependencies=[Depends(require_operator)])
 def refresh_news() -> dict:
-    return parser.refresh()
+    return sources.collect(force=True)
 
 
 @router.post("/insights", response_model=Insight, responses=ERRORS)

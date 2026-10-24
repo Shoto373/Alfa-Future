@@ -164,6 +164,17 @@ export interface NewsBrief {
   countries: string[];
   direction: string | null;
   duplicates: number;
+  /** Организации в новости и их отношение к компании (лента); есть ли среди них она сама или ее контрагент. */
+  mentions?: Mention[];
+  mentions_company?: boolean;
+}
+
+/** Организация в тексте новости: своя компания, поставщик, покупатель или сторонняя (SPR3-02). */
+export interface Mention {
+  name: string;
+  company_id: string | null;
+  method: "dictionary" | "legal_form" | "inn" | "ogrn";
+  relation: "self" | "supplier" | "customer" | "other";
 }
 
 export interface TopicCount {

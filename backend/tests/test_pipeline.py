@@ -9,6 +9,7 @@ import httpx
 from app.companies import ai_settings as company_ai
 from app import llm, pipeline, storage
 from app.news import parser
+from app.news.sources import registry as sources
 
 RSS = """<?xml version="1.0"?><rss><channel>
 <item><title>ЦБ повысил ключевую ставку до 16%</title><link>https://example.org/a</link>
@@ -133,7 +134,7 @@ def test_rss_failure_does_not_stop_cycle(client, company, monkeypatch):
     assert report["rss"]["failed"] == ["Тест"] and report["rss"]["added"] == 0
     assert report["rules_built"] >= 1, "лента из уже известных новостей разбирается"
 
-    monkeypatch.setattr(parser, "refresh", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(sources, "collect", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
     report = asyncio.run(pipeline.cycle())
     assert report["rss"]["error"] == "RuntimeError" and report["error"] is None
 

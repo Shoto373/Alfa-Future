@@ -31,6 +31,14 @@ export const PRODUCT_NAMES: Record<string, string> = {
   factoring: "Факторинг",
 };
 
+// Отношение упомянутой организации к компании пользователя.
+export const RELATION_LABEL: Record<string, string> = {
+  self: "ваша компания",
+  supplier: "ваш поставщик",
+  customer: "ваш покупатель",
+  other: "",
+};
+
 export const ORIGIN_LABEL: Record<string, string> = {
   fact: "Факт из новости",
   client_data: "Данные компании",

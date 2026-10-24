@@ -1,7 +1,7 @@
 """Автоматический конвейер: сбор новостей из RSS и их разбор для компаний — в фоне, без участия пользователя.
 
 Цикл (каждые RSS_REFRESH_MINUTES минут, первый — вскоре после старта; 0 — конвейер выключен):
-1. Сбор: parser.refresh() — новые новости из RSS. Уже известные пропускаются,
+1. Сбор: sources.collect() — новые новости из источников (RSS, лицензированные ленты, ручные). Уже известные пропускаются,
    новые классифицируются, в базу попадают только деловые.
 2. Сюжеты: новые сюжеты из 3+ сообщений получают короткое название от быстрой модели
    (PIPELINE_STORY_LABELS за цикл, в пределах доли бюджета конвейера).
@@ -36,7 +36,8 @@ from app.agent import orchestrator, prompts
 from app.auth import store as auth_store
 from app.companies import ai_settings as company_ai
 from app.companies import profiles
-from app.news import parser, store
+from app.news import entities, store
+from app.news.sources import registry as sources
 
 logger = logging.getLogger("app.pipeline")
 
@@ -120,10 +121,10 @@ def _save(report: dict) -> None:
 
 
 async def _collect(report: dict) -> None:
-    if not config.rss_sources():
+    if not config.news_sources():
         return
     try:
-        rss = await asyncio.to_thread(parser.refresh)
+        rss = await asyncio.to_thread(sources.collect)
         report["rss"] = {"added": rss["added"], "duplicates": rss["duplicates"], "skipped": rss["skipped"],
                          "full_text": rss.get("full_text", 0),
                          "failed": [s["name"] for s in rss["sources"] if s["error"]]}
@@ -131,6 +132,11 @@ async def _collect(report: dict) -> None:
         logger.exception("pipeline rss step failed")
         report["rss"] = {"added": 0, "duplicates": 0, "skipped": 0, "full_text": 0, "failed": [],
                          "error": type(exc).__name__}
+
+
+def index_news() -> dict:
+    """Сюжеты новых новостей — в базу, организации в новостях — в news_entities (после сбора и переклассификации)."""
+    return {"stories": store.persist_stories(), "entities": entities.sync(store.all_items(), store.revision())}
 
 
 async def _optional(step, name: str, default):
@@ -170,6 +176,7 @@ async def cycle(started_at: str | None = None) -> dict:
               "rss": None, "stories_named": 0, "pairs": 0, "rules_built": 0, "llm_built": 0, "llm_skipped": None,
               "quality_report": False, "duration": None, "error": None}
     await _collect(report)
+    report["indexed"] = await _optional(index_news, "index", None)
     report["stories_named"] = await _optional(_name_stories, "stories", 0)
     # Существенность еще не проверенных новостей (собранных до включения проверки или при сбое модели).
     if await asyncio.to_thread(_llm_budget_left):

@@ -21,6 +21,11 @@ def news_reclassify(payload: dict) -> dict:
     return {"news": store.warm()}
 
 
+def news_index(payload: dict) -> dict:
+    """Сюжеты в базе и организации в новостях (news_entities): после сбора, добавления и переклассификации."""
+    return pipeline.index_news()
+
+
 def warm_feeds(payload: dict) -> dict:
     """Ленты привязанных компаний — в общий кэш (Redis): первое открытие ленты в любом экземпляре API быстрое."""
     pairs = pipeline.audience()
@@ -41,6 +46,7 @@ def jobs_cleanup(payload: dict) -> dict:
 HANDLERS: dict[str, Callable[[dict], dict]] = {
     "news_cycle": news_cycle,
     "news_reclassify": news_reclassify,
+    "news_index": news_index,
     "warm_feeds": warm_feeds,
     "llm_sweep": llm_sweep,
     "jobs_cleanup": jobs_cleanup,

@@ -1,5 +1,7 @@
 """Конфигурация из переменных окружения (читается при каждом обращении — удобно для тестов)."""
 
+import hashlib
+import json
 import os
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -338,3 +340,51 @@ def classify_llm_enabled() -> bool:
     ложные срабатывания (политика, иностранные компании) и не находила пропущенных деловых новостей
     (python -m app.eval_classify --llm). Включение — CLASSIFY_LLM=1."""
     return _env("CLASSIFY_LLM", "0").lower() in ("1", "true", "yes", "on")
+
+
+
+# Источники новостей (SPR3-02): вес доверия, лицензия и частота опроса — у каждого источника.
+# license: "full" — можно хранить полный текст; "lead" — только заголовок и лид (лицензированные ленты).
+SOURCE_TRUST = {"Банк России": 1.0, "Интерфакс": 0.95, "РБК": 0.85, "Коммерсантъ": 0.9, "Ведомости": 0.9,
+                "Frank Media": 0.75}
+LICENSED_FEEDS = [
+    {"name": "Интерфакс", "format": "interfax", "file": "interfax.xml", "trust": 0.95},
+    {"name": "ПРАЙМ", "format": "prime", "file": "prime.json", "trust": 0.9},
+]
+
+
+def _source(kind: str, name: str, url: str = "", **extra) -> dict:
+    sid = f"{kind}:{hashlib.sha1(f'{name}|{url}'.encode()).hexdigest()[:8]}"
+    # interval_minutes=0 — опрос в каждом цикле конвейера (RSS_REFRESH_MINUTES); больше — реже, для платных лент.
+    base = {"id": sid, "kind": kind, "name": name, "url": url, "trust": SOURCE_TRUST.get(name, 0.8),
+            "license": "full", "interval_minutes": 0}
+    return {**base, **extra}
+
+
+def news_sources() -> list[dict]:
+    """Реестр источников: RSS из RSS_SOURCES, лицензированные ленты (заглушка из LICENSED_FEED_DIR),
+    ручные материалы из MANUAL_NEWS_FILE. SOURCES_FILE (JSON-список) полностью заменяет реестр."""
+    path = os.environ.get("SOURCES_FILE")
+    if path:
+        return [_source(s["kind"], s["name"], s.get("url", ""), **{k: v for k, v in s.items() if k not in ("kind", "name", "url")})
+                for s in json.loads(Path(path).read_text(encoding="utf-8"))]
+    out = [_source("rss", s["name"], s["url"]) for s in rss_sources()]
+    feed_dir = licensed_feed_dir()
+    if feed_dir:
+        out += [_source("licensed", f["name"], str(feed_dir / f["file"]), format=f["format"], trust=f["trust"],
+                        license="lead") for f in LICENSED_FEEDS]
+    manual = os.environ.get("MANUAL_NEWS_FILE")
+    if manual:
+        out.append(_source("manual", "Редакция Альфа.Пульса", manual, trust=0.9))
+    return out
+
+
+def licensed_feed_dir() -> Path | None:
+    """Каталог заглушки лицензированных лент (формат Интерфакс/ПРАЙМ). Без договора реальные ленты не подключаются."""
+    value = os.environ.get("LICENSED_FEED_DIR", "").strip()
+    return Path(value) if value else None
+
+
+def story_similarity() -> float:
+    """Порог смысловой близости заголовков для объединения новостей в сюжет."""
+    return float(_env("STORY_SIMILARITY", "0.78"))

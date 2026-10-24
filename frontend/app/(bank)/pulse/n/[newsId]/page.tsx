@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import AccessDenied from "@/components/AccessDenied";
 import FeedRail from "@/components/FeedRail";
 import InsightView from "@/components/InsightView";
+import Mentions from "@/components/insight/Mentions";
 import { ErrorState, Icon, Skeleton } from "@/components/ui";
 import { AbortedError, ApiError, api } from "@/lib/api";
 import { markRead } from "@/lib/notifications";
@@ -117,7 +118,8 @@ function NewsInsight({ newsId }: { newsId: string }) {
       {error && (error.code === "FORBIDDEN" ? <AccessDenied /> : <ErrorState error={error} onRetry={() => load()} />)}
       {insight && <InsightView insight={insight} onRefresh={() => load(true)} refreshing={loading}
         upgrading={upgrading} upgradeFailed={upgradeFailed}
-        perspective={perspective} ownRole={session!.role} onPerspective={setPerspective} />}
+        perspective={perspective} ownRole={session!.role} onPerspective={setPerspective}
+        mentions={<Mentions newsId={decodeURIComponent(newsId)} companyId={companyId} />} />}
     </div>
   );
 }

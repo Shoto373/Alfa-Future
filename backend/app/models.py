@@ -69,7 +69,20 @@ class News(Base, Payload):
     kind: Mapped[str] = mapped_column(Text)
     # Время последнего изменения записи: API подгружает только изменившиеся новости (дельта), а не весь набор.
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    __table_args__ = (Index("news_published_idx", published_at.desc()), Index("news_updated_idx", "updated_at"))
+    # Сюжет (SPR3-02): id самой ранней новости сюжета; хранится в базе, повторный сбор его не пересчитывает.
+    story_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    __table_args__ = (Index("news_published_idx", published_at.desc()), Index("news_updated_idx", "updated_at"),
+                      Index("news_story_idx", "story_id"))
+
+
+class NewsEntity(Base):
+    """Организация, упомянутая в новости (SPR3-02): company_id — если она есть в профилях."""
+    __tablename__ = "news_entities"
+    news_id: Mapped[str] = mapped_column(ForeignKey("news.news_id", ondelete="CASCADE"), primary_key=True)
+    name: Mapped[str] = mapped_column(Text, primary_key=True)
+    company_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    method: Mapped[str] = mapped_column(Text)
+    __table_args__ = (Index("news_entities_company_idx", "company_id"),)
 
 
 class Insight(Base, Payload):

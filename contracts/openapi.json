@@ -6658,6 +6658,7 @@
     },
     "/api/v1/news/{news_id}": {
       "get": {
+        "description": "Новость с организациями в тексте; с company_id — и их отношение к компании (своя, поставщик, покупатель).",
         "operationId": "news_api_v1_news__news_id__get",
         "parameters": [
           {
@@ -6667,6 +6668,23 @@
             "schema": {
               "title": "News Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "company_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Company Id"
             }
           },
           {

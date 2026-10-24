@@ -577,7 +577,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** News */
+        /**
+         * News
+         * @description Новость с организациями в тексте; с company_id — и их отношение к компании (своя, поставщик, покупатель).
+         */
         get: operations["news_api_v1_news__news_id__get"];
         put?: never;
         post?: never;
@@ -5243,7 +5246,9 @@ export interface operations {
     };
     news_api_v1_news__news_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                company_id?: string | null;
+            };
             header?: never;
             path: {
                 news_id: string;

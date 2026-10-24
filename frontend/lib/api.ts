@@ -1,5 +1,5 @@
 import type {
-  AISettings, Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, LookupCompany, Member, Membership, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
+  AISettings, Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, LookupCompany, Member, Membership, Mention, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
@@ -105,6 +105,10 @@ export const api = {
       `${topic ? `&topic=${encodeURIComponent(topic)}` : ""}${story ? `&story=${encodeURIComponent(story)}` : ""}`),
   // fast: готовая карточка или разбор на правилах без LLM за доли секунды; без fast — версия модели.
   // perspective — другой разрез: тот же разбор глазами другой роли (по умолчанию — своя роль).
+  // Новость с организациями в тексте и их отношением к компании (SPR3-02).
+  newsMentions: (newsId: string, companyId: string, signal?: AbortSignal) =>
+    request<{ entities: Omit<Mention, "relation">[]; mentions: Mention[]; mentions_company: boolean }>(
+      `/api/v1/news/${cid(newsId)}?company_id=${cid(companyId)}`, {}, { signal }),
   insight: (companyId: string, newsId: string, opts: { force?: boolean; fast?: boolean; perspective?: Role } = {}, signal?: AbortSignal) =>
     request<Insight>("/api/v1/insights", json("POST", {
       company_id: companyId, news_id: newsId, force_refresh: !!opts.force, fast: !!opts.fast,
