@@ -17,6 +17,8 @@ build/
 *.docx
 *.png
 *.conf
+# Конфигурации nginx (production и локальный стенд из 2 API) нужны compose; прочие *.conf (phone1.conf) — нет.
+!/nginx/*.conf
 extracted_spec.txt
 generate_word_report.py
 TZ_AND_PROMPTS_ALFA_PULSE.md
