@@ -1,4 +1,4 @@
-"""Контракт API 1.0.0 (SPR3-00): файл контракта совпадает со схемами, закрепленные примеры 1.0.0 валидны
+"""Контракт API 1.1.0, формат разбора 1.0.0 (SPR3-00): файл контракта совпадает со схемами, закрепленные примеры 1.0.0 валидны
 для текущих схем (обратная совместимость), каждый ответ несет X-API-Version, каталог ошибок полон."""
 
 import importlib.util
@@ -11,7 +11,7 @@ import pytest
 from app.api.errors import MESSAGES
 from app.auth.schemas import User
 from app.errors import STATUS
-from app.schemas import SCHEMA_VERSION, Answer, ErrorResponse, Insight
+from app.schemas import API_VERSION, SCHEMA_VERSION, Answer, ErrorResponse, Insight
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS = ROOT / "contracts"
@@ -28,7 +28,8 @@ def _gen_contracts():
 
 
 def test_contract_version_is_1_0_0():
-    assert SCHEMA_VERSION == "1.0.0"
+    assert SCHEMA_VERSION == "1.0.0", "формат разбора не менялся"
+    assert API_VERSION == "1.1.0", "адреса добавлены аддитивно — минорная версия контракта"
 
 
 @needs_repo
@@ -47,7 +48,7 @@ def test_examples_1_0_0_stay_valid(name):
 
 def test_every_response_has_api_version(raw_client):
     for path in ("/api/v1/meta", "/api/v1/auth/me", "/healthz"):
-        assert raw_client.get(path).headers["x-api-version"] == SCHEMA_VERSION
+        assert raw_client.get(path).headers["x-api-version"] == API_VERSION
 
 
 @needs_repo

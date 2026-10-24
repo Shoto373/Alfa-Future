@@ -1,4 +1,4 @@
-"""Публичный контракт 1.0.0 (contracts/schemas/common.json генерируется из этих моделей).
+"""Публичный контракт 1.1.0, формат разбора 1.0.0 (contracts/schemas/common.json генерируется из этих моделей).
 
 Ключевой принцип — происхождение каждого утверждения (Claim.origin):
     fact        — подтверждено текстом новости;
@@ -11,7 +11,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Формат разбора (Insight.schema_version): меняется, только если меняются поля разбора.
 SCHEMA_VERSION = "1.0.0"
+# Версия контракта API (openapi.json, заголовок X-API-Version): 1.1.0 — аддитивно добавлены адреса спринта 3
+# (экран аналитика, разметка ленты, организации в новости). Политика — docs/api-versioning.md.
+API_VERSION = "1.1.0"
 
 Role = Literal["owner", "ceo", "cfo", "accountant", "treasurer", "clevel"]
 Origin = Literal["fact", "client_data", "bank", "ai"]

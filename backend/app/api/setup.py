@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import config, observability
 from app.api.errors import error_response
 from app.errors import ApiError
-from app.schemas import SCHEMA_VERSION
+from app.schemas import API_VERSION
 
 logger = logging.getLogger("app.api")
 
@@ -38,7 +38,7 @@ JSON_CSP = (b"content-security-policy", b"default-src 'none'; frame-ancestors 'n
 
 
 def _with_security_headers(headers: list) -> list:
-    out = [*headers, *SECURITY_HEADERS, (b"x-api-version", SCHEMA_VERSION.encode())]
+    out = [*headers, *SECURITY_HEADERS, (b"x-api-version", API_VERSION.encode())]
     if any(k.lower() == b"content-type" and v.startswith(b"application/json") for k, v in headers):
         out.append(JSON_CSP)
     return out

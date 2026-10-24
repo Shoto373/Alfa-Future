@@ -11,7 +11,7 @@ from app.api.prometheus import router as metrics_router
 from app.api.router import router
 from app.api.setup import configure_api
 from app.auth.router import router as auth_router
-from app.schemas import SCHEMA_VERSION
+from app.schemas import API_VERSION
 
 observability.configure_logging()
 logger = logging.getLogger("app")
@@ -40,7 +40,7 @@ app = FastAPI(
     title="Альфа.Пульс API",
     description="Новостная аналитика для руководителей крупного бизнеса: профили компаний, персональная лента, "
                 "агентная интерпретация событий с позицией Альфа-Банка и трассировкой.",
-    version=SCHEMA_VERSION,  # версия контракта; политика — docs/api-versioning.md
+    version=API_VERSION,  # версия контракта; политика — docs/api-versioning.md
     lifespan=lifespan,
 )
 
