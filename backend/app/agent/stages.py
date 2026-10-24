@@ -138,6 +138,10 @@ def _absorb(ctx: dict, tool: str, result) -> str:
         ctx["coverage"] = [n for n in result if n["news_id"] not in seen]
         return (f"то же событие в других источниках: {', '.join(n['source'] for n in ctx['coverage'])}"
                 if ctx["coverage"] else "других источников по событию нет")
+    if tool == "lookup_counterparty_chain":
+        ctx["counterparty_chains"] = result
+        return (f"контрагенты в новости: {'; '.join(c['text'] for c in result)}" if result
+                else "названные в новости организации — не контрагенты компании")
     if tool == "get_story_history":
         ctx["story"] = result
         return (f"похожих событий раньше: {len(result)}, последнее {result[0]['published_at'][:10]}" if result

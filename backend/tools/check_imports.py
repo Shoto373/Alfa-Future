@@ -33,7 +33,7 @@ LAYERS = [
     ("agent", ["app.agent"]),
     ("services", ["app.storage", "app.pipeline", "app.warmup", "app.quality", "app.demo", "app.demo_accounts",
                   "app.precompute_demo", "app.eval_quality", "app.eval_classify", "app.legacy_import", "app.smoke",
-                  "app.ranking_eval", "app.labeling",
+                  "app.ranking_eval", "app.labeling", "app.monitoring",
                   "app.worker"]),
     ("api", ["app.api", "app.auth.deps", "app.auth.router", "app.main", "app.run"]),
 ]

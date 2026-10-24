@@ -3,7 +3,8 @@
 import logging
 from collections.abc import Callable
 
-from app import config, llm_usage, pipeline, ranking
+from app import config, llm_usage, monitoring, pipeline, ranking
+from app.companies import graph
 from app.domain_config import loader as domain_config
 from app.domain_config import preview as config_preview
 from app.knowledge import ingest
@@ -49,6 +50,11 @@ def domain_config_preview(payload: dict) -> dict:
     return {"status": result["status"]}
 
 
+def counterparty_monitor(payload: dict) -> dict:
+    """Граф контрагентов — в company_edges (при смене данных) и алерты о событиях у контрагентов (SPR4-01)."""
+    return {"edges": graph.sync(), "alerts": monitoring.scan()}
+
+
 def warm_feeds(payload: dict) -> dict:
     """Ленты привязанных компаний — в общий кэш (Redis): первое открытие ленты в любом экземпляре API быстрое."""
     pairs = pipeline.audience()
@@ -72,6 +78,7 @@ HANDLERS: dict[str, Callable[[dict], dict]] = {
     "news_index": news_index,
     "kb_ingest": kb_ingest,
     "domain_config_apply": domain_config_apply,
+    "counterparty_monitor": counterparty_monitor,
     "domain_config_preview": domain_config_preview,
     "warm_feeds": warm_feeds,
     "llm_sweep": llm_sweep,

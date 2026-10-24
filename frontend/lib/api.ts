@@ -1,5 +1,5 @@
 import type {
-  AISettings, Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, ConfigPreview, ConfigState, ConfigTexts, ConfigIssue, KbDocument, KbDraft, KbUploadItem, LabelingState, LookupCompany, Member, Membership, Mention, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
+  AISettings, Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, ConfigPreview, ConfigState, ConfigTexts, ConfigIssue, CounterpartiesView, KbDocument, KbDraft, KbUploadItem, LabelingState, LookupCompany, Member, Membership, Mention, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
@@ -174,5 +174,7 @@ export const api = {
   configPublish: (texts: ConfigTexts, note: string) =>
     request<{ id: number; warnings: ConfigIssue[] }>("/api/v1/admin/config/publish", json("POST", { ...texts, note })),
   configRollback: (id: number) => request<{ id: number }>(`/api/v1/admin/config/versions/${id}/rollback`, { method: "POST" }),
+  counterparties: (companyId: string, signal?: AbortSignal) =>
+    request<CounterpartiesView>(`/api/v1/companies/${cid(companyId)}/counterparties`, {}, { signal }),
   pdfUrl: (docId: string, page?: number | null) => `${API_BASE_URL}/api/v1/analytics/${docId}/pdf${page ? `#page=${page}` : ""}`,
 };

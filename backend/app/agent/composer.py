@@ -212,6 +212,19 @@ def _actions(topics: list[str], role: str, company: dict, theses: list[dict], ne
     return _dedupe(actions)[:4]
 
 
+CHAIN_LABEL = {"supplier": "поставщика", "customer": "покупателя", "person": "возможно связанную компанию"}
+
+
+def _chain_claims(ctx: dict, news_src: str) -> list[dict]:
+    """Новость о контрагенте (SPR4-01): цепочка «вы → поставщик → его поставщик» из графа платежей."""
+    out = []
+    for ch in (ctx.get("counterparty_chains") or [])[:2]:
+        level = "второго уровня " if ch["level"] == 2 else ""
+        out.append(_claim(f"Новость касается вашего {level}{CHAIN_LABEL[ch['relation']]}: {ch['text']}", "client_data",
+                          [news_src, "client:graph"]))
+    return out
+
+
 def compose(ctx: dict) -> dict:
     """Разбор на правилах: эффект = чувствительность компании × направление события, с источником у каждого вывода."""
     news, cls, company = ctx["news"], ctx["news"]["classification"], ctx["company"]
@@ -246,7 +259,7 @@ def compose(ctx: dict) -> dict:
         "headline": _headline(company, topics, by_topic, cls, theses),
         "what_happened": {"summary": news["lead"], "facts": facts, "actors": cls["actors"], "dates": cls["dates"],
                           "assumptions": _assumptions(ctx, cls, news_src)},
-        "why_important": _why_important(exposures, company, event, news_src),
+        "why_important": (_chain_claims(ctx, news_src) + _why_important(exposures, company, event, news_src))[:WHY_MAX],
         "risks": _dedupe(risks)[:4],
         "opportunities": _dedupe(opps)[:4],
         "actions": _actions(topics, role, company, theses, news_src),

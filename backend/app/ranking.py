@@ -30,7 +30,7 @@ import numpy as np
 from sqlalchemy import select
 
 from app import cache, config, database, embeddings
-from app.companies import extra, profiles
+from app.companies import extra, graph, profiles
 from app.companies.sectors import SECTOR_NAMES
 from app.models import Feedback, Insight
 from app.domain_config import runtime
@@ -73,7 +73,7 @@ def _topic_confidence(t: dict) -> float:
 
 
 WEIGHTS_FILE = Path(__file__).with_name("ranking_weights.json")
-FEATURES = ("exposure", "sector_mention", "group", "supply_chain", "country", "region", "mention")
+FEATURES = ("exposure", "sector_mention", "group", "supply_chain", "country", "region", "mention", "counterparty")
 MAX_FEED_AGE_DAYS = 120
 MIN_FEED_SCORE = 10.0
 REGION_WEIGHT = 0.5
@@ -268,6 +268,23 @@ def _mention_signal(news: dict, company_id: str, reasons: list[dict]) -> float:
     return value
 
 
+COUNTERPARTY_VALUE = 0.5  # контрагент второго уровня: слабее прямого упоминания контрагента (0,6)
+
+
+def _counterparty_signal(news: dict, company_id: str, reasons: list[dict], mentioned: bool) -> float:
+    """counterparty_hit (SPR4-01): новость называет контрагента второго уровня — «вы → поставщик → его поставщик»."""
+    if mentioned:
+        return 0.0  # сама компания или ее прямой контрагент уже учтены признаком mention
+    chains = [graph.chain_to(company_id, e["company_id"]) for e in entities.of_news(news) if e["company_id"]]
+    chains = [c for c in chains if c and c["level"] == 2]
+    if not chains:
+        return 0.0
+    best = max(chains, key=lambda c: c["weight"])
+    reasons.append({"kind": "counterparty", "feature": "counterparty_graph", "origin": "payments", "weight": COUNTERPARTY_VALUE,
+                    "text": f"Касается контрагента второго уровня: {best['text']}"})
+    return COUNTERPARTY_VALUE
+
+
 def features(news: dict, company_id: str, role: str) -> dict:
     """Признаки пары «новость × компания × роль»: слагаемые (f), общий множитель и причины.
 
@@ -297,13 +314,14 @@ def features(news: dict, company_id: str, role: str) -> dict:
                         "text": f"Сильное изменение: «{strength['evidence']}»"})
 
     mention = _mention_signal(news, company_id, reasons)
+    counterparty = _counterparty_signal(news, company_id, reasons, mention > 0)
     age = _age_days(news["published_at"])
     freshness = 0.5 ** (age / weights()["half_life_days"])
     importance = 0.5 + sum(share * TOPICS[t]["importance"] for t, share in shares.items() if t in TOPICS)
     # No permanent 40% freshness floor: old external events must leave the feed.
     topic_conf = sum(share * confidence.get(t, 1.0) for t, share in shares.items()) if shares else 1.0
     f = {"exposure": exposure_sum, "sector_mention": direct, "group": group_hit, "supply_chain": supply_chain,
-         "country": country_hit, "region": region_hit, "mention": mention}
+         "country": country_hit, "region": region_hit, "mention": mention, "counterparty": counterparty}
     multiplier = importance * role_mult * strength_mult * freshness * feedback_mult * topic_conf
     return {"f": f, "multiplier": multiplier, "freshness": freshness, "age_days": age, "reasons": reasons}
 
@@ -370,7 +388,7 @@ def feed(items: list[dict], company_id: str, role: str, topic: str | None = None
             continue
         relevance = score(news, company_id, role)
         has_company_basis = any(r["kind"] in ("exposure", "sector_mention", "group", "country", "supply_chain", "region",
-                                              "mention")
+                                              "mention", "counterparty")
                                 for r in relevance["reasons"])
         if not news["classification"]["topics"] or not has_company_basis or relevance["score"] < MIN_FEED_SCORE:
             continue

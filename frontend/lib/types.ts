@@ -340,3 +340,37 @@ export interface ConfigPreview {
   gone?: ConfigPreviewRow[];
   issues?: ConfigIssue[];
 }
+
+// Граф контрагентов (SPR4-01).
+export interface Counterparty {
+  company_id: string;
+  name: string;
+  sector: string | null;
+  relation: "supplier" | "customer" | "person";
+  level: 1 | 2;
+  weight: number;
+  amount?: number;
+  count?: number;
+  text: string;
+}
+
+export interface CounterpartyEvent {
+  news_id: string;
+  counterparty_id: string;
+  counterparty_name: string;
+  level: number;
+  relation: string;
+  chain: string;
+  title: string;
+  published_at: string;
+  strength: number;
+  created_at: string;
+}
+
+export interface CounterpartiesView {
+  company_id: string;
+  top: Counterparty[];
+  second_level: Counterparty[];
+  possible_links: Counterparty[];
+  events: CounterpartyEvent[];
+}

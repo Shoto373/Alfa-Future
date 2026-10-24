@@ -20,6 +20,7 @@ def plan() -> list[tuple[str, int, Callable[[], bool]]]:
         ("news_cycle", max(minutes, 1) * MINUTE, lambda: minutes > 0),
         ("news_reclassify", 10 * MINUTE, lambda: True),
         ("news_index", 5 * MINUTE, lambda: True),
+        ("counterparty_monitor", 5 * MINUTE, lambda: True),
         ("warm_feeds", 15 * MINUTE, config.warm_feeds_on_start),
         ("llm_sweep", 5 * MINUTE, lambda: True),
         ("jobs_cleanup", 24 * 60 * MINUTE, lambda: True),

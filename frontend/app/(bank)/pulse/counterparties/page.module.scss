@@ -1,0 +1,67 @@
+// Контрагенты (SPR4-01).
+.events,
+.chains {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.events li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+
+  a {
+    color: var(--ink);
+    text-decoration: none;
+  }
+}
+
+.chain {
+  font-size: 14px;
+  background: #fff1d6;
+  color: #6b4100;
+  border-radius: 8px;
+  padding: 4px 8px;
+  align-self: flex-start;
+}
+
+.chains li {
+  font-size: 14px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+
+  th,
+  td {
+    text-align: left;
+    padding: 8px 6px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  th {
+    color: var(--ink-2);
+    font-weight: 600;
+    font-size: 13px;
+  }
+}
+
+.num {
+  text-align: right !important;
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .table th:nth-child(2),
+  .table td:nth-child(2) {
+    display: none;
+  }
+}

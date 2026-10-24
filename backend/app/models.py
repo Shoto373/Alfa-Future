@@ -112,6 +112,32 @@ class DomainConfigVersion(Base, Payload):
     __table_args__ = (CheckConstraint("status IN ('published', 'archived')", name="domain_config_versions_status_check"),)
 
 
+class CompanyEdge(Base):
+    """Ребро графа контрагентов (SPR4-01): платеж «плательщик → получатель» или возможная связь через физлиц."""
+    __tablename__ = "company_edges"
+    src: Mapped[str] = mapped_column(Text, primary_key=True)
+    dst: Mapped[str] = mapped_column(Text, primary_key=True)
+    kind: Mapped[str] = mapped_column(Text, primary_key=True)  # payment | person
+    share_out: Mapped[float] = mapped_column(Numeric)  # доля в исходящих платежах src (для person — вес связи)
+    share_in: Mapped[float | None] = mapped_column(Numeric, nullable=True)  # доля во входящих платежах dst
+    amount: Mapped[float] = mapped_column(Numeric, server_default="0")
+    count: Mapped[int] = mapped_column(Integer, server_default="0")
+    __table_args__ = (Index("company_edges_dst_idx", "dst"),)
+
+
+class CounterpartyAlert(Base, Payload):
+    """Событие у контрагента компании (SPR4-01): новость о нем, цепочка до компании и сила события."""
+    __tablename__ = "counterparty_alerts"
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=False), primary_key=True)
+    company_id: Mapped[str] = mapped_column(Text)
+    news_id: Mapped[str] = mapped_column(Text)
+    counterparty_id: Mapped[str] = mapped_column(Text)
+    level: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (UniqueConstraint("company_id", "news_id", "counterparty_id", name="counterparty_alerts_uq"),
+                      Index("counterparty_alerts_company_idx", "company_id", "created_at"))
+
+
 class BankProduct(Base, Payload):
     __tablename__ = "bank_products"
     product_id: Mapped[str] = mapped_column(Text, primary_key=True)

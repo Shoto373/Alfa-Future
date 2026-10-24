@@ -20,6 +20,7 @@ const NAV: (NavItem | "divider")[] = [
   "divider",
   { href: "/", label: "Главная", icon: "home" },
   { href: "/pulse", label: "Альфа.Пульс", icon: "pulse", accent: true },
+  { href: "/pulse/counterparties", label: "Контрагенты", icon: "link" },
   { href: "/pulse/analytics", label: "Аналитика банка", icon: "doc" },
   { href: "/quality", label: "Качество", icon: "shield", operatorOnly: true },
   { href: "/admin/kb", label: "Тезисы аналитики", icon: "check", operatorOnly: true },

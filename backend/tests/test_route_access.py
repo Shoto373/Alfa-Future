@@ -27,6 +27,7 @@ ROUTES = {
     ("GET", "/api/v1/feed"): (None, {403}),
     ("GET", "/api/v1/news/{news_id}"): (None, {403}),
     ("GET", "/api/v1/insights/stream"): (None, {403}),
+    ("GET", "/api/v1/companies/{company_id}/counterparties"): (None, {403}),
     ("POST", "/api/v1/insights"): ({"fast": True}, {403}),
     ("GET", "/api/v1/insights/{insight_id}"): (None, {403, 404}),
     ("POST", "/api/v1/insights/{insight_id}/questions"): ({"question": "Что с долгом?"}, {403, 404}),

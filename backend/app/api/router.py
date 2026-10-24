@@ -8,13 +8,13 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 
-from app import cache, config, embeddings, llm, llm_usage, pipeline, quality, ratelimit, storage, vectors
+from app import cache, config, embeddings, llm, llm_usage, monitoring, pipeline, quality, ratelimit, storage, vectors
 from app.agent import audit, orchestrator, qa
 from app.auth import store as auth_store
 from app.auth.deps import check_origin, client_ip, current_user, member_of, require_operator
 from app.companies import ai_settings as company_ai
 from app.companies import extra as company_extra
-from app.companies import profiles
+from app.companies import graph, profiles
 from app.companies.sectors import SECTOR_NAMES
 from app.errors import AnalysisUnavailable, ApiError, InvalidAnalysisResult
 from app.knowledge import ingest, kb
@@ -249,6 +249,20 @@ def delete_company_file(company_id: str, file_id: str, user: dict = Depends(curr
     if not company_extra.delete_file(company_id, file_id, user["user_id"]):
         raise ApiError("FILE_NOT_FOUND")
     return _extra_view(company_id)
+
+
+@router.get("/companies/{company_id}/counterparties", responses=ERRORS)
+def company_counterparties(company_id: str, user: dict = Depends(current_user)) -> dict:
+    """Контрагенты (SPR4-01): топ по платежам, второй уровень с цепочкой, возможные связи и события у них."""
+    member_of(user, company_id)
+    _company(company_id)
+    found = graph.neighbors(company_id)
+    first = [n for n in found if n["level"] == 1 and n["relation"] != "person"]
+    return {"company_id": company_id,
+            "top": sorted(first, key=lambda n: -n.get("amount", 0))[:graph.TOP],
+            "second_level": [n for n in found if n["level"] == 2][:graph.TOP],
+            "possible_links": [n for n in found if n["relation"] == "person"][:graph.TOP],
+            "events": monitoring.alerts(company_id)}
 
 
 @router.get("/feed", responses=ERRORS)
