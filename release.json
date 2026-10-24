@@ -1,9 +1,9 @@
 {
-  "commit": "c3c79d450af4714c53ae5f0f770947abb4421733",
-  "short": "c3c79d4",
-  "subject": "Merge pull request #22 from dvaJf/fix/gitops-nginx-reload",
+  "commit": "e474ae36a4b34177136366814959314d4e5acfd3",
+  "short": "e474ae3",
+  "subject": "Merge pull request #23 from dvaJf/ui/claim-badges",
   "author": "Egor",
-  "url": "https://github.com/dvaJf/alfa/commit/c3c79d450af4714c53ae5f0f770947abb4421733",
-  "run_url": "https://github.com/dvaJf/alfa/actions/runs/40089920121",
-  "built_at": "2026-10-24T11:29:58+00:00"
+  "url": "https://github.com/dvaJf/alfa/commit/e474ae36a4b34177136366814959314d4e5acfd3",
+  "run_url": "https://github.com/dvaJf/alfa/actions/runs/40090267536",
+  "built_at": "2026-10-24T11:36:48+00:00"
 }
