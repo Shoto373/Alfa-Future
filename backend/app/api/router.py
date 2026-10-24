@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 
 from app import cache, config, embeddings, llm, llm_usage, pipeline, quality, ratelimit, storage, vectors
 from app.agent import audit, orchestrator, qa
@@ -104,10 +104,12 @@ def _news_brief(n: dict) -> dict:
             "duplicates": len(n["duplicates"])}
 
 
-def _mentions(n: dict, company_id: str) -> dict:
-    """Организации в новости и признак «упоминается ваша компания или ее контрагент» (SPR3-02)."""
+def _mentions(n: dict, company_id: str, related_only: bool = False) -> dict:
+    """Организации в новости и признак «упоминается ваша компания или ее контрагент» (SPR3-02).
+    related_only — только своя компания и контрагенты (лента: ответ на сотни новостей не раздувается)."""
     found = entities.mentions(n, company_id)
-    return {"mentions": found, "mentions_company": any(m["relation"] != "other" for m in found)}
+    related = [m for m in found if m["relation"] != "other"]
+    return {"mentions": related if related_only else found, "mentions_company": bool(related)}
 
 
 def _worker_status() -> dict:
@@ -269,16 +271,18 @@ def news_feed(company_id: str, topic: str | None = Query(None, max_length=40),
     storage.log_event("feed_view", company_id=company_id, role=role)
     cached = storage.cached_insight_refs(company_id, role, [r["news"]["news_id"] for r in ranked])
     # total и topic_counts — по всей ленте компании: главная и лента показывают одни и те же числа.
-    return {"company_id": company_id, "role": role, "total": len(everything),
+    # JSONResponse напрямую: ответ — уже простые типы, а jsonable_encoder на сотнях новостей — самая дорогая часть
+    # запроса под нагрузкой (≈14 мс процессора на ленту в 500 новостей).
+    return JSONResponse({"company_id": company_id, "role": role, "total": len(everything),
             "topic_counts": sorted(counts.values(), key=lambda c: (-c["count"], c["name"])), "stories": stories, "items": [
         # Склеенные похожие новости других источников добавляются к счетчику «+N источников».
         {"news": {**_news_brief(r["news"]), "duplicates": len(r["news"]["duplicates"]) + r.get("story_size", 0),
-                  "story_id": r.get("story_id"), **_mentions(r["news"], company_id)},
+                  "story_id": r.get("story_id"), **_mentions(r["news"], company_id, related_only=True)},
          "relevance": r["relevance"],
          # Знак эффекта — из готового разбора: метка «скорее риск / возможность» в карточке ленты.
          "cached_insight_id": cached.get(r["news"]["news_id"], (None, None))[0],
          "cached_effect": cached.get(r["news"]["news_id"], (None, None))[1]}
-        for r in ranked]}
+        for r in ranked]})
 
 
 @router.get("/news/{news_id}", responses=ERRORS)

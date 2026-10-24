@@ -57,6 +57,8 @@ services:
       LICENSED_FEED_DIR: ${LICENSED_FEED_DIR-/app/app/news/sources/demo}
       # Трассы этапов агента — в локальный Tempo (профиль monitoring: make up-monitoring); пусто — не экспортируются.
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT-}
+      # Процессов API в каждом экземпляре backend (app/run.py); воркер переменную не использует.
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
       # Локальная проверка: демо-сотрудник банка видит метрики, расходы и аудит (/metrics, /audit).
       # Только для локального запуска — в production (docker-compose.yml) значения по умолчанию нет.
       OPERATOR_EMAILS: ${OPERATOR_EMAILS:-operator@alfa.test}

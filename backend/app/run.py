@@ -23,8 +23,10 @@ def main() -> int:
     if role == "api":
         # Логи uvicorn — тем же JSON-форматом через корневой логгер; журнал доступа пишет сам API (с request_id).
         observability.configure_logging()
+        # WEB_CONCURRENCY — процессов API в контейнере: Python исполняет код в одном потоке, и под нагрузкой
+        # экземпляр упирается в одно ядро. Каждый процесс держит свою копию новостей и embedding-модели (~0,5 ГБ).
         uvicorn.run("app.main:app", host="0.0.0.0", port=int(os.environ.get("PORT", "8000")), log_config=None,
-                    access_log=False)
+                    access_log=False, workers=int(os.environ.get("WEB_CONCURRENCY", "1")))
         return 0
     print(f"Неизвестная роль ROLE={role}: api или worker", file=sys.stderr)
     return 2

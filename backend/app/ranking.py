@@ -20,6 +20,7 @@ import hashlib
 import json
 import math
 import re
+import threading
 import time
 from functools import lru_cache
 from pathlib import Path
@@ -403,6 +404,21 @@ def _diversify(ranked: list[dict]) -> list[dict]:
     return out
 
 
+_building: dict[str, threading.Lock] = {}
+_building_guard = threading.Lock()
+
+
+def _cached_feed(key: str) -> list[dict] | None:
+    hit = cache.get(key)
+    if hit is None:
+        return None
+    rows = [(store.get(r["news_id"]), r) for r in hit]
+    if not all(n is not None for n, _ in rows):
+        return None
+    return [{"news": n, "relevance": r["relevance"], **{k: r[k] for k in ("story_size", "story_id") if k in r}}
+            for n, r in rows]
+
+
 def company_feed(company_id: str, role: str, limit: int = 500) -> list[dict]:
     """Лента компании по всем новостям с кэшем (память процесса + Redis).
 
@@ -417,14 +433,22 @@ def company_feed(company_id: str, role: str, limit: int = 500) -> list[dict]:
     feedback = hashlib.sha1(repr(sorted(_topic_feedback(company_id, role).items())).encode()).hexdigest()[:10]
     key = (f"feed:v2:{company_id}:{role}:{limit}:{store.revision()}:{profiles.signature()}:{embeddings.signature()}"
            f":fb{feedback}:x{extra.signature(company_id)}:w{weights()['signature']}")
-    hit = cache.get(key)
-    if hit is not None:
-        rows = [(store.get(r["news_id"]), r) for r in hit]
-        if all(n is not None for n, _ in rows):
-            return [{"news": n, "relevance": r["relevance"], **{k: r[k] for k in ("story_size", "story_id") if k in r}}
-                    for n, r in rows]
-    result = feed(store.all_items(), company_id, role, None, limit)
-    cache.set(key, [{"news_id": r["news"]["news_id"], "relevance": r["relevance"],
-                     **({k: r[k] for k in ("story_size", "story_id") if k in r})} for r in result],
-              config.feed_cache_seconds())
+    found = _cached_feed(key)
+    if found is not None:
+        return found
+    # Ленту для ключа считает один поток процесса: когда кэш устарел (новая новость, TTL), десятки
+    # одновременных запросов иначе пересчитывали бы ее параллельно и делили одно ядро — хвост задержки.
+    with _building_guard:
+        lock = _building.setdefault(key, threading.Lock())
+    with lock:
+        found = _cached_feed(key)
+        if found is not None:
+            return found
+        result = feed(store.all_items(), company_id, role, None, limit)
+        cache.set(key, [{"news_id": r["news"]["news_id"], "relevance": r["relevance"],
+                         **({k: r[k] for k in ("story_size", "story_id") if k in r})} for r in result],
+                  config.feed_cache_seconds())
+    with _building_guard:
+        if _building.get(key) is lock and not lock.locked():
+            del _building[key]
     return result
