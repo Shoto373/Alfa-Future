@@ -9,8 +9,10 @@
 import logging
 import time
 
-from app import embeddings, vectors
+from app import config, embeddings, pipeline, ranking, vectors
 from app.companies import profiles
+from app.knowledge import kb
+from app.news import semantic, store
 
 logger = logging.getLogger("app.warmup")
 
@@ -26,8 +28,6 @@ def _step(report: dict, name: str, fn):
 
 
 def _feeds() -> int:
-    from app import config, pipeline, ranking
-
     if not config.warm_feeds_on_start():
         return 0
     pairs = pipeline.audience()
@@ -37,9 +37,6 @@ def _feeds() -> int:
 
 
 def run() -> dict:
-    from app.knowledge import kb
-    from app.news import semantic, store
-
     report: dict = {}
     started = time.perf_counter()
     _step(report, "profiles", lambda: profiles.meta()["profiles"])

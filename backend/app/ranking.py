@@ -15,14 +15,17 @@ score = важность × (совпадение тем с экспозиция
 import hashlib
 import math
 import re
+import time
 from datetime import datetime, timezone
 
 import numpy as np
+from sqlalchemy import select
 
-from app import embeddings
+from app import cache, config, database, embeddings
 from app.companies import profiles
 from app.companies.sectors import SECTOR_NAMES
-from app.news import magnitude
+from app.models import Feedback, Insight
+from app.news import magnitude, store
 from app.news.taxonomy import TOPICS
 
 ROLES = {
@@ -47,10 +50,40 @@ STORY_SIMILARITY = 0.88  # заголовки ближе этого — один
 NOW_OVERRIDE: datetime | None = None  # для тестов
 
 
+FEEDBACK_TTL = 60.0
+_feedback_memo: dict[tuple, tuple[float, dict]] = {}
+
+
+def topic_feedback(company_id: str, role: str) -> dict[str, int]:
+    """Сумма оценок пользователей (+1/−1) по темам новостей для компании и роли.
+
+    Оценка разбора относится к темам его новости: так лента учится, какие темы этой роли полезны.
+    """
+    key = (config.database_schema(), company_id, role)
+    hit = _feedback_memo.get(key)
+    if hit and time.monotonic() - hit[0] < FEEDBACK_TTL:
+        return hit[1]
+    with database.session() as db:
+        rows = db.execute(select(Insight.news_id, Feedback.payload["rating"].as_integer())
+                          .join(Feedback, Feedback.insight_id == Insight.insight_id)
+                          .where(Insight.company_id == company_id, Insight.role == role)).all()
+    net: dict[str, int] = {}
+    for news_id, rating in rows:
+        news = store.get(news_id)
+        for t in (news or {}).get("classification", {}).get("topics", [])[:2]:
+            net[t["topic"]] = net.get(t["topic"], 0) + int(rating or 0)
+    _feedback_memo[key] = (time.monotonic(), net)
+    return net
+
+
+def forget_feedback() -> None:
+    """Сброс памяти оценок: вызывается при сохранении новой оценки."""
+    _feedback_memo.clear()
+
+
 def _topic_feedback(company_id: str, role: str) -> dict[str, int]:
-    from app import storage
     try:
-        return storage.topic_feedback(company_id, role)
+        return topic_feedback(company_id, role)
     except Exception:  # оценки — уточнение, а не условие ранжирования
         return {}
 
@@ -79,14 +112,8 @@ def _region_stem(region: str | None) -> str | None:
     return word
 
 
-def score(news: dict, company_id: str, role: str) -> dict:
-    c = profiles.get(company_id)
-    cls = news["classification"]
-    reasons: list[dict] = []
-    topic_scores = {t["topic"]: t["score"] for t in cls["topics"]}
-    total_topic = sum(topic_scores.values()) or 1
-    shares = {t: v / total_topic for t, v in topic_scores.items()}
-
+def _exposure_signal(company_id: str, topic_scores: dict[str, float], shares: dict[str, float], reasons: list[dict]) -> float:
+    """Вклад признаков компании по темам новости; признаки одной темы — с убывающим весом 1, 1/2, 1/4…"""
     by_topic: dict[str, list[float]] = {}
     seen = set()
     for e in profiles.exposures(company_id):
@@ -99,9 +126,11 @@ def score(news: dict, company_id: str, role: str) -> dict:
             seen.add(key)
             reasons.append({"kind": "exposure", "topic": e["topic"], "feature": e["feature"], "origin": e["origin"],
                             "weight": round(contribution, 3), "text": e["why"]})
-    # Убывающий вклад признаков одной темы: 1, 1/2, 1/4…
-    exposure_sum = sum(v * 0.5 ** i for values in by_topic.values() for i, v in enumerate(sorted(values, reverse=True)))
+    return sum(v * 0.5 ** i for values in by_topic.values() for i, v in enumerate(sorted(values, reverse=True)))
 
+
+def _direct_signals(c: dict | None, cls: dict, news: dict, reasons: list[dict]) -> tuple[float, float, float, float]:
+    """Прямые упоминания: отрасль компании, отрасли ее контрагентов, страны ВЭД и регион."""
     direct = 0.0
     if c and c["sector"] in cls["sectors"]:
         direct = 1.0
@@ -133,23 +162,40 @@ def score(news: dict, company_id: str, role: str) -> dict:
         region_hit = REGION_WEIGHT
         reasons.append({"kind": "region", "feature": "region", "origin": "client_data", "weight": REGION_WEIGHT,
                         "text": f"Новость касается региона компании — {c['region']}"})
+    return direct, supply_chain, country_hit, region_hit
 
+
+def _feedback_multiplier(company_id: str, role: str, shares: dict[str, float], reasons: list[dict]) -> float:
+    """Обратная связь: оценки разборов этой компании и роли поднимают или опускают темы (×0.6…×1.3)."""
+    net = _topic_feedback(company_id, role)
+    if not (net and shares):
+        return 1.0
+    feedback_mult = sum(share * min(FEEDBACK_MAX, max(FEEDBACK_MIN, 1 + FEEDBACK_STEP * net.get(t, 0)))
+                        for t, share in shares.items())
+    liked = [TOPICS[t]["name"] for t in shares if net.get(t, 0) > 0 and t in TOPICS]
+    disliked = [TOPICS[t]["name"] for t in shares if net.get(t, 0) < 0 and t in TOPICS]
+    if liked or disliked:
+        reasons.append({"kind": "feedback", "feature": "feedback", "origin": "user", "weight": round(feedback_mult, 2),
+                        "text": "Учтены ваши оценки: " + "; ".join(
+                            ([f"полезно — {', '.join(liked)}"] if liked else []) +
+                            ([f"не интересно — {', '.join(disliked)}"] if disliked else []))})
+    return feedback_mult
+
+
+def score(news: dict, company_id: str, role: str) -> dict:
+    """Релевантность новости для компании и роли (0–100) и причины отбора, самые весомые — первыми."""
+    c = profiles.get(company_id)
+    cls = news["classification"]
+    reasons: list[dict] = []
+    topic_scores = {t["topic"]: t["score"] for t in cls["topics"]}
+    total_topic = sum(topic_scores.values()) or 1
+    shares = {t: v / total_topic for t, v in topic_scores.items()}
+
+    exposure_sum = _exposure_signal(company_id, topic_scores, shares, reasons)
+    direct, supply_chain, country_hit, region_hit = _direct_signals(c, cls, news, reasons)
     role_spec = ROLES.get(role, ROLES["ceo"])
     role_mult = sum(share * role_spec["focus"].get(t, 1.0) for t, share in shares.items()) if shares else 1.0
-
-    # Обратная связь: оценки разборов этой компании и роли поднимают или опускают темы (×0.6…×1.3).
-    feedback_mult = 1.0
-    net = _topic_feedback(company_id, role)
-    if net and shares:
-        feedback_mult = sum(share * min(FEEDBACK_MAX, max(FEEDBACK_MIN, 1 + FEEDBACK_STEP * net.get(t, 0)))
-                            for t, share in shares.items())
-        liked = [TOPICS[t]["name"] for t in shares if net.get(t, 0) > 0 and t in TOPICS]
-        disliked = [TOPICS[t]["name"] for t in shares if net.get(t, 0) < 0 and t in TOPICS]
-        if liked or disliked:
-            reasons.append({"kind": "feedback", "feature": "feedback", "origin": "user", "weight": round(feedback_mult, 2),
-                            "text": "Учтены ваши оценки: " + "; ".join(
-                                ([f"полезно — {', '.join(liked)}"] if liked else []) +
-                                ([f"не интересно — {', '.join(disliked)}"] if disliked else []))})
+    feedback_mult = _feedback_multiplier(company_id, role, shares, reasons)
     if role_mult > 1.05:
         reasons.append({"kind": "role", "feature": "role", "origin": "user", "weight": round(role_mult, 2),
                         "text": f"Тема в фокусе роли «{role_spec['name']}»"})
@@ -179,7 +225,6 @@ def _collapse_stories(ranked: list[dict]) -> list[dict]:
     Сначала — по сюжетам хранилища (новости одного события и его продолжения), затем —
     по похожим заголовкам среди оставшихся. story_size — сколько еще сообщений у сюжета.
     """
-    from app.news import store
 
     by_story: dict[str, dict] = {}
     kept_rows = []
@@ -240,8 +285,6 @@ def company_feed(company_id: str, role: str, limit: int = 500) -> list[dict]:
     профилей дают новый ключ. TTL ограничивает дрейф свежести внутри одной ревизии.
     В кэше лежат только id и оценки — сами новости берутся из хранилища в памяти.
     """
-    from app import cache, config
-    from app.news import store
 
     if NOW_OVERRIDE is not None:  # тесты с фиксированным временем считают ленту напрямую
         return feed(store.all_items(), company_id, role, None, limit)

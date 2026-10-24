@@ -11,6 +11,8 @@ import logging
 import threading
 import time
 
+import redis
+
 from app import config
 
 logger = logging.getLogger("app.cache")
@@ -33,7 +35,6 @@ def _redis():
     if not url or time.monotonic() < _down_until:
         return None
     if _client is None or _client_url != url:
-        import redis
         _client = redis.Redis.from_url(url, socket_timeout=0.5, socket_connect_timeout=0.5, health_check_interval=30)
         _client_url = url
     return _client

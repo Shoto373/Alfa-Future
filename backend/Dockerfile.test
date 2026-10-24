@@ -7,5 +7,6 @@ COPY backend/alembic.ini /app/alembic.ini
 COPY backend/alembic /app/alembic
 COPY backend/app ./app
 COPY backend/tests ./tests
+COPY backend/tools ./tools
 COPY data/synthetic /data/synthetic
 CMD ["python", "-m", "pytest", "tests", "-q"]

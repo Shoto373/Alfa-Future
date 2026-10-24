@@ -10,7 +10,7 @@
 
 import json
 
-from app.agent import llm
+from app import llm
 from app.agent.prompts import GUARD
 
 SECTIONS = ("why_important", "risks", "opportunities", "actions")

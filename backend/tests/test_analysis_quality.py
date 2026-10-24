@@ -2,8 +2,8 @@
 
 import pytest
 
-from app import embeddings, ranking
-from app.agent import llm, review
+from app import embeddings, llm, ranking
+from app.agent import review
 from app.news import magnitude
 from app.news.classifier import classify
 

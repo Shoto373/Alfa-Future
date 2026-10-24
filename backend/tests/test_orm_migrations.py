@@ -53,8 +53,8 @@ def test_alembic_upgrade_matches_orm_and_downgrade_roundtrip():
         assert compare_metadata(context, Base.metadata) == []
     cfg = database.alembic_config()
     command.downgrade(cfg, "base")
-    with database.engine().connect() as conn:
-        assert set(inspect(conn).get_table_names()) == {"alembic_version"}
+    with database.engine().connect() as conn:  # схема теста явно: в общей базе в public могут быть рабочие таблицы
+        assert set(inspect(conn).get_table_names(schema=database.schema())) == {"alembic_version"}
     command.upgrade(cfg, "head")
     with database.session() as db:
         db.add(Event(kind="after_upgrade", payload={"ok": True}))

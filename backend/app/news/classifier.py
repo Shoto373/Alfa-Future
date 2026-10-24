@@ -139,12 +139,8 @@ def split_sentences(text: str) -> list[str]:
     return [s.strip() for s in _SENT.split((text or "").strip()) if len(s.strip()) > 20]
 
 
-def classify(title: str, text: str, hint: dict | None = None) -> Classification:
-    """hint — ответ модели-классификатора (app.news.llm_classify) для неуверенных случаев."""
-    full = f"{title}. {text}"
-    tokens = tokenize(full)
-    title_tokens = tokenize(title)
-
+def _dictionary_topics(tokens: list[str], title_tokens: list[str]) -> list[dict]:
+    """Темы по словарям; совпадение в заголовке весит вдвое больше."""
     topics = []
     for key, spec in TOPICS.items():
         score, matched = _score(tokens, spec["stems"])
@@ -153,8 +149,12 @@ def classify(title: str, text: str, hint: dict | None = None) -> Classification:
             continue
         if score:
             topics.append({"topic": key, "name": spec["name"], "score": score, "matched": matched})
-    # Смысловые темы (embedding-модель): находят тему без слов из словаря,
-    # например «мегарегулятор оставил стоимость заимствований» — ключевая ставка.
+    return topics
+
+
+def _semantic_topics(topics: list[dict], title: str, text: str, tokens: list[str]) -> tuple[list[dict], dict | None]:
+    """Смысловые темы (embedding-модель): находят тему без слов из словаря,
+    например «мегарегулятор оставил стоимость заимствований» — ключевая ставка."""
     # Опора для смысла — только значимые словарные темы: слабое совпадение («бюджетных» в новости об учителях,
     # «торговле» в новости о договоре по оружию) позже отсеивается и не должно смягчать порог смысловой темы.
     strong = {t["topic"] for t in topics if t["score"] > 1}
@@ -178,19 +178,74 @@ def classify(title: str, text: str, hint: dict | None = None) -> Classification:
         best = max((meaning["sims"].get(t["topic"], -1.0) for t in topics), default=-1.0)
         if meaning["non_business"] - best >= NON_BUSINESS_MARGIN:
             topics = []
+    return topics, meaning
+
+
+def _with_hint(topics: list[dict], hint: dict | None) -> list[dict]:
+    """Ответ модели-классификатора: «не про бизнес» снимает темы, новые темы добавляются."""
+    if not hint:
+        return topics
+    if not hint.get("business"):
+        return []
+    have = {t["topic"] for t in topics}
+    for key in hint.get("topics", []):
+        if key in TOPICS and key not in have:
+            topics.append({"topic": key, "name": TOPICS[key]["name"], "score": LLM_TOPIC_SCORE,
+                           "matched": [f"модель-классификатор ({hint.get('model', 'LLM')})"]})
+    return topics
+
+
+def _topic_direction(topic: str, sentence_tokens: list[list[str]], direction: str | None) -> str | None:
+    """Направление темы — по предложениям, где тема упоминается.
+    Для кредитования «ужесточение» означает меньше кредита (down), «смягчение» — больше (up)."""
+    stems = TOPICS[topic]["stems"]
+    local = [tk for tk in sentence_tokens if _score(tk, stems)[0]]
+    counts = {d: sum(_score(tk, st)[0] for tk in local) for d, st in DIRECTION_STEMS.items()}
+    if topic == "credit_market":
+        tight = sum(_score(tk, ["ужесточ"])[0] for tk in local)
+        soft = sum(_score(tk, ["смягчени", "смягч"])[0] for tk in local)
+        counts["up"] = max(counts["up"] - tight, 0) + soft
+        counts["down"] = counts["down"] - soft + 2 * tight
+    own = bool(local)
+    if topic == "fx":
+        # Валюта названа прямо («рубль», «доллар») — направление читается по любому такому предложению,
+        # даже если тема найдена по смыслу, а не по словарю.
+        fx = _fx_direction(sentence_tokens)
+        if fx["up"] or fx["down"]:
+            counts, own = {**fx, "hold": counts["hold"]}, True
+    if topic == "sanctions_geopolitics":
+        for d, st in SANCTIONS_DIRECTION.items():
+            counts[d] += sum(_score(tk, st)[0] for tk in local)
+    best = max(counts, key=counts.get)
+    # Тема только «по смыслу» (нет своих предложений): направление другой темы ей не переносится —
+    # «ставка повышена» не значит «экономика растет».
+    return best if counts[best] > 0 else direction if own else None
+
+
+def _key_sentences(text: str, topics: list[dict]) -> list[str]:
+    """Три главных предложения текста (о темах, с числами и датами) — в исходном порядке."""
+    sentences = split_sentences(text) or [text.strip()]
+    topic_stems = [s for t in topics for s in TOPICS[t["topic"]]["stems"]]
+    ranked = sorted(
+        sentences,
+        key=lambda s: (_score(tokenize(s), topic_stems)[0] + 2 * bool(_NUMBER.search(s)) + bool(_DATE.search(s))),
+        reverse=True,
+    )
+    return [s for s in sentences if s in ranked[:3]]
+
+
+def classify(title: str, text: str, hint: dict | None = None) -> Classification:
+    """hint — ответ модели-классификатора (app.news.llm_classify) для неуверенных случаев."""
+    full = f"{title}. {text}"
+    tokens = tokenize(full)
+    title_tokens = tokenize(title)
+
+    topics, meaning = _semantic_topics(_dictionary_topics(tokens, title_tokens), title, text, tokens)
     # Неуверенность: тем нет, но по смыслу новость не явно «не про бизнес», или тема одна и слабая.
     best_meaning = max(meaning["sims"].values(), default=-1.0) if meaning else -1.0
     uncertain = (not topics and (meaning is None or meaning["non_business"] - best_meaning < NON_BUSINESS_MARGIN)) \
         or (len(topics) == 1 and topics[0]["score"] <= WEAK_TOPIC_SCORE)
-    if hint:
-        if not hint.get("business"):
-            topics = []
-        else:
-            have = {t["topic"] for t in topics}
-            for key in hint.get("topics", []):
-                if key in TOPICS and key not in have:
-                    topics.append({"topic": key, "name": TOPICS[key]["name"], "score": LLM_TOPIC_SCORE,
-                                   "matched": [f"модель-классификатор ({hint.get('model', 'LLM')})"]})
+    topics = _with_hint(topics, hint)
     topics.sort(key=lambda t: t["score"], reverse=True)
     if topics:
         top = topics[0]["score"]
@@ -201,59 +256,23 @@ def classify(title: str, text: str, hint: dict | None = None) -> Classification:
 
     sectors = [s for s, stems in SECTOR_STEMS.items() if _score(tokens, stems)[0]]
     countries = [c for c, stems in COUNTRY_STEMS.items() if _score(tokens, stems)[0]]
-
     direction_scores = {d: _score(title_tokens, stems)[0] * 2 + _score(tokens[:60], stems)[0]
                         for d, stems in DIRECTION_STEMS.items()}
     best_dir = max(direction_scores, key=direction_scores.get)
     direction = best_dir if direction_scores[best_dir] else None
 
-    # Направление по каждой теме — по предложениям, где тема упоминается.
-    # Для кредитования «ужесточение» означает меньше кредита (down), «смягчение» — больше (up).
     sentences_all = split_sentences(full) or [full]
     sentence_tokens = [tokenize(s) for s in sentences_all]
-    topic_directions = {}
-    for t in topics:
-        stems = TOPICS[t["topic"]]["stems"]
-        local = [tk for tk in sentence_tokens if _score(tk, stems)[0]]
-        counts = {d: sum(_score(tk, st)[0] for tk in local) for d, st in DIRECTION_STEMS.items()}
-        if t["topic"] == "credit_market":
-            tight = sum(_score(tk, ["ужесточ"])[0] for tk in local)
-            soft = sum(_score(tk, ["смягчени", "смягч"])[0] for tk in local)
-            counts["up"] = max(counts["up"] - tight, 0) + soft
-            counts["down"] = counts["down"] - soft + 2 * tight
-        own = bool(local)
-        if t["topic"] == "fx":
-            # Валюта названа прямо («рубль», «доллар») — направление читается по любому такому предложению,
-            # даже если тема найдена по смыслу, а не по словарю.
-            fx = _fx_direction(sentence_tokens)
-            if fx["up"] or fx["down"]:
-                counts, own = {**fx, "hold": counts["hold"]}, True
-        if t["topic"] == "sanctions_geopolitics":
-            for d, st in SANCTIONS_DIRECTION.items():
-                counts[d] += sum(_score(tk, st)[0] for tk in local)
-        best = max(counts, key=counts.get)
-        # Тема только «по смыслу» (нет своих предложений): направление другой темы ей не переносится —
-        # «ставка повышена» не значит «экономика растет».
-        topic_directions[t["topic"]] = best if counts[best] > 0 else direction if own else None
+    topic_directions = {t["topic"]: _topic_direction(t["topic"], sentence_tokens, direction) for t in topics}
 
     actors = [a for a in ACTORS if re.search(rf"(?<![А-Яа-яA-Za-z]){re.escape(a)}", full)]
     dates = list(dict.fromkeys(m.group(0).strip() for m in _DATE.finditer(full)))[:6]
     numbers = list(dict.fromkeys(m.group(0).strip() for m in _NUMBER.finditer(full)))[:12]
-
-    sentences = split_sentences(text) or [text.strip()]
-    topic_stems = [s for t in topics for s in TOPICS[t["topic"]]["stems"]]
-    ranked = sorted(
-        sentences,
-        key=lambda s: (_score(tokenize(s), topic_stems)[0] + 2 * bool(_NUMBER.search(s)) + bool(_DATE.search(s))),
-        reverse=True,
-    )
-    key_sentences = [s for s in sentences if s in ranked[:3]]  # в исходном порядке
-
     importance = max((TOPICS[t["topic"]]["importance"] for t in topics), default=0.0)
 
     # Сила события — по предложениям о главной теме; если их нет, по заголовку и началу текста.
     main = topics[0]["topic"] if topics else None
     about_main = [s for s, tk in zip(sentences_all, sentence_tokens) if main and _score(tk, TOPICS[main]["stems"])[0]]
     strength = magnitude.assess(main, about_main or sentences_all[:3])
-    return Classification(topics, sectors, countries, direction, topic_directions, actors, dates, numbers, key_sentences,
-                          importance, strength, uncertain, hint)
+    return Classification(topics, sectors, countries, direction, topic_directions, actors, dates, numbers,
+                          _key_sentences(text, topics), importance, strength, uncertain, hint)

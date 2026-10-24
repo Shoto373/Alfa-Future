@@ -7,8 +7,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 import pytest
 
-from app import database, llm_usage
-from app.agent import llm
+from app import database, llm, llm_usage
 from app.models import LLMReservation
 
 SYSTEM, USER, MAX_TOKENS = "Ответь JSON.", '{"news": "ставка"}', 200

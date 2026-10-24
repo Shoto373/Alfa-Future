@@ -4,12 +4,13 @@ import os
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from sqlalchemy.engine import URL
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def database_url() -> str:
     if not os.environ.get("DATABASE_URL") and os.environ.get("PGHOST"):
-        from sqlalchemy.engine import URL
         return URL.create("postgresql+psycopg", host=os.environ["PGHOST"], port=int(os.environ.get("PGPORT", "5432")),
                           database=os.environ.get("PGDATABASE", "alfa"), username=os.environ.get("PGUSER", "alfa"),
                           password=os.environ.get("PGPASSWORD", "")).render_as_string(hide_password=False)

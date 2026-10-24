@@ -17,13 +17,13 @@ import argparse
 import json
 from pathlib import Path
 
+from app.news import llm_classify
+from app.news.classifier import classify
+
 GOLDEN = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "golden_news.json"
 
 
 def evaluate(use_llm: bool = False) -> dict:
-    from app.news import llm_classify
-    from app.news.classifier import classify
-
     items = json.loads(GOLDEN.read_text(encoding="utf-8"))["items"]
     rows = []
     for it in items:

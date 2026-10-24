@@ -11,7 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from app.agent import llm, orchestrator, validators
+from app import llm
+
+from app.agent import orchestrator, validators
 from app.companies import profiles
 from app.companies.sectors import SECTOR_NAMES
 from app.news import store

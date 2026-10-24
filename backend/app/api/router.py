@@ -6,8 +6,8 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse
 
-from app import cache, config, embeddings, llm_usage, pipeline, storage, vectors
-from app.agent import audit, llm, orchestrator, qa
+from app import cache, config, embeddings, llm, llm_usage, pipeline, quality, storage, vectors
+from app.agent import audit, orchestrator, qa
 from app.api.errors import ApiError
 from app.auth import store as auth_store
 from app.auth.deps import check_origin, current_user, member_of, require_operator
@@ -302,7 +302,6 @@ def metrics() -> dict:
 @router.get("/metrics/daily", responses=ERRORS, dependencies=[Depends(require_operator)])
 def daily_quality(hours: int = Query(24, ge=1, le=24 * 30)) -> dict:
     """Мониторинг качества за период: доля текста модели, проверки, источники, оценки, задержки, конвейер."""
-    from app import quality
     return quality.daily(hours)
 
 

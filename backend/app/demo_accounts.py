@@ -16,7 +16,7 @@ import logging
 from sqlalchemy import func, select
 
 from app import config, database
-from app.api.errors import ApiError
+from app.errors import ApiError
 from app.auth import store
 from app.companies import profiles
 

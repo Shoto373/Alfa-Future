@@ -26,8 +26,9 @@ from sqlalchemy import func, select
 
 from app import config, database, embeddings, vectors
 from app.models import News
-from app.news import semantic
+from app.news import llm_classify, semantic
 from app.news.classifier import classify, tokenize
+from app.text import safe_text
 
 logger = logging.getLogger("app.news.store")
 
@@ -100,7 +101,6 @@ def _probe(item: dict) -> str:
 
 
 def clean(title: str, text: str) -> tuple[str, str]:
-    from app.agent.evidence import safe_text
     return safe_text(title.strip()), safe_text(text.strip())
 
 
@@ -116,7 +116,6 @@ def make_item(title: str, text: str, source: str, url: str | None = None,
     title, text = clean(title, text)
     cls = classify(title, text, hint)
     if llm and hint is None and cls.uncertain and config.classify_llm_enabled():
-        from app.news import llm_classify
         answer = llm_classify.hint(title, text)
         if answer:
             cls = classify(title, text, answer)

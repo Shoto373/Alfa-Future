@@ -10,8 +10,8 @@ from alembic.migration import MigrationContext
 from sqlalchemy import select, func
 from app.models import BankProduct
 
-from app import database, llm_usage, storage
-from app.agent import llm, orchestrator
+from app import database, llm, llm_usage, storage
+from app.agent import orchestrator
 from app.companies import profiles
 from app.knowledge import kb
 from app.news import store

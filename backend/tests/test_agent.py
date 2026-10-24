@@ -3,7 +3,9 @@ import asyncio
 import httpx
 import pytest
 
-from app.agent import composer, llm, orchestrator, qa, validators
+from app import llm
+
+from app.agent import composer, orchestrator, qa, validators
 from app.agent.tools import ToolError, ToolRunner
 from app.news import store
 from app.schemas import Insight

@@ -186,7 +186,7 @@ def test_insight_lookup_is_safe(client, path):
 
 def test_fast_rules_card_first_then_llm_upgrade(client, company, monkeypatch):
     """Быстрый запрос отдает разбор на правилах без LLM; следующий обычный заменяет его версией модели."""
-    from app.agent import llm
+    from app import llm
 
     monkeypatch.setenv("LLM_BASE_URL", "http://llm.test/v1")
     monkeypatch.setenv("LLM_API_KEY", "k")
@@ -215,7 +215,8 @@ def test_fast_rules_card_first_then_llm_upgrade(client, company, monkeypatch):
 
 
 def test_rules_card_after_failed_llm_draft_is_not_recomputed_on_every_open(client, company, monkeypatch):
-    from app.agent import llm, orchestrator as orch
+    from app import llm
+    from app.agent import orchestrator as orch
 
     monkeypatch.setenv("LLM_BASE_URL", "http://llm.test/v1")
     monkeypatch.setenv("LLM_API_KEY", "k")

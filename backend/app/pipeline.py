@@ -30,8 +30,11 @@ from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 
-from app import config, database, llm_usage, quality, ranking, storage
+from app import config, database, llm, llm_usage, quality, ranking, storage
+from app.agent import orchestrator, prompts
+from app.auth import store as auth_store
 from app.companies import profiles
+from app.news import parser, store
 
 logger = logging.getLogger("app.pipeline")
 
@@ -55,8 +58,6 @@ def status() -> dict:
 
 def audience() -> list[tuple[str, str]]:
     """Пары «компания — роль» по участникам привязанных компаний."""
-    from app.auth import store as auth_store
-
     pairs = {(cid, m["role"]) for cid in auth_store.claimed_ids() for m in auth_store.list_members(cid)
              if m["user_id"]}
     return sorted((cid, role) for cid, role in pairs if profiles.get(cid) is not None)
@@ -64,9 +65,6 @@ def audience() -> list[tuple[str, str]]:
 
 def _name_stories() -> int:
     """Динамические темы: сюжеты из 3+ сообщений получают короткое название от быстрой модели."""
-    from app.agent import llm, prompts
-    from app.news import store
-
     if not _llm_budget_left():
         return 0
     known = store._labels()
@@ -88,8 +86,6 @@ def _name_stories() -> int:
 
 
 def _llm_budget_left() -> bool:
-    from app.agent import llm
-
     if not llm.available():
         return False
     llm_usage.sweep()  # резервы упавшего процесса не должны навсегда выключить AI-версии конвейера
@@ -100,8 +96,6 @@ def _llm_budget_left() -> bool:
 
 
 async def _analyze(company: dict, role: str, news: dict, use_llm: bool) -> dict | None:
-    from app.agent import orchestrator
-
     request_id = f"req_auto_{uuid.uuid4().hex}"
     try:
         # Тот же разбор уже строит пользователь — ждем его результат, модель вызывается один раз.
@@ -122,8 +116,6 @@ def _save(report: dict) -> None:
 
 
 async def _collect(report: dict) -> None:
-    from app.news import parser
-
     if not config.rss_sources():
         return
     try:

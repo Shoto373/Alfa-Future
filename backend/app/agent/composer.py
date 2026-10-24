@@ -185,17 +185,10 @@ def effect_terms(topic: str, direction: str | None, features: set[str] | None = 
     return TOPIC_EFFECT[topic]
 
 
-def compose(ctx: dict) -> dict:
-    news, cls, company = ctx["news"], ctx["news"]["classification"], ctx["company"]
-    role, news_src = ctx["role"], f"news:{ctx['news']['news_id']}"
-    topics = [t["topic"] for t in cls["topics"]] or ["default"]
-    direction = cls["direction"]
-    exposures = ctx["exposures"]
-    theses = ctx["theses"]
-
-    facts = [_claim(s, "fact", [news_src]) for s in (cls["key_sentences"] or [news["lead"]])[:4]]
+def _assumptions(ctx: dict, cls: dict, news_src: str) -> list[dict]:
+    """Предположения: неясное направление, продолжение сюжета, масштаб изменения."""
     assumptions = []
-    if direction is None:
+    if cls["direction"] is None:
         assumptions.append(_claim("Направление события из текста однозначно не определяется — оценка влияния дана в виде сценариев.", "ai", [news_src]))
     # История сюжета: тренд или разовое событие — по последним предыдущим новостям того же сюжета.
     story = ctx.get("story") or []
@@ -208,9 +201,12 @@ def compose(ctx: dict) -> dict:
     if strength and strength.get("evidence"):
         # Сила события: цитата из новости, поэтому числа в утверждении подтверждаются ее текстом.
         assumptions.append(_claim(f"Масштаб изменения — {strength['label']}: в новости «{strength['evidence']}».", "ai", [news_src]))
+    return assumptions
 
-    # Почему важно: самые весомые экспозиции по темам новости, по одному признаку на тему.
-    why, used_features, seen = [], [], set()
+
+def _why_important(exposures: list[dict], company: dict) -> list[dict]:
+    """Почему важно: самые весомые экспозиции по темам новости, по одному признаку на тему, и место в отрасли."""
+    why, seen = [], set()
     for e in sorted(exposures, key=lambda x: x["weight"], reverse=True):
         key = (e["topic"], e["feature"])
         if key in seen or len(why) >= 5:
@@ -218,7 +214,6 @@ def compose(ctx: dict) -> dict:
         seen.add(key)
         why.append(_claim(e["why"], "ai" if e["origin"] == "sector_model" else "client_data",
                           [ORIGIN_SOURCE.get(e["origin"], "client:profile")], [e["feature"]]))
-        used_features.append(e["feature"])
     if exposures and company["market"].get("okved_rank") and company["market"].get("okved_peers"):
         m = company["market"]
         why.append(_claim(
@@ -228,53 +223,48 @@ def compose(ctx: dict) -> dict:
     if not why:
         why.append(_claim(f"Прямых признаков чувствительности компании к теме не найдено. По доступным данным отрасли «{company['sector_name']}» нельзя уверенно оценить влияние.",
                           "ai", ["client:profile"], ["sector"]))
+    return why
 
-    # Риски и возможности: по каждой теме новости — один вывод, объединяющий признаки компании.
+
+def _topic_claims(t: str, exps: list[dict], d: str | None, theses: list[dict], news_src: str) -> tuple[list[dict], list[dict]]:
+    """Риски и возможности одной темы: один вывод на знак эффекта, объединяющий признаки компании."""
     risks, opps = [], []
-    by_topic: dict[str, list[dict]] = {}
-    for e in exposures:
-        by_topic.setdefault(e["topic"], []).append(e)
-    topic_dirs = cls.get("topic_directions") or {}
-    for t in topics[:4]:
-        exps = sorted(by_topic.get(t, []), key=lambda x: x["weight"], reverse=True)
-        if not exps or t not in TOPIC_EFFECT:
-            continue
-        d = topic_dirs.get(t, direction)
-        neg, pos = effect_terms(t, d, {e["feature"] for e in exps})
-        groups = {"neg": [], "pos": [], "amb": []}
-        for e in exps:
-            eff = _effect(t, d, e["sign"])
-            groups["neg" if eff < 0 else "pos" if eff > 0 else "amb"].append(e)
-        forecast = next((th for th in sorted(theses, key=lambda x: x["doc_date"], reverse=True)
-                         if t in th["topics"] and th.get("stance") == "forecast" and not th.get("stale")), None)
-        horizon = f" Горизонт по прогнозу банка: {_first_sentence(forecast['text'])}" if forecast else ""
-        extra = [f"bank:{forecast['id']}"] if forecast else []
+    neg, pos = effect_terms(t, d, {e["feature"] for e in exps})
+    groups = {"neg": [], "pos": [], "amb": []}
+    for e in exps:
+        eff = _effect(t, d, e["sign"])
+        groups["neg" if eff < 0 else "pos" if eff > 0 else "amb"].append(e)
+    forecast = next((th for th in sorted(theses, key=lambda x: x["doc_date"], reverse=True)
+                     if t in th["topics"] and th.get("stance") == "forecast" and not th.get("stale")), None)
+    horizon = f" Горизонт по прогнозу банка: {_first_sentence(forecast['text'])}" if forecast else ""
+    extra = [f"bank:{forecast['id']}"] if forecast else []
 
-        def basis(items):
-            srcs = [news_src] + sorted({ORIGIN_SOURCE.get(e["origin"], "client:profile") for e in items}) + extra
-            return srcs, [e["feature"] for e in items[:3]]
+    def basis(items):
+        srcs = [news_src] + sorted({ORIGIN_SOURCE.get(e["origin"], "client:profile") for e in items}) + extra
+        return srcs, [e["feature"] for e in items[:3]]
 
-        def because(items):
-            return "; ".join(_lower_first(e["why"].replace(": ", " — ", 1)) for e in items[:3])
+    def because(items):
+        return "; ".join(_lower_first(e["why"].replace(": ", " — ", 1)) for e in items[:3])
 
-        if groups["neg"]:
-            srcs, feats = basis(groups["neg"])
-            risks.append(_claim(f"{_cap(neg)}. Почему это касается компании: {because(groups['neg'])}.{horizon}", "ai", srcs, feats))
-        if groups["pos"]:
-            srcs, feats = basis(groups["pos"])
-            opps.append(_claim(f"{_cap(pos)}. Почему это касается компании: {because(groups['pos'])}.{horizon}", "ai", srcs, feats))
-        if groups["amb"]:
-            srcs, feats = basis(groups["amb"])
-            if not groups["neg"]:
-                risks.append(_claim(f"{HEDGED_RISK} {neg}. Знак влияния зависит от развития ситуации и структуры операций компании: "
-                                    f"{because(groups['amb'])}.", "ai", srcs, feats))
-            if not groups["pos"]:
-                opps.append(_claim(f"{HEDGED_OPP} {pos}, если ситуация развернется в пользу компании: "
-                                   f"{because(groups['amb'])}.", "ai", srcs, feats))
-    risks = _dedupe(risks)[:4]
-    opps = _dedupe(opps)[:4]
+    if groups["neg"]:
+        srcs, feats = basis(groups["neg"])
+        risks.append(_claim(f"{_cap(neg)}. Почему это касается компании: {because(groups['neg'])}.{horizon}", "ai", srcs, feats))
+    if groups["pos"]:
+        srcs, feats = basis(groups["pos"])
+        opps.append(_claim(f"{_cap(pos)}. Почему это касается компании: {because(groups['pos'])}.{horizon}", "ai", srcs, feats))
+    if groups["amb"]:
+        srcs, feats = basis(groups["amb"])
+        if not groups["neg"]:
+            risks.append(_claim(f"{HEDGED_RISK} {neg}. Знак влияния зависит от развития ситуации и структуры операций компании: "
+                                f"{because(groups['amb'])}.", "ai", srcs, feats))
+        if not groups["pos"]:
+            opps.append(_claim(f"{HEDGED_OPP} {pos}, если ситуация развернется в пользу компании: "
+                               f"{because(groups['amb'])}.", "ai", srcs, feats))
+    return risks, opps
 
-    # Позиция банка.
+
+def _bank_view(ctx: dict, theses: list[dict]) -> dict:
+    """Позиция банка: тезисы, резюме и расхождения или пересмотры прогнозов между материалами."""
     bank_claims = [_claim(t["text"], "bank", [f"bank:{t['id']}"]) for t in theses[:4]]
     conflicts = []
     for conflict in ctx.get("forecast_conflicts", []):
@@ -288,8 +278,12 @@ def compose(ctx: dict) -> dict:
     bank_summary = theses[0]["text"] if theses else None
     if theses and any(t.get("stale") for t in theses[:2]):
         conflicts.append("Часть найденных материалов банка устарела (2021 г.) — они приведены только как пример логики оценки.")
+    return {"available": bool(theses), "summary": bank_summary, "theses": bank_claims, "conflicts": conflicts}
 
-    # Сводная мысль: событие -> главный плюс и минус для компании -> позиция банка.
+
+def _headline(company: dict, topics: list[str], by_topic: dict[str, list[dict]], cls: dict, theses: list[dict]) -> str:
+    """Сводная мысль: событие -> главный плюс и минус для компании -> позиция банка."""
+    direction, topic_dirs = cls["direction"], cls.get("topic_directions") or {}
     who = f"компании {company['display_name'].replace('Компания ', '')} ({company['sector_name'].lower()})"
     main = next((t for t in topics if t in TOPIC_EFFECT and by_topic.get(t)), None)
     if main:
@@ -307,8 +301,11 @@ def compose(ctx: dict) -> dict:
         headline = f"Для {who} не найдена подтвержденная связь с событием; нужны дополнительные данные."
     if theses and not theses[0].get("stale"):
         headline += " Банк учитывает это в своих прогнозах — см. раздел «Как оценивает банк»."
+    return headline
 
-    # Действия по роли.
+
+def _actions(topics: list[str], role: str, company: dict, theses: list[dict], news_src: str) -> list[dict]:
+    """Действия по роли: до двух на тему из библиотеки, только доступные компании по ее продуктам."""
     actions = []
     for t in topics[:3]:
         lib = ACTIONS.get(t, {})
@@ -317,24 +314,45 @@ def compose(ctx: dict) -> dict:
             actions.append(_claim(text, "ai", [news_src, "client:profile"] + ([f"bank:{theses[0]['id']}"] if theses else [])))
     if not actions:
         actions = [_claim(ACTIONS["default"]["default"][0], "ai", [news_src])]
-    actions = _dedupe(actions)[:4]
-    questions = [QUESTIONS[t] for t in topics if t in QUESTIONS][:3]
+    return _dedupe(actions)[:4]
+
+
+def compose(ctx: dict) -> dict:
+    """Разбор на правилах: эффект = чувствительность компании × направление события, с источником у каждого вывода."""
+    news, cls, company = ctx["news"], ctx["news"]["classification"], ctx["company"]
+    role, news_src = ctx["role"], f"news:{ctx['news']['news_id']}"
+    topics = [t["topic"] for t in cls["topics"]] or ["default"]
+    exposures, theses = ctx["exposures"], ctx["theses"]
+    facts = [_claim(s, "fact", [news_src]) for s in (cls["key_sentences"] or [news["lead"]])[:4]]
+
+    # Риски и возможности: по каждой теме новости — один вывод, объединяющий признаки компании.
+    risks, opps = [], []
+    by_topic: dict[str, list[dict]] = {}
+    for e in exposures:
+        by_topic.setdefault(e["topic"], []).append(e)
+    topic_dirs = cls.get("topic_directions") or {}
+    for t in topics[:4]:
+        exps = sorted(by_topic.get(t, []), key=lambda x: x["weight"], reverse=True)
+        if not exps or t not in TOPIC_EFFECT:
+            continue
+        neg_claims, pos_claims = _topic_claims(t, exps, topic_dirs.get(t, cls["direction"]), theses, news_src)
+        risks += neg_claims
+        opps += pos_claims
 
     products = [{"product_id": p["id"], "title": p["title"], "text": p["text"],
                  "reason": f"Связано с темой «{TOPICS.get(p['topics'][0], {}).get('name', p['topics'][0])}»"}
                 for p in ctx.get("products", [])]
-
     return {
         "title": news["title"],
-        "headline": headline,
+        "headline": _headline(company, topics, by_topic, cls, theses),
         "what_happened": {"summary": news["lead"], "facts": facts, "actors": cls["actors"], "dates": cls["dates"],
-                          "assumptions": assumptions},
-        "why_important": why,
-        "risks": risks,
-        "opportunities": opps,
-        "actions": actions,
-        "questions": questions,
-        "bank_view": {"available": bool(theses), "summary": bank_summary, "theses": bank_claims, "conflicts": conflicts},
+                          "assumptions": _assumptions(ctx, cls, news_src)},
+        "why_important": _why_important(exposures, company),
+        "risks": _dedupe(risks)[:4],
+        "opportunities": _dedupe(opps)[:4],
+        "actions": _actions(topics, role, company, theses, news_src),
+        "questions": [QUESTIONS[t] for t in topics if t in QUESTIONS][:3],
+        "bank_view": _bank_view(ctx, theses),
         "products": products,
         "role_name": ROLES.get(role, ROLES["ceo"])["name"],
         "sector_name": SECTOR_NAMES.get(company["sector"], company["sector"]),

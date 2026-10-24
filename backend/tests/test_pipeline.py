@@ -6,8 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 
-from app import pipeline, storage
-from app.agent import llm
+from app import llm, pipeline, storage
 from app.news import parser
 
 RSS = """<?xml version="1.0"?><rss><channel>

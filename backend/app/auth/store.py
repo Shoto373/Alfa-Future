@@ -15,7 +15,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app import config, database
-from app.api.errors import ApiError
+from app.errors import ApiError
 from app.auth import security
 from app.companies import profiles
 from app.models import AuthMembership, AuthSession, AuthUser, LoginFailure

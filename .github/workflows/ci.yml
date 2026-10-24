@@ -55,6 +55,11 @@ jobs:
           python -m unittest discover -s deploy/tests -v
           python -m pytest backend/tests -v
 
+      - name: Architecture (layers, cycles, function size)
+        if: always()
+        working-directory: backend
+        run: python tools/check_imports.py
+
       # Порог качества проверяет tests/test_golden_quality.py; здесь — читаемый отчет по golden set.
       - name: Quality report (golden set, rules)
         if: always()

@@ -18,7 +18,7 @@ from collections import OrderedDict
 
 import numpy as np
 
-from app import config
+from app import config, vector_store
 
 logger = logging.getLogger("app.embeddings")
 
@@ -56,7 +56,7 @@ def _load():
     if _model is not None and _model_key == key:
         return _model
     try:
-        from fastembed import TextEmbedding
+        from fastembed import TextEmbedding  # optional: тяжелая библиотека модели, без нее — поиск по словарям
         _model = TextEmbedding(key[0], cache_dir=key[1])
         if _model_key != key:
             with _cache_lock:
@@ -90,14 +90,12 @@ def _remember(items: dict[str, np.ndarray]) -> None:
 
 def warm() -> bool:
     """Загрузка модели, пробный вызов (инициализация ONNX) и чтение посчитанных векторов из базы."""
-    from app import vectors
-
     model = model_name()
     if model is None:
         return False
     with _lock:
         list(_model.embed(["прогрев модели"]))
-    stored = vectors.load(vectors.CACHE, model)
+    stored = vector_store.load(vector_store.CACHE, model)
     _remember({k: v for k, (_, v, _) in list(stored.items())[-CACHE_SIZE:]})
     logger.info("embeddings warm: model=%s cached_vectors=%d", model, len(stored))
     return True
@@ -111,8 +109,6 @@ def _normalize(matrix) -> np.ndarray:
 
 def embed(texts: list[str]) -> np.ndarray | None:
     """Нормированные векторы (матрица n × d) для списка текстов или None, если модель недоступна."""
-    from app import vectors
-
     with _lock:
         model = _load()
         name = _model_key[0] if model is not None and _model_key else None
@@ -125,7 +121,7 @@ def embed(texts: list[str]) -> np.ndarray | None:
         found = {k: _cache[k] for k in keys if k in _cache}
     missing = {k: t for k, t in zip(keys, texts) if k not in found}
     if missing:
-        stored = vectors.load(vectors.CACHE, name, list(missing))
+        stored = vector_store.load(vector_store.CACHE, name, list(missing))
         fresh = {k: v for k, (_, v, _) in stored.items()}
         todo = {k: t for k, t in missing.items() if k not in fresh}
         if todo:
@@ -138,7 +134,7 @@ def embed(texts: list[str]) -> np.ndarray | None:
                 return None
             computed_map = dict(zip(todo, computed))
             fresh.update(computed_map)
-            vectors.save(vectors.CACHE, name, [(k, k, v, {}) for k, v in computed_map.items()])
+            vector_store.save(vector_store.CACHE, name, [(k, k, v, {}) for k, v in computed_map.items()])
         _remember(fresh)
         found.update(fresh)
     return np.stack([found[k] for k in keys])

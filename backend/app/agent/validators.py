@@ -7,8 +7,8 @@
 
 import re
 
+from app.agent import composer, evidence
 from app.news.store import similarity
-from app.agent import evidence
 
 _NUM = re.compile(r"\d+(?:[.,]\d+)?")
 _THOUSANDS = re.compile(r"(?<=\d)[  ](?=\d{3}(?!\d))")
@@ -221,6 +221,5 @@ def apply_fix(draft: dict, results: list[dict], source_ids: set[str], grounding_
         bv["available"] = bool(bv["theses"])
         bv["summary"] = bv["theses"][0]["text"] if bv["theses"] else None
         if "restore_headline" in fixes:
-            from app.agent import composer
             draft["headline"] = composer.compose(ctx)["headline"]
     return done

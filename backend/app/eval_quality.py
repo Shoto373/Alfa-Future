@@ -35,15 +35,18 @@ import uuid
 from collections import Counter
 from pathlib import Path
 
+from app import llm, ranking
+from app.agent import composer, orchestrator
+from app.companies import profiles
+from app.companies.sectors import SECTOR_NAMES
+from app.knowledge import kb
+from app.news import store
+
 ROLES = ["cfo", "ceo", "treasurer", "owner"]
 METRICS = ("llm_share", "first_pass", "grounded", "personalized", "bank_coverage", "depth", "pass")
 
 
 def make_set(size: int, seed: int) -> list[dict]:
-    from app import ranking
-    from app.companies import profiles
-    from app.news import store
-
     rnd = random.Random(seed)
     companies = profiles._load()["companies"]
     # Разные отрасли: по одной крупнейшей компании на отрасль, затем случайные из них.
@@ -96,10 +99,6 @@ def _metrics(ins: dict) -> dict:
 
 
 async def run(items: list[dict]) -> dict:
-    from app.agent import llm, orchestrator
-    from app.companies import profiles
-    from app.news import store
-
     rows = []
     for it in items:
         company, news = profiles.get(it["company_id"]), store.get(it["news_id"])
@@ -139,9 +138,6 @@ def load_golden(path: str | Path) -> list[dict]:
 
 def golden_company(base: dict, spec: dict) -> dict:
     """Синтетическая компания из шаблона кейса: отрасль, продукты, страны ВЭД (как в tests/test_scenarios.py)."""
-    from app.companies import profiles
-    from app.companies.sectors import SECTOR_NAMES
-
     c = copy.deepcopy(base)
     c.update(sector=spec["sector"], revenue=20e9, workers_fns=None, fts_flag=bool(spec.get("countries")),
              fts_countries=spec.get("countries", []))
@@ -158,14 +154,10 @@ def golden_company(base: dict, spec: dict) -> dict:
 
 def observed_effect(ins: dict) -> str:
     """Знак влияния по итоговым разделам — тот же, что метка effect в разборе и ленте."""
-    from app.agent import composer
-
     return composer.overall_effect(ins)
 
 
 def golden_metrics(case: dict, news: dict, ins: dict) -> dict:
-    from app.knowledge import kb
-
     exp = case["expect"]
     claims = [c for sec in ("why_important", "risks", "opportunities", "actions") for c in ins[sec]]
     claims += ins["what_happened"]["facts"] + ins["what_happened"]["assumptions"] + ins["bank_view"]["theses"]
@@ -202,10 +194,6 @@ def _pct(values: list[float], q: float) -> float:
 
 async def run_golden(cases: list[dict], mode: str = "rules") -> dict:
     """Прогон golden set; mode: rules — без модели, llm — с моделью (нужен ключ), auto — как в сервисе."""
-    from app.agent import llm, orchestrator
-    from app.companies import profiles
-    from app.news import store
-
     use_llm = {"rules": False, "llm": True, "auto": None}[mode]
     base = profiles._load()["companies"][0]
     rows = []

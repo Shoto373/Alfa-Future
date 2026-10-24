@@ -10,6 +10,7 @@ import logging
 import os
 import threading
 from functools import lru_cache
+from pathlib import Path
 
 from app import config, database
 from sqlalchemy import select, func
@@ -46,7 +47,6 @@ def _load() -> dict:
             explicit = os.environ.get("PROFILES_PATH")  # optional legacy import / test fixture
             if not meta or meta.get("signature") != signature:
                 if explicit:
-                    from pathlib import Path
                     data = json.loads(Path(explicit).read_text(encoding="utf-8"))
                 else:
                     if not signature:

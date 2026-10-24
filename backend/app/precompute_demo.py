@@ -18,10 +18,11 @@ import json
 import time
 import uuid
 
-from app import config, database, llm_usage, ranking, storage
-from app.agent import llm
+from app import config, database, llm, llm_usage, ranking, storage
+from app.agent import orchestrator
 from app.companies import profiles
 from app.news import store
+from app.schemas import Insight
 
 DEMO_SECTORS = ("metallurgy", "auto")
 DEMO_ROLES = ("cfo", "ceo", "owner")
@@ -61,8 +62,6 @@ def plan(companies: list[dict], roles: list[str], top: int) -> list[dict]:
 
 def check_cache(items: list[dict]) -> dict:
     """Критерий SPR2-03: каждый демо-разбор открывается из кэша не дольше CACHE_OPEN_LIMIT_S."""
-    from app.schemas import Insight
-
     times, missing = [], []
     for it in items:
         t0 = time.perf_counter()
@@ -87,8 +86,6 @@ def per_insight_cost() -> float:
 async def build(items: list[dict], max_cost: float | None = None) -> dict:
     """Строит недостающие разборы. max_cost, ₽ — сколько можно потратить на модель: когда следующий
     разбор может выйти за предел, остальные строятся правилами (бюджет живой демонстрации не трогается)."""
-    from app.agent import orchestrator
-
     before, started = llm_usage.usage(), time.perf_counter()
     built, capped = [], False
     for it in items:
