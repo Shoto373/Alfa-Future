@@ -151,6 +151,23 @@ class NotificationReadRequest(Strict):
     ids: list[int] | None = Field(None, max_length=200)  # пусто — прочитать все
 
 
+class LeadRequest(Strict):
+    """«Обсудить с менеджером» (SPR4-06): заявка только с явного согласия (consent=true)."""
+    insight_id: str = Field(..., min_length=1, max_length=64)
+    offer_id: str = Field(..., min_length=1, max_length=64)
+    consent: Literal[True]
+    comment: str | None = Field(None, max_length=500)
+
+
+class LeadStatusRequest(Strict):
+    status: Literal["new", "in_progress", "done", "declined"]
+
+
+class ManagerAssignRequest(Strict):
+    email: str = Field(..., min_length=3, max_length=200, pattern=r"^[^@\s]+@[^@\s]+$")
+    company_id: str = Field(..., min_length=1, max_length=64)
+
+
 class KbApproveRequest(Strict):
     supersedes: str | None = Field(None, max_length=64)
 

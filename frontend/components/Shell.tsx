@@ -12,7 +12,7 @@ import styles from "@/components/Shell.module.scss";
 import ui from "@/components/ui.module.scss";
 import common from "@/styles/common.module.scss";
 
-type NavItem = { href: string; label: string; icon: string; badge?: string; accent?: boolean; disabled?: boolean; operatorOnly?: boolean };
+type NavItem = { href: string; label: string; icon: string; badge?: string; accent?: boolean; disabled?: boolean; operatorOnly?: boolean; managerOnly?: boolean };
 
 // Разделы Альфа-Бизнеса с экранов банка; рабочие — только разделы Альфа.Пульса.
 const NAV: (NavItem | "divider")[] = [
@@ -23,6 +23,7 @@ const NAV: (NavItem | "divider")[] = [
   { href: "/pulse/counterparties", label: "Контрагенты", icon: "link" },
   { href: "/pulse/analytics", label: "Аналитика банка", icon: "doc" },
   { href: "/settings/notifications", label: "Уведомления", icon: "bell" },
+  { href: "/manager", label: "Кабинет менеджера", icon: "users", managerOnly: true },
   { href: "/quality", label: "Качество", icon: "shield", operatorOnly: true },
   { href: "/admin/kb", label: "Тезисы аналитики", icon: "check", operatorOnly: true },
   { href: "/admin/labeling", label: "Разметка ленты", icon: "list", operatorOnly: true },
@@ -48,7 +49,8 @@ export default function Shell({ children }: { children: ReactNode }) {
 
   // Без компаний доступны регистрация компании и профиль, сотруднику банка — еще его служебные разделы
   // (качество, тезисы аналитики): своей компании-клиента у него обычно нет.
-  const staffPage = Boolean(session?.user.is_operator) && (path === "/quality" || path.startsWith("/admin/"));
+  const staffPage = (Boolean(session?.user.is_operator) && (path === "/quality" || path.startsWith("/admin/")))
+    || (Boolean(session?.user.is_manager) && path === "/manager");
   const noCompanyOk = path === "/company/register" || path === "/profile" || staffPage;
   const needCompany = Boolean(session) && session!.memberships.length === 0 && !noCompanyOk;
 
@@ -76,6 +78,7 @@ export default function Shell({ children }: { children: ReactNode }) {
           {NAV.map((item, i) => {
             if (item === "divider") return <hr key={`d${i}`} className={styles.navDivider} />;
             if (item.operatorOnly && !session.user.is_operator) return null;  // мониторинг — только сотрудникам банка
+            if (item.managerOnly && !session.user.is_manager) return null;  // кабинет — менеджерам с закрепленными клиентами
             const inner = (
               <>
                 <Icon name={item.icon} size={20} /> <span className={styles.navLabel}>{item.label}</span>

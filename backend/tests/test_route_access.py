@@ -12,10 +12,10 @@ from tests.conftest import register
 API = "/api/v1"
 ROOT = Path(__file__).resolve().parents[2]
 SCOPED = ("{company_id}", "{insight_id}")
-SCOPED_BODIES = {"InsightRequest", "FeedbackRequest", "ScenarioRequest", "NotificationReadRequest"}
+SCOPED_BODIES = {"InsightRequest", "FeedbackRequest", "ScenarioRequest", "NotificationReadRequest", "LeadRequest"}
 # Маршруты, где компания — в query (?company_id=) или в теле запроса.
 QUERY_COMPANY = {"/api/v1/feed", "/api/v1/news/{news_id}", "/api/v1/notifications", "/api/v1/notifications/settings",
-                 "/api/v1/notifications/test-digest"}
+                 "/api/v1/notifications/test-digest", "/api/v1/admin/managers"}
 BODY_COMPANY = {"/api/v1/insights", "/api/v1/scenarios", "/api/v1/notifications/read"}
 
 # (метод, путь) -> (тело или None, ожидаемые коды). company_id/insight_id/member_id подставляются компании B.
@@ -44,6 +44,11 @@ ROUTES = {
     ("GET", "/api/v1/insights/{insight_id}/questions"): (None, {403, 404}),
     ("POST", "/api/v1/insights/{insight_id}/questions/{turn_id}/rating"): ({"rating": 1}, {403, 404}),
     ("POST", "/api/v1/feedback"): ({"rating": 1}, {403, 404}),
+    ("GET", "/api/v1/insights/{insight_id}/offers"): (None, {403, 404}),
+    # Закрепление клиентов за менеджерами — только сотрудник банка.
+    ("GET", "/api/v1/admin/managers"): (None, {403}),
+    ("DELETE", "/api/v1/admin/managers"): (None, {403}),
+    ("POST", "/api/v1/leads"): ({"offer_id": "factoring", "consent": True}, {403, 404}),
     ("GET", "/api/v1/companies/{company_id}/members"): (None, {403}),
     ("POST", "/api/v1/companies/{company_id}/members"): ({"email": "spy@example.com", "role": "cfo"}, {403}),
     ("PATCH", "/api/v1/companies/{company_id}/members/{member_id}"): ({"is_admin": True}, {403}),
@@ -110,7 +115,7 @@ def test_outsider_cannot_touch_other_company(victim, route):
             payload["company_id"] = victim["company_id"]
         if path == "/api/v1/insights":
             payload["news_id"] = victim["news_id"]
-        if path == "/api/v1/feedback":
+        if path in ("/api/v1/feedback", "/api/v1/leads"):
             payload["insight_id"] = victim["insight_id"]
         r = client.request(method, url, json=payload, params=params)
     else:

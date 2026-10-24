@@ -10,6 +10,7 @@ from app.api.admin_kb import router as admin_kb_router
 from app.api.admin_labeling import router as admin_labeling_router
 from app.api.prometheus import router as metrics_router
 from app.api.router import router
+from app.api.manager import router as manager_router
 from app.api.notifications import public as notifications_public
 from app.api.notifications import router as notifications_router
 from app.api.stream import router as stream_router
@@ -57,6 +58,7 @@ app.include_router(admin_kb_router)
 app.include_router(admin_config_router)
 app.include_router(admin_labeling_router)
 app.include_router(notifications_router)
+app.include_router(manager_router)
 app.include_router(notifications_public)
 app.include_router(metrics_router)
 

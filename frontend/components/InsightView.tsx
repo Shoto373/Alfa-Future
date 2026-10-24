@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { Insight, Role } from "@/lib/types";
 import Chat from "./Chat";
+import BankOffers from "./insight/BankOffers";
 import BankPosition from "./insight/BankPosition";
 import ClaimList, { OpenSource, RulesMode } from "./insight/ClaimList";
 import Feedback from "./insight/Feedback";
@@ -94,14 +95,7 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
         <Card title="4. Что можно сделать" actions={fb("actions")}>
           <ClaimList items={ins.actions} index={index} />
           {ins.questions.length > 0 && (<><h4>Вопросы для дополнительного анализа</h4><ul className={common.plain}>{ins.questions.map((q) => <li key={q}>{q}</li>)}</ul></>)}
-          {ins.products.length > 0 && (
-            <div className={styles.offers}>
-              <span className={styles.offerLabel}>Предложение банка</span>
-              {ins.products.map((p) => (
-                <div className={styles.offer} key={p.product_id}><strong>{p.title}</strong><span>{p.text}</span></div>
-              ))}
-            </div>
-          )}
+          <BankOffers insightId={ins.insight_id} />
         </Card>
 
         <BankPosition view={ins.bank_view} index={index} actions={fb("bank_view")} />

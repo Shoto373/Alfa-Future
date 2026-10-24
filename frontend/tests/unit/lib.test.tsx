@@ -10,7 +10,7 @@ import { SessionProvider, shortName, useSession } from "@/lib/session";
 import type { User } from "@/lib/types";
 
 const user: User = {
-  user_id: "u1", name: "Анна Морозова", email: "a@b.ru", is_operator: false,
+  user_id: "u1", name: "Анна Морозова", email: "a@b.ru", is_operator: false, is_manager: false,
   memberships: [
     { company_id: "A", company_name: "Альфа", role: "cfo", is_admin: true, is_founder: true },
     { company_id: "B", company_name: "Бета", role: "ceo", is_admin: false, is_founder: false },

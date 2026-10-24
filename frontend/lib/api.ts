@@ -1,5 +1,5 @@
 import type {
-  AISettings, Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, ConfigPreview, ConfigState, ConfigTexts, ConfigIssue, CounterpartiesView, DialogTurn, Inbox, NotificationSettings, ScenarioKind, ScenarioResponse, KbDocument, KbDraft, KbUploadItem, LabelingState, LookupCompany, Member, Membership, Mention, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
+  AISettings, Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, ConfigPreview, ConfigState, ConfigTexts, ConfigIssue, BankOffer, CounterpartiesView, DialogTurn, Lead, ManagerClient, Inbox, NotificationSettings, ScenarioKind, ScenarioResponse, KbDocument, KbDraft, KbUploadItem, LabelingState, LookupCompany, Member, Membership, Mention, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
@@ -183,6 +183,16 @@ export const api = {
   scenario: (body: { company_id: string; scenario: ScenarioKind; shock: number; debt?: number; floating_share?: number;
     fx_revenue_share?: number; import_share?: number; exposure?: number }) =>
     request<ScenarioResponse>("/api/v1/scenarios", json("POST", body)),
+  // Связь с банком (SPR4-06): предложения по потребности, заявка с согласия, кабинет менеджера.
+  insightOffers: (insightId: string, signal?: AbortSignal) =>
+    request<{ offers: BankOffer[]; leads: Lead[]; consent_text: string }>(`/api/v1/insights/${cid(insightId)}/offers`, {}, { signal }),
+  createLead: (body: { insight_id: string; offer_id: string; consent: true; comment: string | null }) =>
+    request<Lead & { created: boolean; managers: number }>("/api/v1/leads", json("POST", body)),
+  managerClients: (hours: number, signal?: AbortSignal) =>
+    request<{ hours: number; priority_formula: string; clients: ManagerClient[] }>(`/api/v1/manager/clients?hours=${hours}`, {}, { signal }),
+  managerLeads: (signal?: AbortSignal) => request<{ items: Lead[] }>("/api/v1/manager/leads", {}, { signal }),
+  managerLeadStatus: (id: number, status: Lead["status"]) => request<Lead>(`/api/v1/manager/leads/${id}`, json("PATCH", { status })),
+  managerLeadsCsv: () => `${API_BASE_URL}/api/v1/manager/leads.csv`,
   // Сводки и алерты (SPR4-04).
   notificationSettings: (companyId: string, signal?: AbortSignal) =>
     request<NotificationSettings>(`/api/v1/notifications/settings?company_id=${cid(companyId)}`, {}, { signal }),

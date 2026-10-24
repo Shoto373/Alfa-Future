@@ -76,9 +76,21 @@ class ControlCase(Strict):
     why: str = ""
 
 
+class OfferRule(Strict):
+    """Предложение банка при выявленной потребности (SPR4-06): тема + знак события + признак компании."""
+    title: str = Field(..., min_length=2)
+    text: str = Field(..., min_length=10)
+    need: str = Field(..., min_length=5)
+    topics: list[str] = Field(..., min_length=1)
+    effect: Literal["risk", "opportunity", "any"]
+    exposure: Literal["customers_concentration", "fx_operations", "new_countries", "loans"]
+    min_share: float = Field(0.5, gt=0, le=1)  # для customers_concentration: доля крупнейшего покупателя
+
+
 class TopicsDoc(Strict):
     topics: dict[str, Topic]
     default_actions: dict[str, list[Action]]
+    offers: dict[str, OfferRule] = Field(default_factory=dict)
 
 
 class SectorsDoc(Strict):

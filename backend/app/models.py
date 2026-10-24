@@ -181,6 +181,32 @@ class DialogTurn(Base, Payload):
                       CheckConstraint("rating IN (-1, 1)", name="dialog_turns_rating_check"))
 
 
+class ManagerClient(Base):
+    """Клиенты менеджера банка (SPR4-06): менеджер видит события и лиды только этих компаний."""
+    __tablename__ = "manager_clients"
+    email: Mapped[str] = mapped_column(Text, primary_key=True)
+    company_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Lead(Base, Payload):
+    """Заявка «обсудить с менеджером» (SPR4-06): создается только с явного согласия пользователя.
+    В payload — контекст разбора: новость, вывод, предложение, потребность, текст согласия."""
+    __tablename__ = "leads"
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=False), primary_key=True)
+    company_id: Mapped[str] = mapped_column(Text)
+    user_id: Mapped[str] = mapped_column(Text)
+    insight_id: Mapped[str] = mapped_column(Text)
+    offer_id: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, server_default="new")  # new | in_progress | done | declined
+    consent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    __table_args__ = (UniqueConstraint("user_id", "insight_id", "offer_id", name="leads_user_insight_offer_uq"),
+                      Index("leads_company_idx", "company_id", "created_at"),
+                      CheckConstraint("status IN ('new', 'in_progress', 'done', 'declined')", name="leads_status_check"))
+
+
 class BankProduct(Base, Payload):
     __tablename__ = "bank_products"
     product_id: Mapped[str] = mapped_column(Text, primary_key=True)

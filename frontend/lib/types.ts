@@ -376,6 +376,21 @@ export interface CounterpartiesView {
   events: CounterpartyEvent[];
 }
 
+// Связь с банком (SPR4-06).
+export interface BankOffer { offer_id: string; title: string; text: string; need: string; reason: string; label: string }
+
+export interface Lead {
+  id: number; company_id: string; insight_id: string; offer_id: string; status: "new" | "in_progress" | "done" | "declined";
+  created_at: string; updated_at: string; company_name: string | null; contact_name: string | null; contact_email?: string;
+  role: string | null; news_title: string | null; headline: string | null; offer_title: string | null; need: string | null;
+  reason: string | null; comment: string | null;
+}
+
+export interface ManagerClient {
+  company_id: string; name: string; sector: string; revenue: number | null; priority: number; new_leads: number;
+  events: { news_id: string; title: string; score: number; published_at: string }[];
+}
+
 // Сводки и алерты (SPR4-04).
 export interface NotificationSettings {
   company_id: string;

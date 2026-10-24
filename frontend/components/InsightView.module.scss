@@ -710,3 +710,25 @@
 .mentionRelated {
   background: #fff1d6 !important;
 }
+
+.offer small {
+  font-size: 12px;
+}
+
+.offerAsk {
+  align-self: flex-start;
+  margin-top: 6px;
+}
+
+.consent {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.consentActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

@@ -78,6 +78,10 @@ def _cross(docs: dict) -> list[Issue]:
             elif p in seen:
                 out.append(Issue("error", "sectors", f"sectors.{key}.okved", f"Префикс «{p}» уже у отрасли «{seen[p]}»"))
             seen[p] = key
+    for key, o in docs["topics"].get("offers", {}).items():
+        for t in o["topics"]:
+            if t not in topics:
+                out.append(Issue("error", "topics", f"offers.{key}.topics", f"Темы «{t}» нет в topics"))
     return out
 
 
