@@ -53,7 +53,9 @@ test("разбор, трасса, уточнение, оценка и перво
   // Плашка самопроверки убрана из шапки — результат проверок виден в ходе анализа.
   await expect(page.getByTestId("quality-checks").getByRole("listitem").first()).toBeVisible();
   await page.getByRole("button", { name: "Уточнить у аналитика", exact: true }).click();
-  await page.getByRole("button", { name: "Покажи в разрезе контрагентов" }).click();
+  // Подсказки зависят от новости — вопрос о другом разрезе задается вручную.
+  await page.getByPlaceholder(/Например/).fill("Покажи в разрезе контрагентов");
+  await page.getByRole("button", { name: "Спросить", exact: true }).click();
   await expect(page.getByTestId("chat-turn").last()).toContainText("Структура платежей", { timeout: 60_000 });
   await page.getByRole("button", { name: "Свернуть", exact: true }).click();
   await page.getByRole("button", { name: "Полезно", exact: true }).first().click();

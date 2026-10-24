@@ -100,3 +100,27 @@ def test_materiality_filters_private_cases(monkeypatch):
         raise llm.LLMError("нет связи")
     monkeypatch.setattr(llm, "chat_json", fail)
     assert materiality.assess("ЦБ повысил ключевую ставку", "") is None
+
+
+def test_magnitude_level_is_not_a_change():
+    """Число рядом с маркером — уровень («курс 81 руб.»), а не величина изменения: сильное — только по измерению
+    или при сравнении за годы."""
+    from app.news import magnitude
+
+    assert magnitude.assess("fx", ["ЦБ установил курс доллара ниже 81 руб. впервые с августа."])["level"] == "moderate"
+    assert magnitude.assess("fx", ["Рубль укрепился до максимума с 2023 года."])["level"] == "strong"
+    assert magnitude.assess("fx", ["Рубль подешевел на 4%."])["level"] == "strong"
+    assert magnitude.assess("inflation", ["Цены резко выросли."])["level"] == "moderate"
+
+
+def test_same_company_in_titles_joins_story():
+    """Одна отчетность из разных источников — один сюжет, хотя заголовки о разном периоде."""
+    a = {"title": "Выручка ФосАгро в III квартале выросла на 15%, чистая прибыль упала на 37%",
+         "published_at": "2026-10-24T08:00:00+00:00"}
+    b = {"title": "Чистая прибыль «Фосагро» снизилась в три раза за девять месяцев",
+         "published_at": "2026-10-23T18:00:00+00:00"}
+    c = {"title": "Что рассказал Новак о планах по экспорту дизтоплива", "published_at": "2026-10-23T18:00:00+00:00"}
+    d = {"title": "Главные заявления Новака о рынке топлива", "published_at": "2026-10-23T19:00:00+00:00"}
+    assert store._same_story(0.70, a, b)
+    assert not store._same_story(0.70, c, d), "фамилия — не компания"
+    assert not store._same_story(0.60, a, b), "слишком далеко по смыслу"

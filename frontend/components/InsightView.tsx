@@ -9,12 +9,11 @@ import Feedback from "./insight/Feedback";
 import InsightHeader from "./insight/InsightHeader";
 import SourceList from "./insight/SourceList";
 import { groupSources } from "./insight/sources";
+import { chatSuggestions } from "./insight/suggestions";
 import TraceView from "./insight/TraceView";
 import { Card } from "./ui";
 import styles from "@/components/InsightView.module.scss";
 import common from "@/styles/common.module.scss";
-
-const CHAT_SUGGESTIONS = ["Какие источники использованы?", "Покажи в разрезе контрагентов", "Что думает банк о ставке?", "Какое место компании в отрасли?"];
 
 /** Источник из ссылки вида …#src-3: такая ссылка открывает разбор сразу на нужном источнике. */
 function sourceFromHash(): number | null {
@@ -109,7 +108,7 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
           onToggle={() => setShowSources((v) => !v)} focused={focused} />
       </div>
 
-      <Chat insightId={ins.insight_id} suggestions={CHAT_SUGGESTIONS} />
+      <Chat insightId={ins.insight_id} suggestions={chatSuggestions(ins)} />
     </div>
     </OpenSource.Provider>
     </RulesMode.Provider>

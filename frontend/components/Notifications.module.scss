@@ -105,10 +105,33 @@
 }
 
 .notifBody {
+  // Видно 4–5 событий, остальное — прокруткой; на низком экране меню ограничивает высоту само.
+  max-height: 340px;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior-y: contain;
   scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #cdd2d9 transparent;
+  margin-right: -8px;
+  padding-right: 4px;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--line);
+    border-radius: 3px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: var(--muted);
+  }
 
   &:focus-visible {
     outline: 2px solid var(--blue);

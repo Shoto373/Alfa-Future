@@ -15,6 +15,7 @@ app_state; другие процессы сверяют ее не чаще ра�
 import hashlib
 import json
 import logging
+import re
 import threading
 import time
 from dataclasses import dataclass, field
@@ -40,6 +41,13 @@ RECHECK_SECONDS = 2.0
 # (порог подобран на реальной ленте: «Brent выше $115» из Интерфакса, Коммерсанта и ТАСС — один сюжет).
 STORY_SIMILARITY = 0.78
 STORY_WINDOW_DAYS = 10
+# Одна и та же компания в заголовках за пару дней — один сюжет и при меньшей близости: «Выручка ФосАгро
+# в III квартале…» (Интерфакс) и «Чистая прибыль «Фосагро» за девять месяцев…» (Коммерсантъ) — 0,70.
+ENTITY_STORY_SIMILARITY = 0.65
+ENTITY_STORY_DAYS = 3
+_QUOTED = re.compile(r"«([^»]{2,40})»")
+_WORD = re.compile(r"[A-Za-zА-ЯЁа-яё][\w-]*")
+_ROMAN = re.compile(r"[IVXLC]+")  # «III квартал» — не компания
 STORY_LABELS_KEY = "story_labels"
 VERSION_KEY, REV_KEY = "news_seed", "news_rev"
 NEWS_LOCK = 72810403
@@ -152,6 +160,22 @@ def _time(item: dict) -> float:
     return (dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)).timestamp()
 
 
+def _companies(title: str) -> set[str]:
+    """Названия компаний в заголовке: в кавычках «», с заглавной внутри слова (ФосАгро) или латиницей.
+    Фамилии и страны сюда не попадают — «Новак» или «Украина» в разных событиях не делают их одним сюжетом."""
+    names = {m.group(1) for m in _QUOTED.finditer(title)}
+    names |= {w for w in _WORD.findall(title)
+              if (any(c.isupper() for c in w[1:]) and not w.isupper()) or (w[0].isascii() and len(w) > 2)}
+    return {n.lower().replace("ё", "е")[:5] for n in names if len(n) >= 3 and not _ROMAN.fullmatch(n)}
+
+
+def _same_story(sim: float, a: dict, b: dict) -> bool:
+    if sim >= STORY_SIMILARITY:
+        return True
+    return (sim >= ENTITY_STORY_SIMILARITY and abs(_time(a) - _time(b)) <= ENTITY_STORY_DAYS * 86400
+            and bool(_companies(a["title"]) & _companies(b["title"])))
+
+
 def _assign_stories(items_asc: list[dict]) -> dict[str, str]:
     """Сюжеты для всех новостей (по времени, скользящее окно). Без модели — каждая новость сама по себе."""
     vectors = embeddings.embed([_story_text(i) for i in items_asc]) if items_asc else None
@@ -168,9 +192,10 @@ def _assign_stories(items_asc: list[dict]) -> dict[str, str]:
         story = item["news_id"]
         if start < idx:
             sims = matrix[start:idx] @ matrix[idx]
-            best = int(np.argmax(sims))
-            if sims[best] >= STORY_SIMILARITY:
-                story = stories[items_asc[start + best]["news_id"]]
+            match = next((int(k) for k in np.argsort(-sims) if sims[k] >= ENTITY_STORY_SIMILARITY
+                          and _same_story(float(sims[k]), item, items_asc[start + int(k)])), None)
+            if match is not None:
+                story = stories[items_asc[start + match]["news_id"]]
         stories[item["news_id"]] = story
     return stories
 
@@ -185,8 +210,9 @@ def _nearest_story(item: dict, others: list[dict], stories: dict[str, str]) -> s
         return item["news_id"]
     matrix = embeddings.as_matrix(vectors)
     sims = matrix[1:] @ matrix[0]
-    best = int(np.argmax(sims))
-    return stories[window[best]["news_id"]] if sims[best] >= STORY_SIMILARITY else item["news_id"]
+    match = next((int(k) for k in np.argsort(-sims) if sims[k] >= ENTITY_STORY_SIMILARITY
+                  and _same_story(float(sims[k]), item, window[int(k)])), None)
+    return stories[window[match]["news_id"]] if match is not None else item["news_id"]
 
 
 def _version() -> str:

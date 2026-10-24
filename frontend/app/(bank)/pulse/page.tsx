@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import AddNews from "@/components/AddNews";
 import NewsCard from "@/components/NewsCard";
+import TopicChips from "@/components/TopicChips";
 import { Card, ErrorState, Icon, Loading } from "@/components/ui";
 import { useFeedWithTopics } from "@/lib/hooks";
 import { useRead } from "@/lib/notifications";
@@ -12,7 +13,6 @@ import type { FeedItem, TopicCount } from "@/lib/types";
 import common from "@/styles/common.module.scss";
 import styles from "@/app/(bank)/pulse/page.module.scss";
 
-const TOPICS_SHOWN = 10;
 const PAGE_SIZE = 30;
 
 type Sort = "priority" | "new" | "unread" | "read";
@@ -69,9 +69,8 @@ function PulseFeed() {
     setShown(PAGE_SIZE);
   }
   const unreadCount = page.data?.items.filter((i) => !read.has(i.news.news_id)).length ?? 0;
-  const [allTopics, setAllTopics] = useState(false);
 
-  // Только темы, по которым у компании есть новости; первые 10 видны сразу, остальные — по кнопке.
+  // Только темы, по которым у компании есть новости; сколько видно сразу — решает TopicChips (3 строки).
   // Счетчики приходят с сервером и не меняются при выборе темы, поэтому список не «прыгает».
   // Пока грузится лента по новому фильтру, остаются прежние чипы этой же компании.
   const [chips, setChips] = useState<{ source: object; companyId: string; topics: TopicCount[] } | null>(null);
@@ -79,8 +78,6 @@ function PulseFeed() {
     setChips({ source: page.data, companyId, topics: page.data.topic_counts });
   }
   const topics = chips?.companyId === companyId ? chips.topics : [];
-  const visibleTopics = allTopics ? topics : topics.filter((t, i) => i < TOPICS_SHOWN || t.topic === topic);
-  const hiddenCount = topics.length - topics.filter((t, i) => i < TOPICS_SHOWN || t.topic === topic).length;
 
   return (
     <div className={common.page}>
@@ -94,21 +91,7 @@ function PulseFeed() {
       <div className={styles.feedTop}>
         <section className={`${common.card} ${styles.topicsCard}`}>
           <h2>Темы</h2>
-          <div className={styles.chips} role="toolbar" aria-label="Фильтр по темам">
-            <button className={!topic ? `${styles.chip} ${styles.on}` : styles.chip} aria-pressed={!topic} onClick={() => setTopic(undefined)}>
-              Все темы {page.data && <span className={styles.chipCount}>{page.data.total}</span>}
-            </button>
-            {visibleTopics.map((t) => (
-              <button key={t.topic} className={topic === t.topic ? `${styles.chip} ${styles.on}` : styles.chip} aria-pressed={topic === t.topic} onClick={() => setTopic(t.topic)}>
-                {t.name} <span className={styles.chipCount}>{t.count}</span>
-              </button>
-            ))}
-            {hiddenCount > 0 && (
-              <button className={`${styles.chip} ${styles.chipMore}`} onClick={() => setAllTopics((v) => !v)} aria-expanded={allTopics}>
-                {allTopics ? "Свернуть" : `Ещё ${hiddenCount}`}
-              </button>
-            )}
-          </div>
+          <TopicChips topics={topics} topic={topic} total={page.data?.total ?? null} onSelect={setTopic} />
         </section>
         <div id="add-news" className={styles.anchor}><AddNews onAdded={feed.reload} compact /></div>
       </div>

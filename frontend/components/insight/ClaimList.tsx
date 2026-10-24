@@ -37,7 +37,12 @@ export default function ClaimList({ items, index, empty = "Нет данных" 
     <ul className={common.claims}>
       {items.map((c, i) => (
         <li key={i}>
-          <OriginTag origin={rules && c.origin === "ai" ? "rules" : c.origin} />
+          {/* Подряд одинаковые метки («Вывод AI», «Данные компании»…) — одна, у первого вывода группы;
+              у остальных метка невидима и только держит отступ, чтобы текст оставался выровнен. */}
+          <span className={i > 0 && items[i - 1].origin === c.origin ? styles.repeatOrigin : undefined}
+            aria-hidden={i > 0 && items[i - 1].origin === c.origin ? true : undefined}>
+            <OriginTag origin={rules && c.origin === "ai" ? "rules" : c.origin} />
+          </span>
           <span>{c.text}</span>
           <SourceRefs ids={c.source_ids} index={index} />
         </li>
