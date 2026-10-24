@@ -8,7 +8,7 @@ import { ErrorState, Icon, Skeleton } from "@/components/ui";
 import { AbortedError, ApiError, api } from "@/lib/api";
 import { markRead } from "@/lib/notifications";
 import { useSession } from "@/lib/session";
-import type { Insight } from "@/lib/types";
+import type { Insight, Role } from "@/lib/types";
 import common from "@/styles/common.module.scss";
 import styles from "@/app/(bank)/pulse/n/[newsId]/page.module.scss";
 
@@ -18,7 +18,7 @@ export default function InsightPage() {
   const { newsId } = useParams<{ newsId: string }>();
   const { session } = useSession();
   // Смена компании или новости — разбор с чистого листа; ответ на старый запрос игнорируется.
-  return <NewsInsight key={`${session!.companyId}:${newsId}`} newsId={newsId} />;
+  return <NewsInsight key={`${session!.companyId}:${session!.role}:${newsId}`} newsId={newsId} />;
 }
 
 function NewsInsight({ newsId }: { newsId: string }) {
@@ -30,6 +30,8 @@ function NewsInsight({ newsId }: { newsId: string }) {
   const [step, setStep] = useState(0);
   const [upgrading, setUpgrading] = useState(false);
   const [upgradeFailed, setUpgradeFailed] = useState(false);
+  // Другой разрез: тот же разбор глазами другой роли компании; по умолчанию — своя роль.
+  const [perspective, setPerspective] = useState<Role>(session!.role);
   const seq = useRef(0);
 
   // Открыли разбор — уведомление по этой новости прочитано.
@@ -46,7 +48,8 @@ function NewsInsight({ newsId }: { newsId: string }) {
     const mine = ++seq.current;
     const id = decodeURIComponent(newsId);
     // 1) Сразу — готовая карточка или разбор на правилах (доли секунды).
-    api.insight(companyId, id, { force, fast: true }, c.signal)
+    const view = perspective === session!.role ? undefined : perspective;
+    api.insight(companyId, id, { force, fast: true, perspective: view }, c.signal)
       .then((ins) => {
         if (mine !== seq.current) return;
         setInsight(ins);
@@ -54,7 +57,7 @@ function NewsInsight({ newsId }: { newsId: string }) {
         if (ins.mode !== "rules") return;
         // 2) Следом — версия модели: она заменит карточку на правилах, когда будет готова.
         setUpgrading(true);
-        return api.insight(companyId, id, {}, c.signal)
+        return api.insight(companyId, id, { perspective: view }, c.signal)
           .then((full) => {
             if (mine !== seq.current) return;
             setInsight(full);
@@ -70,7 +73,7 @@ function NewsInsight({ newsId }: { newsId: string }) {
         setError(e instanceof ApiError ? e : new ApiError("Непредвиденная ошибка", "CLIENT", true));
         setLoading(false);
       });
-  }, [companyId, newsId]);
+  }, [companyId, newsId, perspective, session]);
 
   // «Пересчитать» и «Повторить»: сброс состояния и новый запрос.
   const load = (force = false) => {
@@ -106,7 +109,8 @@ function NewsInsight({ newsId }: { newsId: string }) {
       )}
       {error && <ErrorState error={error} onRetry={() => load()} />}
       {insight && <InsightView insight={insight} onRefresh={() => load(true)} refreshing={loading}
-        upgrading={upgrading} upgradeFailed={upgradeFailed} />}
+        upgrading={upgrading} upgradeFailed={upgradeFailed}
+        perspective={perspective} ownRole={session!.role} onPerspective={setPerspective} />}
     </div>
   );
 }

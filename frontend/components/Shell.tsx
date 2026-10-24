@@ -11,15 +11,16 @@ import styles from "@/components/Shell.module.scss";
 import ui from "@/components/ui.module.scss";
 import common from "@/styles/common.module.scss";
 
-type NavItem = { href: string; label: string; icon: string; badge?: string; accent?: boolean; disabled?: boolean };
+type NavItem = { href: string; label: string; icon: string; badge?: string; accent?: boolean; disabled?: boolean; operatorOnly?: boolean };
 
 // Разделы Альфа-Бизнеса с экранов банка; рабочие — только разделы Альфа.Пульса.
 const NAV: (NavItem | "divider")[] = [
   { href: "#services", label: "Все сервисы", icon: "grid", disabled: true },
   "divider",
   { href: "/", label: "Главная", icon: "home" },
-  { href: "/pulse", label: "Альфа.Пульс", icon: "pulse", badge: "НОВОЕ", accent: true },
+  { href: "/pulse", label: "Альфа.Пульс", icon: "pulse", accent: true },
   { href: "/pulse/analytics", label: "Аналитика банка", icon: "doc" },
+  { href: "/quality", label: "Качество", icon: "shield", operatorOnly: true },
 ];
 
 export default function Shell({ children }: { children: ReactNode }) {
@@ -57,6 +58,7 @@ export default function Shell({ children }: { children: ReactNode }) {
         <nav className={styles.nav}>
           {NAV.map((item, i) => {
             if (item === "divider") return <hr key={`d${i}`} className={styles.navDivider} />;
+            if (item.operatorOnly && !session.user.is_operator) return null;  // мониторинг — только сотрудникам банка
             const inner = (
               <>
                 <Icon name={item.icon} size={20} /> <span className={styles.navLabel}>{item.label}</span>

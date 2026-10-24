@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AbortedError, ApiError, api } from "./api";
-import type { CompanyProfile, Exposure, FeedItem, TopicCount, StoryChip } from "./types";
+import type { CompanyProfile, Exposure, FeedItem, FeedPage } from "./types";
 
 export type Load<T> = { data: T | null; error: ApiError | null; loading: boolean; reload: () => void };
 type Result<T> = { key: string; data: T | null; error: ApiError | null };
@@ -36,7 +36,7 @@ export function useFeed(companyId: string, topic?: string): Load<FeedItem[]> {
 }
 
 /** Лента вместе со счетчиками тем по всей ленте компании (для фильтра тем). */
-export function useFeedWithTopics(companyId: string, topic?: string, story?: string): Load<{ items: FeedItem[]; topic_counts: TopicCount[]; stories: StoryChip[] }> {
+export function useFeedWithTopics(companyId: string, topic?: string, story?: string): Load<FeedPage> {
   return useLoad((s) => api.feed(companyId, topic, s, story), [companyId, topic, story]);
 }
 

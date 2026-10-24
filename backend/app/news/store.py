@@ -26,7 +26,7 @@ from sqlalchemy import func, select
 
 from app import config, database, embeddings, vector_store, vectors
 from app.models import News
-from app.news import llm_classify, semantic
+from app.news import llm_classify, materiality, semantic
 from app.news.classifier import classify, tokenize
 from app.text import safe_text
 
@@ -119,7 +119,12 @@ def make_item(title: str, text: str, source: str, url: str | None = None,
         answer = llm_classify.hint(title, text)
         if answer:
             cls = classify(title, text, answer)
+    # Существенность для крупного бизнеса — только для новой новости с темами (не демо-ленты).
+    verdict = None
+    if llm and cls.topics and kind != "seed":
+        verdict = materiality.assess(title, text)
     return {
+        **({"materiality": verdict} if verdict else {}),
         "news_id": news_id or f"n-{_digest(title, text)}",
         "title": title,
         "text": text,
@@ -224,6 +229,8 @@ def _reclassify(db, version: str) -> None:
                             hint=(previous.get("classification") or {}).get("llm_hint"))
         updated.update(added_at=previous["added_at"], duplicates=previous.get("duplicates") or [],
                        content_filtered=previous.get("content_filtered", False) or updated["content_filtered"])
+        if previous.get("materiality"):  # ответ модели не запрашивается повторно
+            updated["materiality"] = previous["materiality"]
         record.payload = updated
     db.flush()
     database.set_state(VERSION_KEY, version, db)
@@ -351,6 +358,23 @@ def stories(min_size: int = 2) -> list[dict]:
             for sid, items in groups]
 
 
+def set_materiality(news_id: str, verdict: dict) -> None:
+    """Сохранить ответ проверки существенности (записи в памяти общие — заменяется копией)."""
+    with _lock:
+        with database.session() as db:
+            db.execute(select(func.pg_advisory_xact_lock(NEWS_LOCK)))
+            state = _state_now(db)
+            item = state.items.get(news_id)
+            if item is None:
+                return
+            saved = {**item, "materiality": verdict}
+            db.get(News, news_id).payload = saved
+            rev = _bump(db)
+        state.items[news_id] = saved
+        state.rev = rev
+        state.reindex()
+
+
 def known(title: str, text: str) -> bool:
     """Новость уже есть (тот же id или почти тот же текст) — ее не нужно классифицировать заново."""
     title, text = clean(title, text)
@@ -393,3 +417,46 @@ def add(item: dict) -> tuple[dict, bool]:
     if created:
         _news_vectors([saved])
     return saved, created
+
+
+MATERIALITY_FAILURES_IN_ROW = 3  # единичный сбой шлюза пропускаем; несколько подряд — модель недоступна
+
+
+def check_materiality(limit: int = 40, recheck_rejected: bool = False, recheck_all: bool = False,
+                      checked_before: str | None = None) -> int:
+    """Проверить существенность еще не проверенных новостей с темами (сначала свежие). Возвращает число проверенных.
+
+    recheck_rejected — перепроверить и отсеянные, recheck_all — все (после уточнения критерия).
+    """
+    if not materiality.enabled():
+        return 0
+    todo = [n for n in all_items()
+            if n["classification"]["topics"] and n.get("kind") != "seed"
+            and ("materiality" not in n or recheck_all
+                 or (recheck_rejected and n["materiality"].get("material") is False)
+                 or (checked_before and n["materiality"].get("checked_at", "") < checked_before))][:limit]
+    done = failures = 0
+    for n in todo:
+        verdict = materiality.assess(n["title"], n["text"])
+        if verdict is None:
+            failures += 1
+            if failures >= MATERIALITY_FAILURES_IN_ROW:
+                break  # модель недоступна или исчерпан лимит — продолжим в следующем цикле
+            continue
+        failures = 0
+        set_materiality(n["news_id"], verdict)
+        done += 1
+    return done
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Проверить существенность уже собранных новостей")
+    parser.add_argument("--limit", type=int, default=1000)
+    parser.add_argument("--recheck-rejected", action="store_true", help="перепроверить отсеянные новости")
+    parser.add_argument("--recheck-all", action="store_true", help="перепроверить все (после изменения критерия)")
+    parser.add_argument("--checked-before", help="перепроверить проверенные раньше этого времени (ISO)")
+    args = parser.parse_args()
+    logging.basicConfig(level=logging.INFO)
+    print(f"проверено новостей: {check_materiality(args.limit, args.recheck_rejected, args.recheck_all, args.checked_before)}")

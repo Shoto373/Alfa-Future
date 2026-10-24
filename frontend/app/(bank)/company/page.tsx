@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import CompanyExtraCard from "@/components/CompanyExtraCard";
 import CompanyPanel from "@/components/CompanyPanel";
 import { Card, ErrorState, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -23,7 +24,7 @@ export default function CompanyPage() {
       <div className={common.pageHead}>
         <div>
           <h1>{session!.companyName}</h1>
-          <p className={common.muted}>Профиль по данным кейса: на этих признаках строится лента и разборы Альфа.Пульса.</p>
+          <p className={common.muted}>Профиль по данным кейса и сведениям компании: на этих признаках строится лента и разборы Альфа.Пульса.</p>
         </div>
       </div>
       {company.loading && <Card title="Профиль компании"><Skeleton lines={8} /></Card>}
@@ -31,6 +32,7 @@ export default function CompanyPage() {
       {company.data && (
         <CompanyPanel title="Профиль компании" profile={company.data.profile} exposures={company.data.exposures} sectors={sectors} />
       )}
+      <CompanyExtraCard companyId={session!.companyId} isAdmin={session!.isAdmin} onSaved={company.reload} />
     </div>
   );
 }

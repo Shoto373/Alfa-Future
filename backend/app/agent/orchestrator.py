@@ -8,6 +8,7 @@ import asyncio
 
 from app import llm_usage
 from app.agent import stages
+from app.companies import extra as company_extra
 
 _inflight: dict[tuple, asyncio.Future] = {}
 
@@ -62,6 +63,10 @@ async def run(company: dict, role: str, news: dict, request_id: str, use_llm: bo
 
 
 async def _run(company: dict, role: str, news: dict, request_id: str, use_llm: bool | None = None) -> dict:
+    # Сведения, которые компания сообщила сама, идут вместе с профилем: их видят модель, проверки и источники.
+    reported = await asyncio.to_thread(company_extra.get, company["company_id"])
+    if reported:
+        company = {**company, "extra": reported}
     run = stages.start(company, role, news, request_id, use_llm)
     steps, planner = stages.plan(run)
     await stages.collect(run, steps, planner)

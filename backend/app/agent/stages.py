@@ -102,20 +102,20 @@ def _absorb(ctx: dict, tool: str, result) -> str:
     if tool == "get_exposures":
         event_topics = {t["topic"] for t in ctx["news"]["classification"]["topics"]}
         ctx["exposures"] = [e for e in result if e["topic"] in event_topics]
-        return f"найдено экспозиций: {len(result)}"
+        return f"найдено связей с компанией: {len(result)}"
     if tool == "search_bank_analytics":
         known = {t["id"] for t in ctx["theses"]}
         fresh = [t for t in result if not t.get("stale") and t["id"] not in known]
         ctx["theses"] = (ctx["theses"] + fresh)[:MAX_THESES]
         ctx["bank_search_complete"] = True
-        return ("тезисы: " + ", ".join(t["id"] for t in result) + (f" (новых {len(fresh)})" if known else "")) \
+        return (f"найдено тезисов: {len(result)}" + (f", из них новых {len(fresh)}" if known else "")) \
             if result else "материалы не найдены"
     if tool == "get_bank_products":
         ctx["products"] = result
-        return f"продуктов: {len(result)}"
+        return f"подходящих продуктов: {len(result)}"
     if tool == "check_forecast_conflicts":
         ctx["forecast_conflicts"] = result
-        return f"тем с несколькими прогнозами: {len(result)}"
+        return f"расхождения в прогнозах: {len(result)}" if result else "прогнозы не расходятся"
     if tool == "get_counterparties":
         ctx["counterparties"] = result
         return f"поставщиков {result['suppliers']['counterparties']}, покупателей {result['customers']['counterparties']}"
@@ -126,8 +126,8 @@ def _absorb(ctx: dict, tool: str, result) -> str:
                 if ctx["coverage"] else "других источников по событию нет")
     if tool == "get_story_history":
         ctx["story"] = result
-        return (f"ранее по сюжету: {len(result)}, последнее {result[0]['published_at']}" if result
-                else "предыдущих событий сюжета нет")
+        return (f"похожих событий раньше: {len(result)}, последнее {result[0]['published_at'][:10]}" if result
+                else "похожих событий раньше не было")
     return "получено"
 
 
@@ -140,7 +140,8 @@ def _run_steps(run: Run, steps: list[dict]) -> None:
             continue
         summary = _absorb(run.ctx, step["tool"], result)
         run.trace.add("tool", step["tool"], f"{step['why']}: {summary}", "ok", ms,
-                      {"args": {k: v for k, v in step["args"].items() if k != "company_id"}})
+                      {"args": {k: v for k, v in step["args"].items() if k != "company_id"},
+                       **({"thesis_ids": [t["id"] for t in result]} if step["tool"] == "search_bank_analytics" else {})})
 
 
 async def collect(run: Run, steps: list[dict], planner: asyncio.Task | None) -> None:
@@ -150,8 +151,8 @@ async def collect(run: Run, steps: list[dict], planner: asyncio.Task | None) -> 
         return
     try:
         extra, meta = await planner
-        run.trace.add("plan", "llm_queries", f"Модель {meta['model']} предложила запросов: {len(extra)}" +
-                      ("".join(f"; «{q['args']['query']}» — {q['why']}" for q in extra)), "ok", meta["duration_ms"])
+        run.trace.add("plan", "llm_queries", f"Модель {meta['model']} предложила уточняющих запросов: {len(extra)}", "ok",
+                      meta["duration_ms"], {"queries": [{"query": q["args"]["query"], "why": q["why"]} for q in extra]})
         await asyncio.to_thread(_run_steps, run, extra)
     except llm.LLMError as exc:
         run.trace.add("plan", "llm_queries", f"Уточняющие запросы модели не получены ({exc}); достаточно обязательных шагов", "warning")
@@ -175,9 +176,9 @@ async def draft(run: Run) -> None:
                 run.fallback_reason = "company_budget" if exc.scope == "company" else "budget"
             else:
                 run.fallback_reason = "unavailable"
-            run.trace.add("compose", "llm_compose", f"LLM недоступна ({exc}); черновик на правилах", "warning")
+            run.trace.add("compose", "llm_compose", f"LLM недоступна ({exc}); быстрый разбор", "warning")
     if run.mode == "rules":
-        run.trace.add("compose", "rules_compose", "Черновик составлен правилами: эффект = чувствительность компании × направление события",
+        run.trace.add("compose", "rules_compose", "Быстрый разбор: эффект = чувствительность компании × направление события",
                       "ok", (time.perf_counter() - t0) * 1000)
 
 
@@ -241,7 +242,7 @@ def _fill_from_rules(run: Run, actions: list[str]) -> None:
         draft["what_happened"]["facts"] = rebuilt["what_happened"]["facts"]
     if validators.similarity(draft["headline"], run.news["title"]) > 0.5:
         draft["headline"] = rebuilt["headline"]
-    actions.append("разделы дополнены правилами")
+    actions.append("разделы дополнены быстрым разбором")
 
 
 async def _adapt(run: Run, round_no: int, failed: list[dict], source_ids: set[str], repaired: bool) -> bool:
@@ -268,7 +269,7 @@ def _safe_fallback(run: Run) -> None:
     run.draft = composer.compose(run.ctx)
     run.mode, run.model = "rules", None
     run.results = validators.check(run.draft, run.ctx, {s["source_id"] for s in context.sources(run.ctx)}, context.grounding_text(run.ctx))
-    run.trace.add("adapt", "safe_fallback", "Лимит коррекций исчерпан; повторно проверен разбор на правилах", "warning")
+    run.trace.add("adapt", "safe_fallback", "Лимит коррекций исчерпан; повторно проверен быстрый разбор", "warning")
     if any(not r["passed"] for r in run.results):
         logger.warning("analysis rejected request_id=%s checks=%s", run.request_id,
                        [r["name"] for r in run.results if not r["passed"]])
@@ -342,8 +343,7 @@ def finalize(run: Run) -> dict:
                "checks": [{"name": r["name"], "passed": r["passed"], "detail": r["detail"]} for r in run.final_checks]}
     sources = _used_sources(run)
     relevance = score(run.news, company["company_id"], run.role)
-    total_ms = (time.perf_counter() - run.started) * 1000
-    run.trace.add("finalize", "finalize", f"Источников: {len(sources)}, режим: {run.mode}, всего {total_ms:.0f} мс",
+    run.trace.add("finalize", "finalize", f"{'AI-разбор' if run.mode == 'llm' else 'Быстрый разбор'} готов, источников: {len(sources)}",
                   output={"total_duration_ms": round((time.perf_counter() - run.started) * 1000, 1)})
     insight = {
         "schema_version": SCHEMA_VERSION, "insight_id": f"ins-{uuid.uuid4().hex[:12]}", "request_id": run.request_id,

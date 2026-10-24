@@ -37,6 +37,12 @@ SEMANTIC_TOPIC_SCORE = 2  # как слабое словарное совпад�
 WEAK_TOPIC_SCORE = 2      # одно упоминание в тексте — слабый сигнал темы
 LLM_TOPIC_SCORE = 3       # тема от модели-классификатора: сильнее одного упоминания, слабее явной словарной
 NON_BUSINESS_MARGIN = 0.15  # насколько новость должна быть ближе к «не про бизнес», чтобы снять слабые темы
+# Даже сильное словарное совпадение не делает новость деловой, если по смыслу она ближе к «не про бизнес»:
+# «гимнастка завоевала серебро» (золото), «тренер «Металлурга»» (металлургия), «пляж закрыли из-за разлива нефти».
+STRONG_NON_BUSINESS_MARGIN = 0.03
+# Тема по одному упоминанию в тексте остается, только если новость действительно о ней по смыслу
+# («Силуанов посоветовал жить экономнее» — 0,52 к ставке, «ЦБ сохранил ставку» — 0,6+).
+WEAK_TOPIC_MIN_SIM = 0.55
 
 _WORD = re.compile(r"[a-zа-я0-9$%.,/-]+", re.IGNORECASE)
 _SENT = re.compile(r"(?<=[.!?…])\s+(?=[А-ЯA-Z«\"0-9])")
@@ -172,11 +178,20 @@ def _semantic_topics(topics: list[dict], title: str, text: str, tokens: list[str
                 continue
             topics.append({"topic": key, "name": TOPICS[key]["name"], "score": SEMANTIC_TOPIC_SCORE,
                            "matched": [f"по смыслу ({meaning['sims'][key]:.2f})"], "semantic": meaning["sims"][key]})
+    # Тема по одному упоминанию в тексте (не в заголовке) — повод, а не предмет новости, если смысл ее не подтверждает:
+    # «на пресс-конференции по итогам заседания по ключевой ставке» в новости о цифровом рубле.
+    if meaning:
+        topics = [t for t in topics if t["score"] > WEAK_TOPIC_SCORE or _score(tokenize(title), TOPICS[t["topic"]]["stems"])[0]
+                  or t.get("semantic", meaning["sims"].get(t["topic"], 0)) >= WEAK_TOPIC_MIN_SIM]
     # Только слабые словарные совпадения, а по смыслу новость ближе к «не про бизнес» (спорт, политика,
     # происшествия): «зарплаты футболистов» не делают матч новостью о рынке труда.
     if meaning and topics and max(t["score"] for t in topics) <= WEAK_TOPIC_SCORE:
         best = max((meaning["sims"].get(t["topic"], -1.0) for t in topics), default=-1.0)
         if meaning["non_business"] - best >= NON_BUSINESS_MARGIN:
+            topics = []
+    if meaning and topics:
+        best = max((meaning["sims"].get(t["topic"], -1.0) for t in topics), default=-1.0)
+        if meaning["non_business"] - best >= STRONG_NON_BUSINESS_MARGIN:
             topics = []
     return topics, meaning
 

@@ -10,6 +10,7 @@ from app import cache, config, embeddings, llm, llm_usage, pipeline, quality, st
 from app.agent import audit, orchestrator, qa
 from app.auth import store as auth_store
 from app.auth.deps import check_origin, current_user, member_of, require_operator
+from app.companies import extra as company_extra
 from app.companies import profiles
 from app.companies.sectors import SECTOR_NAMES
 from app.errors import AnalysisUnavailable, ApiError, InvalidAnalysisResult
@@ -17,7 +18,8 @@ from app.knowledge import kb
 from app.news import parser, store
 from app.news.taxonomy import TOPICS
 from app.ranking import ROLES, company_feed
-from app.schemas import (Answer, ErrorResponse, FeedbackRequest, Insight, InsightRequest, LLMSwitchRequest,
+from app.schemas import (Answer, CompanyExtraRequest, ErrorResponse, FeedbackRequest, Insight, InsightRequest,
+                         LLMSwitchRequest,
                          NewsCreateRequest, QuestionRequest)
 
 logger = logging.getLogger("app.api")
@@ -30,7 +32,7 @@ ERROR_DESCRIPTIONS = {
     403: "Недостаточно прав (FORBIDDEN)",
     404: "Объект не найден (*_NOT_FOUND, MEMBER_NOT_FOUND)",
     409: "Конфликт (EMAIL_TAKEN, COMPANY_CLAIMED, TOO_MANY_COMPANIES, MEMBER_EXISTS, LAST_ADMIN)",
-    413: "Тело запроса больше 64 КиБ (REQUEST_TOO_LARGE)",
+    413: "Тело запроса больше 64 КиБ, файл — больше 5 МБ (REQUEST_TOO_LARGE)",
     422: "Не удалось загрузить материал по ссылке (FETCH_FAILED)",
     500: "Внутренняя ошибка (INTERNAL_ERROR, INVALID_ANALYSIS_RESULT)",
     503: "Сервис или данные временно недоступны (ANALYSIS_UNAVAILABLE, DATA_UNAVAILABLE)",
@@ -143,10 +145,64 @@ def company(company_id: str, user: dict = Depends(current_user)) -> dict:
     return {"profile": c, "exposures": list(profiles.exposures(company_id))}
 
 
+def _extra_view(company_id: str) -> dict:
+    value = company_extra.get(company_id) or {}
+    return {"company_id": company_id, "shares": value.get("shares", {}), "notes": value.get("notes", ""),
+            "updated_at": value.get("updated_at"),
+            "files": [{k: f[k] for k in ("file_id", "name", "kind", "size", "chars", "uploaded_at")} | {"preview": f["text"][:200]}
+                      for f in value.get("files", [])],
+            "fields": [{"key": k, "label": v["label"]} for k, v in company_extra.SHARES.items()]}
+
+
+@router.get("/companies/{company_id}/extra", responses=ERRORS)
+def get_company_extra(company_id: str, user: dict = Depends(current_user)) -> dict:
+    """Сведения, которые компания сообщила о себе (видят все участники)."""
+    member_of(user, company_id)
+    _company(company_id)
+    return _extra_view(company_id)
+
+
+@router.put("/companies/{company_id}/extra", responses=ERRORS)
+def put_company_extra(company_id: str, payload: CompanyExtraRequest, user: dict = Depends(current_user)) -> dict:
+    """Меняет администратор компании; карточки и лента компании после этого пересчитываются."""
+    _admin_of(user, company_id)
+    company_extra.save(company_id, payload.shares.model_dump(), payload.notes, user["user_id"])
+    storage.log_event("company_extra_saved", company_id=company_id)
+    return _extra_view(company_id)
+
+
+def _admin_of(user: dict, company_id: str) -> None:
+    if not member_of(user, company_id)["is_admin"]:
+        raise ApiError("FORBIDDEN")
+    _company(company_id)
+
+
+@router.post("/companies/{company_id}/extra/files", responses=ERRORS)
+async def upload_company_file(company_id: str, request: Request, name: str = Query(..., min_length=1, max_length=200),
+                              user: dict = Depends(current_user)) -> dict:
+    """Файл CSV или PDF телом запроса (до 5 МБ): текст из него дополняет сведения компании."""
+    await asyncio.to_thread(_admin_of, user, company_id)
+    data = await request.body()
+    try:
+        await asyncio.to_thread(company_extra.add_file, company_id, name, data, user["user_id"])
+    except company_extra.FileError as exc:
+        raise ApiError("INVALID_REQUEST", str(exc))
+    storage.log_event("company_file_added", company_id=company_id)
+    return await asyncio.to_thread(_extra_view, company_id)
+
+
+@router.delete("/companies/{company_id}/extra/files/{file_id}", responses=ERRORS)
+def delete_company_file(company_id: str, file_id: str, user: dict = Depends(current_user)) -> dict:
+    _admin_of(user, company_id)
+    if not company_extra.delete_file(company_id, file_id, user["user_id"]):
+        raise ApiError("FILE_NOT_FOUND")
+    return _extra_view(company_id)
+
+
 @router.get("/feed", responses=ERRORS)
 def news_feed(company_id: str, topic: str | None = Query(None, max_length=40),
               story: str | None = Query(None, max_length=64),
-              limit: int = Query(30, ge=1, le=100), user: dict = Depends(current_user)) -> dict:
+              limit: int = Query(30, ge=1, le=500), user: dict = Depends(current_user)) -> dict:
     role = member_of(user, company_id)["role"]  # роль берется из членства, не от клиента
     _company(company_id)
     # Вся лента компании без фильтра — для счетчиков тем: показываются только темы, где есть новости.
@@ -162,7 +218,8 @@ def news_feed(company_id: str, topic: str | None = Query(None, max_length=40),
               and (not story or r.get("story_id") == story)][:limit]
     storage.log_event("feed_view", company_id=company_id, role=role)
     cached = storage.cached_insight_refs(company_id, role, [r["news"]["news_id"] for r in ranked])
-    return {"company_id": company_id, "role": role,
+    # total и topic_counts — по всей ленте компании: главная и лента показывают одни и те же числа.
+    return {"company_id": company_id, "role": role, "total": len(everything),
             "topic_counts": sorted(counts.values(), key=lambda c: (-c["count"], c["name"])), "stories": stories, "items": [
         # Склеенные похожие новости других источников добавляются к счетчику «+N источников».
         {"news": {**_news_brief(r["news"]), "duplicates": len(r["news"]["duplicates"]) + r.get("story_size", 0),
@@ -208,7 +265,9 @@ def refresh_news() -> dict:
 @router.post("/insights", response_model=Insight, responses=ERRORS)
 async def create_insight(payload: InsightRequest, request: Request, user: dict = Depends(current_user)) -> dict:
     request_id: str = request.state.request_id
-    role = member_of(user, payload.company_id)["role"]  # роль берется из членства, не от клиента
+    # Роль — из членства; perspective лишь меняет угол зрения (доступ к компании проверяется так же).
+    role = payload.perspective or member_of(user, payload.company_id)["role"]
+    member_of(user, payload.company_id)
 
     def prepare():
         c, n = _company(payload.company_id), _news(payload.news_id)
@@ -302,6 +361,14 @@ def metrics() -> dict:
 def daily_quality(hours: int = Query(24, ge=1, le=24 * 30)) -> dict:
     """Мониторинг качества за период: доля текста модели, проверки, источники, оценки, задержки, конвейер."""
     return quality.daily(hours)
+
+
+@router.get("/metrics/overview", responses=ERRORS, dependencies=[Depends(require_operator)])
+def quality_overview(hours: int = Query(24 * 7, ge=1, le=24 * 30)) -> dict:
+    """Страница мониторинга: показатели за период, накопленные метрики и выводы «что улучшить»."""
+    period, totals = quality.daily(hours), storage.metrics()
+    return {"period": period, "totals": totals, "findings": quality.findings(period, totals),
+            "check_labels": quality.CHECK_LABELS}
 
 
 @router.get("/analytics", responses=ERRORS, dependencies=[Depends(current_user)])

@@ -49,11 +49,11 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844
     await page.goto(`/pulse/n/${encodeURIComponent(newsId)}`);
     await expect(page.getByRole("heading", { name: "Быстрый разбор готов", exact: true })).toBeVisible();
     await expect(page.getByRole("status")).toContainText("AI-модель дополняет выводы");
-    await expect(page.getByText("Вывод по правилам", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Быстрый разбор", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Пересчитать", exact: true })).toBeDisabled();
     const sources = page.getByRole("button", { name: /6\. На чем основан вывод/ });
     await expect(sources).toHaveAttribute("aria-expanded", "false");
-    await page.getByRole("link", { name: "[1]", exact: true }).first().click();
+    await page.getByRole("link", { name: "Источник 1", exact: true }).first().click();
     await expect(sources).toHaveAttribute("aria-expanded", "true");
     await expect(page.getByText("Первоисточник новости", { exact: true })).toBeVisible();
     await expect(page).toHaveURL(/#src-1$/);

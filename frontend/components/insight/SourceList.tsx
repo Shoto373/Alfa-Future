@@ -1,7 +1,7 @@
-import { api } from "@/lib/api";
 import { date } from "@/lib/format";
 import type { Insight, Source } from "@/lib/types";
 import { Card, Icon } from "../ui";
+import { reasonLines, type SourceGroup } from "./sources";
 import styles from "@/components/InsightView.module.scss";
 import common from "@/styles/common.module.scss";
 
@@ -13,41 +13,49 @@ const SOURCE_KIND: Record<Source["kind"], string> = {
   news: "Новость", bank_analytics: "Аналитика банка", client_data: "Данные компании", bank_product: "Продукт банка",
 };
 
-function sourceLink(s: Source): string | null {
-  if (s.kind === "news") return s.url;
-  if (s.kind === "bank_analytics" && s.doc_id) return api.pdfUrl(s.doc_id, s.page);
-  return null;
-}
-
 /** «На чем основан вывод»: источники (сворачиваются) с переходом к первоисточнику и причины отбора в ленту. */
-export default function SourceList({ sources, reasons, open, onToggle, focused }: {
-  sources: Source[]; reasons: Insight["relevance"]["reasons"]; open: boolean; onToggle: () => void; focused: number | null;
+export default function SourceList({ groups, reasons, open, onToggle, focused }: {
+  groups: SourceGroup[]; reasons: Insight["relevance"]["reasons"]; open: boolean; onToggle: () => void; focused: number | null;
 }) {
   return (
     <Card className={styles.span2} title={
       <button type="button" className={styles.collapseToggle} aria-expanded={open} aria-controls="insight-sources" onClick={onToggle}>
-        6. На чем основан вывод <span className={styles.muted}>· {sources.length}</span>
+        6. На чем основан вывод <span className={styles.muted}>· {groups.length}</span>
         <Icon name="chevron" size={18} />
       </button>
     }>
       {open && <ol className={styles.sources} id="insight-sources">
-        {sources.map((s, i) => {
-          const link = sourceLink(s);
+        {groups.map((g, i) => {
+          const pages = [...new Set(g.items.map((s) => s.page).filter((p): p is number => !!p))];
           return (
-            <li key={s.source_id} id={`src-${i + 1}`} className={focused === i + 1 ? styles.focused : undefined}>
-              <span className={`${styles.srcKind} ${SOURCE_STYLES[s.kind] ?? ""}`}>{SOURCE_KIND[s.kind]}</span>
+            <li key={g.key} id={`src-${i + 1}`} className={focused === i + 1 ? styles.focused : undefined}>
+              <span className={`${styles.srcKind} ${SOURCE_STYLES[g.kind] ?? ""}`}>{SOURCE_KIND[g.kind]}</span>
               <div>
-                <strong>{s.title}</strong>{s.page ? `, стр. ${s.page}` : ""}{s.date ? ` · ${date(s.date)}` : ""}
-                {s.excerpt && <p className={`${styles.muted} ${common.small}`}>{s.excerpt}</p>}
+                <strong>{g.title}</strong>
+                {pages.length > 0 && `, стр. ${pages.join(", ")}`}{g.date ? ` · ${date(g.date)}` : ""}
+                {g.items.length === 1 && g.items[0].excerpt && <p className={`${styles.muted} ${common.small}`}>{g.items[0].excerpt}</p>}
+                {g.items.length > 1 && (
+                  <ul className={styles.srcQuotes}>
+                    {g.items.map((s) => (
+                      <li key={s.source_id} className={`${styles.muted} ${common.small}`}>
+                        {s.page && <span className={styles.srcPage}>стр. {s.page}</span>}{s.excerpt}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
-              {link && <a className={`${common.btn} ${common.btnLink} ${common.btnSm}`} href={link} target="_blank" rel="noreferrer"
-                aria-label={`Первоисточник: ${s.title} (откроется в новой вкладке)`}><Icon name="link" size={14} /> Первоисточник</a>}
+              {g.url && <a className={`${common.btn} ${common.btnLink} ${common.btnSm}`} href={g.url} target="_blank" rel="noreferrer"
+                aria-label={`Первоисточник: ${g.title} (откроется в новой вкладке)`}><Icon name="link" size={14} /> Первоисточник</a>}
             </li>
           );
         })}
       </ol>}
       <h4>Почему новость попала в вашу ленту</h4>
-      <ul className={common.plain}>{reasons.map((r, i) => <li key={i}>{r.text}</li>)}</ul>
+      <dl className={styles.reasonList}>
+        {reasonLines(reasons).map((r) => (
+          <div key={r.label}><dt>{r.label}</dt><dd>{r.text}</dd></div>
+        ))}
+      </dl>
     </Card>
   );
 }

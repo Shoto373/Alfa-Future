@@ -162,6 +162,10 @@ async def cycle(started_at: str | None = None) -> dict:
               "quality_report": False, "duration": None, "error": None}
     await _collect(report)
     report["stories_named"] = await _optional(_name_stories, "stories", 0)
+    # Существенность еще не проверенных новостей (собранных до включения проверки или при сбое модели).
+    if await asyncio.to_thread(_llm_budget_left):
+        report["materiality_checked"] = await _optional(
+            lambda: store.check_materiality(config.pipeline_materiality_batch()), "materiality", 0)
 
     pairs = await asyncio.to_thread(audience)
     report["pairs"] = len(pairs)

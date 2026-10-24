@@ -16,13 +16,14 @@ export type SourceIndex = Map<string, number>;
 
 function SourceRefs({ ids, index }: { ids: string[]; index: SourceIndex }) {
   const openSource = useContext(OpenSource);
-  const refs = ids.filter((id) => index.has(id));
+  // Несколько тезисов одного документа — одна сноска.
+  const refs = [...new Set(ids.map((id) => index.get(id)).filter((n): n is number => n !== undefined))].sort((a, b) => a - b);
   if (!refs.length) return null;
   return (
     <span className={styles.refs}>
-      {refs.map((id) => (
-        <a key={id} href={`#src-${index.get(id)}`} title="Перейти к источнику"
-          onClick={(e) => { e.preventDefault(); openSource(index.get(id)); }}>[{index.get(id)}]</a>
+      {refs.map((n) => (
+        <a key={n} href={`#src-${n}`} title="Перейти к источнику" aria-label={`Источник ${n}`}
+          onClick={(e) => { e.preventDefault(); openSource(n); }}>{n}</a>
       ))}
     </span>
   );

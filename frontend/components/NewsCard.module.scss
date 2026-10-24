@@ -90,3 +90,8 @@
   gap: 10px;
   flex-wrap: wrap;
 }
+
+// Прочитанная новость приглушена, но остается в ленте.
+.isRead h3 a {
+  color: var(--muted);
+}

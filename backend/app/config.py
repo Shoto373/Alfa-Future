@@ -29,12 +29,18 @@ ALLOWED_MODELS = (
     "kimi-k2.6",
 )
 
+# Деловые разделы, а не общие ленты: в общей ленте ТАСС деловых было около половины.
 DEFAULT_RSS = [
     {"name": "Банк России", "url": "https://www.cbr.ru/rss/eventrss"},
     {"name": "Интерфакс", "url": "https://www.interfax.ru/rss.asp"},
     {"name": "РБК", "url": "https://rssexport.rbc.ru/rbcnews/news/30/full.rss"},
-    {"name": "ТАСС", "url": "https://tass.ru/rss/v2.xml"},
-    {"name": "Коммерсантъ", "url": "https://www.kommersant.ru/RSS/news.xml"},
+    {"name": "Коммерсантъ", "url": "https://www.kommersant.ru/RSS/section-economics.xml"},
+    {"name": "Коммерсантъ", "url": "https://www.kommersant.ru/RSS/section-business.xml"},
+    {"name": "Коммерсантъ", "url": "https://www.kommersant.ru/RSS/section-finance.xml"},
+    {"name": "Ведомости", "url": "https://www.vedomosti.ru/rss/rubric/economics"},
+    {"name": "Ведомости", "url": "https://www.vedomosti.ru/rss/rubric/business"},
+    {"name": "Ведомости", "url": "https://www.vedomosti.ru/rss/rubric/finance"},
+    {"name": "Frank Media", "url": "https://frankmedia.ru/feed"},
 ]
 
 
@@ -105,7 +111,7 @@ def rss_sources() -> list[dict]:
 
 
 def rss_max_items() -> int:
-    return int(_env("RSS_MAX_ITEMS", "30"))
+    return int(_env("RSS_MAX_ITEMS", "50"))
 
 
 def rss_full_text() -> bool:
@@ -140,6 +146,11 @@ def pipeline_llm_per_cycle() -> int:
 def pipeline_llm_share() -> float:
     """Доля дневного лимита LLM, которую может потратить конвейер; остальное — запросам пользователей."""
     return float(_env("PIPELINE_LLM_SHARE", "0.5"))
+
+
+def pipeline_materiality_batch() -> int:
+    """Сколько непроверенных новостей конвейер проверяет на существенность за цикл."""
+    return int(_env("PIPELINE_MATERIALITY_BATCH", "40"))
 
 
 def pipeline_story_labels() -> int:
@@ -253,6 +264,12 @@ def telegram_settings() -> tuple[str, str]:
 def quality_report_hour() -> int:
     """Час (UTC), после которого уходит ежедневный отчет о качестве; 6 UTC = 9:00 МСК."""
     return int(_env("QUALITY_REPORT_HOUR_UTC", "6"))
+
+
+def materiality_llm_enabled() -> bool:
+    """Проверка существенности новости моделью-классификатором (app.news.materiality). Включена по умолчанию,
+    если LLM подключена; MATERIALITY_LLM=0 — только словари и смысловая модель."""
+    return _env("MATERIALITY_LLM", "1").lower() in ("1", "true", "yes", "on")
 
 
 def classify_llm_enabled() -> bool:

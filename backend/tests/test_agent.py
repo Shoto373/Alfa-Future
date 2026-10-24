@@ -106,7 +106,7 @@ def test_llm_mode_used_when_connected_and_falls_back(client, company, monkeypatc
     ins = run(company, "cfo", "seed-rate-hold")
     assert ins["mode"] == "llm" and llm.is_allowed(ins["model"])
     queries = next(s for s in ins["trace"] if s["name"] == "llm_queries")
-    assert queries["status"] == "ok" and "прогноз ключевой ставки" in queries["detail"]
+    assert queries["status"] == "ok" and "прогноз ключевой ставки" in queries["output"]["queries"][0]["query"]
     # Тема не из новости («gold») отброшена: уточняющий поиск идет только в темах события.
     extra = [s for s in ins["trace"] if s["name"] == "search_bank_analytics"][-1]
     assert "gold" not in str(extra.get("output"))
@@ -146,3 +146,26 @@ def test_question_guard(client, company):
 def test_number_normalization_keeps_tokens_apart():
     assert validators._norm_numbers("4К26 3–6 месяцев") == {"4", "26", "3", "6"}
     assert validators._norm_numbers("цена 4 650 долларов, ставка 14,0%") == {"4650", "14"}
+
+
+def test_jargon_in_ai_claims_is_detected():
+    from app.agent.validators import JARGON
+
+    assert JARGON.search("В профиле loans=false, coverage и story пусты")
+    assert JARGON.search("см. bank:rate-04")
+    assert not JARGON.search("Кредитов в Альфа-Банке у компании нет, других публикаций не нашлось; Brent выше $115")
+
+
+def test_group_of_companies_adds_exposures_and_reason():
+    from app.companies import profiles
+
+    # Сотни компаний — не повод отбрасывать группу (девелопер с проектными юрлицами), важен центр выручки.
+    c = {"sector": "construction", "group": {
+        "members": 400, "revenue": 80e9, "usable": True, "focus_sectors": ["construction", "metallurgy"],
+        "sector_shares": [{"sector": "construction", "share": 0.6}, {"sector": "metallurgy", "share": 0.3},
+                          {"sector": "services", "share": 0.1}]}}
+    g = profiles.group(c)
+    assert g and g["other_sectors"] == ["metallurgy"]
+    assert profiles.group_mix(g) == "строительство 60%, металлургия 30%"
+    assert profiles.group({**c, "group": {**c["group"], "usable": False}}) is None
+    assert profiles.group({**c, "group": {**c["group"], "members": 1}}) is None

@@ -16,7 +16,7 @@ from app import config, database
 from sqlalchemy import select, func
 from sqlalchemy.dialects.postgresql import insert
 from app.models import Company
-from app.companies import etl, names
+from app.companies import etl, extra, names
 from app.companies.sectors import SECTOR_NAMES, SECTOR_SENSITIVITY
 
 logger = logging.getLogger("app.companies")
@@ -79,7 +79,8 @@ def _signature(data_dir) -> str | None:
     files = [data_dir / n for n in ("df_Uid_data_hack.csv", "df_Uid_payment_hack.csv", "df_Fid_Uid_link_hack.csv")]
     if not files[0].exists():
         return None
-    return "v2|" + str((data_dir / "SYNTHETIC").is_file()) + "|" + "|".join(
+    # Версия в подписи: при изменении правил ETL (v3 — доли выручки групп) профили пересобираются сами.
+    return "v3|" + str((data_dir / "SYNTHETIC").is_file()) + "|" + "|".join(
         f"{f.name}:{f.stat().st_size}:{f.stat().st_mtime_ns}" for f in files if f.exists())
 
 
@@ -125,12 +126,43 @@ def summary(c: dict) -> dict:
     }
 
 
+def group(c: dict) -> dict | None:
+    """Группа компаний, у выручки которой есть центр (отрасль с заметной долей), или None.
+
+    other_sectors — такие отрасли группы, кроме отрасли самой компании.
+    """
+    g = c.get("group") or {}
+    if not g.get("usable") or not g.get("members") or g["members"] < 2:
+        return None
+    return {**g, "other_sectors": [s for s in g.get("focus_sectors", []) if s not in (c["sector"], "unknown", None)]}
+
+
+def group_mix(g: dict, names: dict | None = None) -> str:
+    """«строительство 60%, операции с недвижимостью 25%» — основные отрасли по выручке группы."""
+    names = names or SECTOR_NAMES
+    return ", ".join(f"{names.get(x['sector'], x['sector']).lower()} {round(x['share'] * 100)}%"
+                     for x in g.get("sector_shares", []) if x["sector"] in g.get("focus_sectors", []))
+
+
 def _bn(value: float | None) -> str:
     return f"{value / 1e9:.1f} млрд ₽" if value else "нет данных"
 
 
-@lru_cache(maxsize=2048)
 def exposures(company_id: str) -> tuple[dict, ...]:
+    """Чувствительность компании к темам новостей: данные кейса плюс сведения от самой компании."""
+    return _base_exposures(company_id) + tuple(extra.exposures(company_id))
+
+
+def _clear_exposures() -> None:
+    _base_exposures.cache_clear()
+    extra._memo.clear()
+
+
+exposures.cache_clear = _clear_exposures  # type: ignore[attr-defined]
+
+
+@lru_cache(maxsize=2048)
+def _base_exposures(company_id: str) -> tuple[dict, ...]:
     """Чувствительность компании к темам новостей с обоснованием по признакам."""
     c = get(company_id)
     if c is None:
@@ -148,11 +180,11 @@ def exposures(company_id: str) -> tuple[dict, ...]:
             add(topic, 1.0, s.sign, "sector", c["sector_name"], f"Отрасль «{c['sector_name']}»: {s.why}", "sector_model")
 
     if p.get("loans"):
-        add("key_rate", 1.2, -1, "products.loans", True, "Есть кредитные продукты: стоимость новых заимствований чувствительна к ставке; эффект для действующего долга зависит от договора")
-        add("credit_market", 0.8, 1, "products.loans", True, "Есть кредитные продукты: условия кредитования влияют на финансирование")
+        add("key_rate", 1.2, -1, "products.loans", True, "Есть кредиты: стоимость новых займов зависит от ставки")
+        add("credit_market", 0.8, 1, "products.loans", True, "Есть кредиты: условия кредитования влияют на финансирование")
         add("bonds", 0.4, -1, "products.loans", True, "Ставки рынка долга задают ориентир стоимости новых заимствований")
     if p.get("leasing"):
-        add("key_rate", 0.6, -1, "products.leasing", True, "Есть лизинг: стоимость новых сделок и условия пересмотра платежей могут зависеть от стоимости фондирования")
+        add("key_rate", 0.6, -1, "products.leasing", True, "Есть лизинг: платежи по новым сделкам зависят от ставки")
     if p.get("deposits"):
         add("key_rate", 0.7, 1, "products.deposits", True, "Есть депозиты: высокая ставка повышает доходность размещения ликвидности")
         add("deposits", 0.6, 1, "products.deposits", True, "Есть депозиты: важна доходность размещения")
@@ -187,8 +219,24 @@ def exposures(company_id: str) -> tuple[dict, ...]:
                 s = by_sector.get(sector)
                 if s:
                     add(topic, round(0.7 * share, 3), s.sign, f"{side}.by_sector", {"sector": sector, "share": round(share, 3)},
-                        f"{round(share * 100)}% платежей {label} приходится на отрасль «{SECTOR_NAMES.get(sector, sector)}»: {s.why}",
+                        f"{round(share * 100)}% платежей {label} — отрасль «{SECTOR_NAMES.get(sector, sector)}»: {s.why}",
                         "payments")
+    # Группа компаний: отрасли других участников группы тоже делают событие значимым.
+    g = group(c)
+    if g:
+        shares = {x["sector"]: x["share"] for x in g.get("sector_shares", [])}
+        for sector in g["other_sectors"]:
+            for topic, by_sector in SECTOR_SENSITIVITY.items():
+                s = by_sector.get(sector)
+                if s:
+                    # Вес — по доле отрасли в выручке группы, но не выше половины собственного признака компании.
+                    add(topic, round(0.5 * min(1.0, shares.get(sector, 0) * 2), 3), s.sign, "group", g["members"],
+                        f"{round(shares.get(sector, 0) * 100)}% выручки группы приходится на отрасль "
+                        f"«{SECTOR_NAMES.get(sector, sector)}»: {s.why}", "group")
+        if (g["revenue"] or 0) > 50e9:
+            add("gdp_industry", 0.4, 1, "group", g["members"],
+                f"Совокупная выручка группы {_bn(g['revenue'])}: масштаб группы связывает ее с общей динамикой экономики", "group")
+
     top1 = c["suppliers"]["top1_share"]
     if top1 and top1 > 0.5:
         add("corporate_finance", 0.5, -1, "suppliers.top1_share", round(top1, 3),

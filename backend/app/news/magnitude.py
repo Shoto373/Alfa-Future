@@ -24,7 +24,14 @@ PRICE_TOPICS = {"inflation", "fuel_oil", "metals_steel", "gold", "energy"}
 
 LEVELS = ("weak", "moderate", "strong")
 LABELS = {"weak": "слабое", "moderate": "заметное", "strong": "сильное"}
-FACTOR = {"weak": 0.85, "moderate": 1.0, "strong": 1.2}
+# Сила события — уточнение, а не основа ранжирования: влияние на оценку небольшое.
+FACTOR = {"weak": 0.9, "moderate": 1.0, "strong": 1.1}
+
+
+def _around(s: str, m: re.Match, width: int = 60) -> str:
+    """Фрагмент предложения вокруг маркера — понятнее, чем одно слово."""
+    start, end = max(0, m.start() - width), min(len(s), m.end() + width)
+    return ("…" if start else "") + s[start:end].strip() + ("…" if end < len(s) else "")
 
 
 def _f(value: str) -> float:
@@ -69,7 +76,8 @@ def assess(topic: str | None, sentences: list[str]) -> dict | None:
         for m in _TIMES.finditer(s):
             keep("strong" if _f(m.group(1)) >= 1.5 else "moderate", m.group(0))
         if (m := _RECORD.search(s)):
-            keep("strong", m.group(0))
+            # Слово-маркер («резко», «обвал») без цифры — не больше чем «заметное» изменение.
+            keep("strong" if re.search(r"\d", s) else "moderate", _around(s, m))
         if topic in RATE_TOPICS and (m := _HOLD.search(s)):
             keep("weak", m.group(0))
     if best is None:

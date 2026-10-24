@@ -79,6 +79,71 @@ def _pct(v) -> str:
     return "—" if v is None else f"{round(v * 100)}%"
 
 
+CHECK_LABELS = {
+    "completeness": "все разделы заполнены", "sources_linked": "у каждого вывода есть источник",
+    "bank_view_grounded": "позиция банка только из материалов банка", "bank_view_found": "найдены материалы банка",
+    "numbers_grounded": "цифры подтверждены источниками", "consistent_with_client": "нет противоречий с данными компании",
+    "personalized": "вывод опирается на признаки компании", "evidence_boundaries": "типы источников и признаков",
+    "headline_grounded": "заголовок подтвержден", "bank_summary_grounded": "резюме банка сверено с тезисом",
+    "semantic_review": "смысловая проверка второй моделью",
+}
+MIN_SAMPLE = 5  # меньше разборов или оценок — вывод о качестве преждевременен
+
+
+def findings(d: dict, totals: dict) -> list[dict]:
+    """Выводы мониторинга: что в норме и что стоит улучшить (level: ok | warn | info)."""
+    out = []
+
+    def add(level: str, text: str):
+        out.append({"level": level, "text": text})
+
+    if d["insights"] < MIN_SAMPLE:
+        add("info", f"За период всего {d['insights']} разборов — выводы о качестве пока предварительные.")
+    if d["llm_attempted"] and d["llm_share"] is not None:
+        if d["llm_share"] < 0.6:
+            add("warn", f"Только {_pct(d['llm_share'])} AI-разборов дошли до пользователя, остальные заменены быстрым разбором: "
+                        "модель часто не проходит проверки. Стоит разобрать частые ошибки ниже и уточнить промпт.")
+        else:
+            add("ok", f"AI-версию получают {_pct(d['llm_share'])} разборов, где подключалась модель.")
+    elif not totals["ai"]["llm_connected"]:
+        add("info", "Модель не подключена — работают только быстрые разборы без LLM.")
+    rates = totals["content"]["checks_pass_rate"]
+    weak = sorted((v, k) for k, v in rates.items() if v < 0.9)
+    for v, k in weak[:3]:
+        add("warn", f"Проверка «{CHECK_LABELS.get(k, k)}» проходит в {_pct(v)} разборов — главный кандидат на доработку.")
+    if rates and not weak:
+        add("ok", "Все самопроверки проходят не реже чем в 90% разборов.")
+    if d["grounded"] is not None and d["grounded"] < 0.95:
+        add("warn", f"Ссылку на источник имеют {_pct(d['grounded'])} утверждений — часть выводов не трассируется.")
+    if d["bank_coverage"] is not None:
+        if d["bank_coverage"] < 0.5:
+            add("warn", f"Позиция банка есть только в {_pct(d['bank_coverage'])} разборов — стоит пополнить базу тезисов "
+                        "по темам, которые чаще встречаются в ленте.")
+        else:
+            add("ok", f"Позиция Альфа-Банка есть в {_pct(d['bank_coverage'])} разборов.")
+    fb = d["feedback"]
+    if fb["up"] + fb["down"] >= MIN_SAMPLE:
+        if fb["useful_rate"] < 0.6:
+            sections = totals["personalization"]["by_section"]
+            worst = max(sections.items(), key=lambda kv: kv[1]["down"] - kv[1]["up"], default=None)
+            add("warn", f"Полезными разборы считают {_pct(fb['useful_rate'])} оценок"
+                        + (f"; больше всего минусов у раздела «{worst[0]}»." if worst and worst[1]["down"] else "."))
+        else:
+            add("ok", f"Пользователи считают полезными {_pct(fb['useful_rate'])} разборов.")
+    else:
+        add("info", "Оценок 👍/👎 пока мало — попросите пользователей оценивать разделы разбора.")
+    if d["latency_p90"] and d["latency_p90"] > 60:
+        add("warn", f"90% AI-разборов готовятся дольше {d['latency_p90']} с — пользователь дольше видит быстрый разбор.")
+    if d["feed_views"] >= MIN_SAMPLE:
+        rate = d["insight_opens"] / d["feed_views"]
+        if rate < 0.1:
+            add("warn", f"Разборы открывают в {_pct(rate)} просмотров ленты — стоит проверить, понятны ли заголовки и причины отбора.")
+    rss = (d["pipeline"] or {}).get("rss") or {}
+    if rss.get("failed"):
+        add("warn", "Недоступны источники новостей: " + ", ".join(rss["failed"]) + ".")
+    return out
+
+
 def report_text(d: dict) -> str:
     rss = (d["pipeline"] or {}).get("rss") or {}
     return "\n".join([
@@ -90,7 +155,7 @@ def report_text(d: dict) -> str:
         f"Оценки: 👍 {d['feedback']['up']} · 👎 {d['feedback']['down']} (полезно: {_pct(d['feedback']['useful_rate'])})",
         f"Лента: просмотров {d['feed_views']}, открытий разборов {d['insight_opens']}, вопросов {d['questions']}",
         f"Конвейер (последний цикл): новых новостей {rss.get('added', '—')}, отсеяно {rss.get('skipped', '—')}, "
-        f"разборов на правилах {d['pipeline'].get('rules_built', '—')}, AI {d['pipeline'].get('llm_built', '—')}",
+        f"быстрых разборов {d['pipeline'].get('rules_built', '—')}, AI {d['pipeline'].get('llm_built', '—')}",
         _budget_line(d["budget"]),
     ])
 

@@ -31,6 +31,20 @@ class InsightRequest(Strict):
     # Быстрый ответ: готовая карточка или разбор на правилах без LLM (~0,2 с).
     # LLM-версию клиент запрашивает следом обычным запросом: карточка на правилах ею заменяется.
     fast: bool = False
+    # Другой разрез: тот же разбор глазами другой роли компании. По умолчанию — роль из членства.
+    perspective: Role | None = None
+
+
+class CompanyExtraShares(Strict):
+    floating_debt_share: float | None = Field(None, ge=0, le=100)
+    fx_revenue_share: float | None = Field(None, ge=0, le=100)
+    import_share: float | None = Field(None, ge=0, le=100)
+
+
+class CompanyExtraRequest(Strict):
+    """Сведения, которые компания сообщает о себе: доли в процентах и свободный текст (можно из файла)."""
+    shares: CompanyExtraShares = CompanyExtraShares()
+    notes: str = Field("", max_length=15000)
 
 
 class QuestionRequest(Strict):

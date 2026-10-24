@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 from app import config, database, llm, llm_usage, ranking
 from sqlalchemy import func, select
+from app.companies import extra as company_extra
 from app.models import AppState, Insight, Feedback, Answer, Event
 
 # Меняется, когда правила меняют содержание карточек: старые перестают быть актуальным кэшем.
@@ -60,11 +61,17 @@ def _newest_first() -> tuple:
     return (Insight.created_at.desc(), (Insight.payload["mode"].astext == "llm").desc(), Insight.insight_id.desc())
 
 
+def _fresh(company_id: str) -> tuple:
+    """Карточки, собранные до изменения сведений от компании, устарели."""
+    since = company_extra.updated_at(company_id)
+    return (Insight.created_at > since,) if since else ()
+
+
 def cached_insight(company_id: str, role: str, news_id: str) -> dict | None:
     version = cache_version()
     with database.session() as db:
         return db.scalar(select(Insight.payload).where(Insight.company_id == company_id, Insight.role == role,
-            Insight.news_id == news_id, Insight.cache_version == version)
+            Insight.news_id == news_id, Insight.cache_version == version, *_fresh(company_id))
             .order_by(*_newest_first()).limit(1))
 
 
@@ -76,7 +83,7 @@ def cached_insights(company_id: str, role: str, news_ids: list[str]) -> dict[str
     with database.session() as db:
         rows = db.execute(select(Insight.news_id, Insight.payload)
             .where(Insight.company_id == company_id, Insight.role == role, Insight.cache_version == version,
-                   Insight.news_id.in_(news_ids))
+                   Insight.news_id.in_(news_ids), *_fresh(company_id))
             .order_by(Insight.news_id, *_newest_first())
             .distinct(Insight.news_id)).all()
     return dict(rows)
@@ -98,7 +105,7 @@ def cached_insight_refs(company_id: str, role: str, news_ids: list[str]) -> dict
     with database.session() as db:
         rows = db.execute(select(Insight.news_id, Insight.insight_id, Insight.payload["effect"].astext)
             .where(Insight.company_id == company_id, Insight.role == role, Insight.cache_version == version,
-                   Insight.news_id.in_(news_ids))
+                   Insight.news_id.in_(news_ids), *_fresh(company_id))
             .order_by(Insight.news_id, *_newest_first())
             .distinct(Insight.news_id)).all()
     return {news_id: (insight_id, effect) for news_id, insight_id, effect in rows}

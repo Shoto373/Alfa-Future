@@ -15,6 +15,7 @@ Backend (Python, PyPI)
   httpx              0.28.1    BSD-3-Clause   (RSS/URL-парсер, LLM-клиент, тесты)
   pytest             9.1.1     MIT            (тесты)
   pytest-asyncio     1.4.0     Apache-2.0     (тесты)
+  pypdf              6.20.1    BSD-3-Clause   (текст из PDF, приложенных компанией)
 
 Frontend (npm)
   @playwright/test    1.56.1   Apache-2.0    (только браузерная приемка)

@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { Insight } from "@/lib/types";
+import type { Insight, Role } from "@/lib/types";
 import Chat from "./Chat";
 import BankPosition from "./insight/BankPosition";
 import ClaimList, { OpenSource, RulesMode } from "./insight/ClaimList";
 import Feedback from "./insight/Feedback";
 import InsightHeader from "./insight/InsightHeader";
 import SourceList from "./insight/SourceList";
+import { groupSources } from "./insight/sources";
 import TraceView from "./insight/TraceView";
 import { Card } from "./ui";
 import styles from "@/components/InsightView.module.scss";
@@ -26,10 +27,12 @@ const scrollToSource = (n: number) =>
   // Блок раскрывается в этом же кадре — прокрутка после отрисовки.
   requestAnimationFrame(() => document.getElementById(`src-${n}`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
 
-export default function InsightView({ insight: ins, onRefresh, refreshing, upgrading = false, upgradeFailed = false }: {
+export default function InsightView({ insight: ins, onRefresh, refreshing, upgrading = false, upgradeFailed = false,
+  perspective, ownRole, onPerspective }: {
   insight: Insight; onRefresh: () => void; refreshing: boolean; upgrading?: boolean; upgradeFailed?: boolean;
+  perspective?: Role; ownRole?: Role; onPerspective?: (role: Role) => void;
 }) {
-  const index = new Map(ins.sources.map((s, i) => [s.source_id, i + 1]));
+  const { groups, index } = groupSources(ins);
   const [showTrace, setShowTrace] = useState(false);
   const [showSources, setShowSources] = useState(() => sourceFromHash() !== null);
   const [focused, setFocused] = useState<number | null>(sourceFromHash);
@@ -53,7 +56,8 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
     <OpenSource.Provider value={openSource}>
     <div className={styles.insight}>
       <InsightHeader ins={ins} onRefresh={onRefresh} refreshing={refreshing} upgrading={upgrading} upgradeFailed={upgradeFailed}
-        showTrace={showTrace} onToggleTrace={() => setShowTrace((v) => !v)} />
+        showTrace={showTrace} onToggleTrace={() => setShowTrace((v) => !v)}
+        perspective={perspective} ownRole={ownRole} onPerspective={onPerspective} />
 
       {showTrace && <TraceView trace={ins.trace} checks={ins.quality.checks} />}
 
@@ -101,7 +105,7 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
 
         <BankPosition view={ins.bank_view} index={index} actions={fb("bank_view")} />
 
-        <SourceList sources={ins.sources} reasons={ins.relevance.reasons} open={showSources}
+        <SourceList groups={groups} reasons={ins.relevance.reasons} open={showSources}
           onToggle={() => setShowSources((v) => !v)} focused={focused} />
       </div>
 

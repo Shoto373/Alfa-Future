@@ -144,6 +144,8 @@ def golden_company(base: dict, spec: dict) -> dict:
     c["sector_name"] = SECTOR_NAMES.get(c["sector"], c["sector"])
     c["products"] = dict.fromkeys(c["products"], False) | spec.get("products", {})
     c["market"] = {"okved_rank": None, "okved_peers": None, "okved_share": None, "sector_share": None}
+    c["group"] = {"group_id": None, "members": None, "revenue": None, "reliable": None, "top_sectors": [],
+                  "sector_shares": [], "focus_sectors": [], "usable": False}  # самостоятельная компания, без группы
     for side in ("suppliers", "customers"):
         c[side] = {"counterparties": 0, "total_amount": 0, "top1_share": None, "by_sector": [], "top": [],
                    "intra_group_share": None}

@@ -5,38 +5,35 @@ import Gauge from "@/components/home/Gauge";
 import HomeHero, { type TopicRow } from "@/components/home/HomeHero";
 import { EmptyState, Icon, OriginTag, Score, Skeleton } from "@/components/ui";
 import { date, IMPORTANT_SCORE as IMPORTANT } from "@/lib/format";
-import { useFeed } from "@/lib/hooks";
+import { useFeedWithTopics } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
-import type { FeedItem } from "@/lib/types";
+import type { FeedItem, TopicCount } from "@/lib/types";
 import styles from "@/app/(bank)/page.module.scss";
 import common from "@/styles/common.module.scss";
 
-function topicCounts(items: FeedItem[]): TopicRow[] {
-  const map = new Map<string, TopicRow>();
-  for (const it of items) {
-    for (const t of it.news.topics) {
-      const row = map.get(t.topic) ?? { topic: t.topic, name: t.name, total: 0, important: 0 };
-      row.total += 1;
-      if (it.relevance.score >= IMPORTANT) row.important += 1;
-      map.set(t.topic, row);
-    }
-  }
-  return [...map.values()].sort((a, b) => b.important - a.important || b.total - a.total);
+/** Счетчики тем — те же, что у фильтра в ленте (с сервера); важные считаются по той же ленте. */
+function topicCounts(counts: TopicCount[], items: FeedItem[]): TopicRow[] {
+  return counts.map((t) => ({
+    ...t,
+    important: items.filter((i) => i.relevance.score >= IMPORTANT && i.news.topics.some((x) => x.topic === t.topic)).length,
+  }));
 }
 
 export default function HomePage() {
   const { session } = useSession();
-  const feed = useFeed(session!.companyId);
+  const page = useFeedWithTopics(session!.companyId);
+  const feed = { ...page, data: page.data?.items ?? null };
   const items = feed.data ?? [];
+  const total = page.data?.total ?? 0;
   const important = items.filter((i) => i.relevance.score >= IMPORTANT);
-  const topics = topicCounts(items).slice(0, 7);
+  const topics = topicCounts(page.data?.topic_counts ?? [], items).slice(0, 7);
   const top5 = items.slice(0, 5);
   const level = top5.length ? top5.reduce((a, i) => a + i.relevance.score, 0) / top5.length : 0;
   const levelText = level >= 70 ? "Требует внимания" : level >= 45 ? "Умеренный фон" : "Спокойный фон";
 
   return (
     <div className={common.page}>
-      <HomeHero feed={feed} important={important.length} topics={topics} />
+      <HomeHero feed={feed} total={total} topics={topics} userId={session!.user.user_id} />
 
       <div className={styles.tabs} role="tablist" aria-label="Разделы главной">
         <span className={`${styles.tab} ${styles.on}`} role="tab" aria-selected="true">Сводка</span>

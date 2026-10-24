@@ -81,3 +81,22 @@ def test_kb_search_prefers_fresh_and_hides_stale():
 def test_kb_has_conflicting_rate_forecasts():
     forecasts = kb.latest_forecasts("key_rate")
     assert len({f["doc_id"] for f in forecasts}) > 1
+
+
+def test_materiality_filters_private_cases(monkeypatch):
+    """Модель-классификатор отсекает частный случай; без ответа модели новость остается."""
+    from app import llm
+    from app.news import materiality
+
+    monkeypatch.setattr(llm, "available", lambda: True)
+    answers = {"кампус": {"material": False, "reason": "один социальный объект"},
+               "ставк": {"material": True, "reason": "стоимость кредита"}}
+    monkeypatch.setattr(llm, "chat_json", lambda system, user, kind, tokens: (
+        next(v for k, v in answers.items() if k in user), {"model": "google/gemma-4-26b-a4b-it"}))
+    assert materiality.assess("Путин поручил рассмотреть строительство кампуса", "")["material"] is False
+    assert materiality.assess("ЦБ повысил ключевую ставку", "ставка 16%")["material"] is True
+
+    def fail(*a, **k):
+        raise llm.LLMError("нет связи")
+    monkeypatch.setattr(llm, "chat_json", fail)
+    assert materiality.assess("ЦБ повысил ключевую ставку", "") is None

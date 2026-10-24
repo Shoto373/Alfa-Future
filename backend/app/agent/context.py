@@ -3,6 +3,7 @@
 
 from app import llm
 from app.agent import composer, evidence, prompts, validators
+from app.companies import extra as company_extra
 from app.companies.sectors import SECTOR_NAMES
 
 
@@ -13,6 +14,8 @@ FEATURE_LABELS = {
     "workers_fns": "Численность (ФНС)", "fts_countries": "Страны ВЭД (ФТС)", "revenue": "Выручка",
     "suppliers.by_sector": "Отрасли поставщиков", "customers.by_sector": "Отрасли покупателей",
     "suppliers.top1_share": "Концентрация поставщиков", "market": "Место в отрасли (выборка)",
+    "group": "Группа компаний",
+    **{f"extra.{k}": v["label"] for k, v in company_extra.SHARES.items()},
 }
 
 
@@ -80,6 +83,10 @@ def sources(ctx: dict) -> list[dict]:
     out.append({"source_id": "client:payments", "kind": "client_data", "title": "Платежи компании (данные кейса)",
                 "excerpt": f"Поставщиков: {c['suppliers']['counterparties']}, покупателей: {c['customers']['counterparties']}",
                 "url": None, "doc_id": None, "page": None, "date": None})
+    if c.get("extra"):
+        out.append({"source_id": "client:extra", "kind": "client_data", "title": "Сведения от компании",
+                    "excerpt": company_extra.text(c["extra"])[:300], "url": None, "doc_id": None, "page": None,
+                    "date": c["extra"]["updated_at"][:10]})
     for p in ctx.get("products", []):
         out.append({"source_id": f"product:{p['id']}", "kind": "bank_product", "title": p["title"], "excerpt": p["text"],
                     "url": None, "doc_id": None, "page": None, "date": None})
@@ -135,14 +142,19 @@ def llm_repair(draft: dict, ctx: dict, source_ids: set[str]) -> dict | None:
 def grounding_text(ctx: dict) -> str:
     c = ctx["company"]
     parts = [ctx["news"]["title"], ctx["news"]["text"]] + [t["text"] for t in ctx["theses"]]
-    parts += [f"{n['title']} {n['lead']}" for n in ctx.get("story", []) + ctx.get("coverage", [])]
+    # Дата прошлой новости в «Предположениях» пишется по-человечески (27.07.2026) — она тоже из источника.
+    parts += [f"{n['title']} {n['lead']} {composer.day(n['published_at'])}" for n in ctx.get("story", []) + ctx.get("coverage", [])]
     m = c["market"]
     parts += [str(m.get("okved_rank")), str(m.get("okved_peers")), c.get("okved_code") or "", composer.pct(m.get('okved_share') or 0),
               f"{(c.get('revenue') or 0) / 1e9:.1f}", c.get("workers_fns") or ""]
     parts += [composer.pct(s['share'], 0) for side in ("suppliers", "customers") for s in c[side]["by_sector"]]
     if c["suppliers"]["top1_share"]:
         parts.append(composer.pct(c['suppliers']['top1_share'], 0))
-    parts += [c["company_id"]]
+    g = c.get("group") or {}
+    if g.get("revenue"):
+        parts += [f"{g['revenue'] / 1e9:.1f}", str(g.get("members"))]
+        parts += [f"{x['share'] * 100:.0f}%" for x in g.get("sector_shares", [])]
+    parts += [c["company_id"], company_extra.text(c.get("extra"))]
     return " ".join(parts)
 
 
@@ -162,6 +174,9 @@ def features_used(ctx: dict, draft: dict) -> list[dict]:
         "customers.by_sector": ", ".join(f"{SECTOR_NAMES.get(s['sector'], 'вне выборки')} {s['share']:.0%}" for s in c["customers"]["by_sector"][:3]) or "нет данных",
         "suppliers.top1_share": f"{(c['suppliers']['top1_share'] or 0):.0%}",
         "market": f"№{c['market'].get('okved_rank')} из {c['market'].get('okved_peers')} по ОКВЭД {c['okved_code']}",
+        **{f"extra.{k}": company_extra.fmt(v) for k, v in ((c.get("extra") or {}).get("shares") or {}).items()},
+        "group": (f"{(c.get('group') or {}).get('members')} компаний, выручка "
+                  f"{((c.get('group') or {}).get('revenue') or 0) / 1e9:.1f} млрд ₽"),
     }
     return [{"name": f, "label": FEATURE_LABELS.get(f, f), "value": values.get(f, "—")} for f in sorted(used) if f in values]
 
@@ -185,7 +200,8 @@ def merge_llm(draft: dict, data: dict) -> dict:
     # «Почему это важно» всегда сохраняет признаки компании из профиля: выводы модели
     # дополняются ими, чтобы связь с данными клиента оставалась трассируемой.
     texts = {c["text"] for c in draft["why_important"]}
-    draft["why_important"] = [c for c in rules_why[:2] if c["text"] not in texts] + draft["why_important"][:4]
+    # Не больше четырех пунктов: один признак из профиля и три вывода модели.
+    draft["why_important"] = [c for c in rules_why[:1] if c["text"] not in texts] + draft["why_important"][:3]
     # Keep the evidence-based summary from the composer. A free-form model
     # headline has no per-claim citations and cannot be independently grounded.
     if data.get("facts"):

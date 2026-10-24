@@ -11,6 +11,7 @@ MESSAGES = {
     "NEWS_NOT_FOUND": "Новость не найдена",
     "INSIGHT_NOT_FOUND": "Карточка анализа не найдена",
     "DOCUMENT_NOT_FOUND": "Документ не найден",
+    "FILE_NOT_FOUND": "Файл не найден",
     "FETCH_FAILED": "Не удалось загрузить материал по ссылке",
     "REQUEST_TOO_LARGE": "Тело запроса превышает допустимый размер",
     "DATA_UNAVAILABLE": "Данные о компаниях недоступны",

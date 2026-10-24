@@ -5,6 +5,8 @@ import { ErrorState, Icon, Loading } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useLoad } from "@/lib/hooks";
 import { date } from "@/lib/format";
+import { ANALYTICS_SCOPE, markRead } from "@/lib/notifications";
+import { useSession } from "@/lib/session";
 import type { BankDocument } from "@/lib/types";
 import styles from "@/app/(bank)/pulse/analytics/page.module.scss";
 import common from "@/styles/common.module.scss";
@@ -108,6 +110,19 @@ export default function AnalyticsPage() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const desktop = useDesktop();
   const active = docs?.find((d) => d.doc_id === activeId) ?? null;
+  const { session } = useSession();
+  const userId = session!.user.user_id;
+
+  // Открытый материал считается прочитанным: баннер «Новая аналитика» на главной для него больше не показывается.
+  useEffect(() => { if (activeId) markRead(userId, ANALYTICS_SCOPE, [activeId]); }, [activeId, userId]);
+
+  // Переход с баннера главной (?doc=…) сразу открывает этот материал — один раз, когда список загружен.
+  const [linkApplied, setLinkApplied] = useState(false);
+  if (docs && !linkApplied) {
+    setLinkApplied(true);
+    const wanted = new URLSearchParams(window.location.search).get("doc");
+    if (wanted && docs.some((d) => d.doc_id === wanted)) setActiveId(wanted);
+  }
 
   return (
     <div className={common.page}>
