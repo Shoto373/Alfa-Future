@@ -12,7 +12,11 @@ from tests.conftest import register
 API = "/api/v1"
 ROOT = Path(__file__).resolve().parents[2]
 SCOPED = ("{company_id}", "{insight_id}")
-SCOPED_BODIES = {"InsightRequest", "FeedbackRequest"}
+SCOPED_BODIES = {"InsightRequest", "FeedbackRequest", "ScenarioRequest", "NotificationReadRequest"}
+# Маршруты, где компания — в query (?company_id=) или в теле запроса.
+QUERY_COMPANY = {"/api/v1/feed", "/api/v1/news/{news_id}", "/api/v1/notifications", "/api/v1/notifications/settings",
+                 "/api/v1/notifications/test-digest"}
+BODY_COMPANY = {"/api/v1/insights", "/api/v1/scenarios", "/api/v1/notifications/read"}
 
 # (метод, путь) -> (тело или None, ожидаемые коды). company_id/insight_id/member_id подставляются компании B.
 ROUTES = {
@@ -28,6 +32,12 @@ ROUTES = {
     ("GET", "/api/v1/news/{news_id}"): (None, {403}),
     ("GET", "/api/v1/insights/stream"): (None, {403}),
     ("GET", "/api/v1/companies/{company_id}/counterparties"): (None, {403}),
+    ("POST", "/api/v1/scenarios"): ({"scenario": "key_rate", "shock": 1}, {403}),
+    ("GET", "/api/v1/notifications"): (None, {403}),
+    ("POST", "/api/v1/notifications/read"): ({}, {403}),
+    ("GET", "/api/v1/notifications/settings"): (None, {403}),
+    ("PUT", "/api/v1/notifications/settings"): ({"threshold": 90}, {403}),
+    ("POST", "/api/v1/notifications/test-digest"): (None, {403}),
     ("POST", "/api/v1/insights"): ({"fast": True}, {403}),
     ("GET", "/api/v1/insights/{insight_id}"): (None, {403, 404}),
     ("POST", "/api/v1/insights/{insight_id}/questions"): ({"question": "Что с долгом?"}, {403, 404}),
@@ -86,7 +96,7 @@ def test_outsider_cannot_touch_other_company(victim, route):
     body, expected = ROUTES[route]
     url = path.format(company_id=victim["company_id"], insight_id=victim["insight_id"],
                       member_id=victim["member_id"], file_id="file-0", news_id=victim["news_id"])
-    params = {"company_id": victim["company_id"]} if path in ("/api/v1/feed", "/api/v1/news/{news_id}") else None
+    params = {"company_id": victim["company_id"]} if path in QUERY_COMPANY else None
     if path == "/api/v1/insights/stream":
         params = {"company_id": victim["company_id"], "news_id": victim["news_id"]}
     client = victim["outsider"]
@@ -94,11 +104,13 @@ def test_outsider_cannot_touch_other_company(victim, route):
         r = client.post(url, params={"name": "data.csv"}, content=b"a;b\n1;2\n")
     elif isinstance(body, dict):
         payload = dict(body)
+        if path in BODY_COMPANY:
+            payload["company_id"] = victim["company_id"]
         if path == "/api/v1/insights":
-            payload |= {"company_id": victim["company_id"], "news_id": victim["news_id"]}
+            payload["news_id"] = victim["news_id"]
         if path == "/api/v1/feedback":
             payload["insight_id"] = victim["insight_id"]
-        r = client.request(method, url, json=payload)
+        r = client.request(method, url, json=payload, params=params)
     else:
         r = client.request(method, url, params=params)
     assert r.status_code in expected, f"{method} {path}: HTTP {r.status_code} {r.text[:200]}"

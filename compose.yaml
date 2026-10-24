@@ -50,6 +50,11 @@ services:
       RUNTIME_DIR: /app/runtime
       BANK_PDF_DIR: /data/bank_pdf
       FRONTEND_ORIGIN: http://localhost:${WEB_PORT:-3000}
+      # Письма сводок и алертов (SPR4-04): только в локальный Mailpit (профиль mail: make up-mail,
+      # просмотр писем — http://localhost:8025). Пусто — письма не отправляются, в журнале skipped.
+      SMTP_HOST: ${SMTP_HOST-}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      PUBLIC_API_URL: http://localhost:${API_PORT:-8000}
       ANALYSIS_TIMEOUT_SECONDS: "150"
       REDIS_URL: redis://redis:6379/0
       # Заглушка лицензированных лент Интерфакс/ПРАЙМ (SPR3-02): демо-новости о компаниях профилей
@@ -133,6 +138,14 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+    restart: unless-stopped
+
+  # Локальный почтовый ящик для писем сводок (SPR4-04): принимает все письма, наружу ничего не отправляет.
+  mail:
+    profiles: [mail]
+    image: axllent/mailpit:v1.21.8
+    ports:
+      - "127.0.0.1:8025:8025"
     restart: unless-stopped
 
   # Демо-IdP (OIDC) вместо Альфа-ID: реалм alfa, клиент alfa-pulse (PKCE), пилотные пользователи

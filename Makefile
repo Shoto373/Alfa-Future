@@ -1,4 +1,4 @@
-.PHONY: up down up-local down-local up-prod down-prod db migrate test demo smoke check up-auth up-monitoring restore-test
+.PHONY: up down up-local down-local up-prod down-prod db migrate test demo smoke check up-auth up-monitoring up-mail restore-test
 
 up up-local:
 	docker compose -f compose.yaml up -d --build
@@ -36,6 +36,10 @@ check: test smoke
 # Наблюдаемость: Grafana http://localhost:3001 (admin / GRAFANA_ADMIN_PASSWORD), Prometheus, алерты, трассы, бэкапы.
 up-monitoring:
 	OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318 docker compose -f compose.yaml --profile monitoring up -d --build
+
+# Письма сводок и алертов — в локальный Mailpit: http://localhost:8025 (наружу ничего не уходит).
+up-mail:
+	SMTP_HOST=mail docker compose -f compose.yaml --profile mail up -d --build
 
 restore-test:
 	bash infra/backup/restore_test.sh

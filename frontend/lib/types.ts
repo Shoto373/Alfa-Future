@@ -375,6 +375,35 @@ export interface CounterpartiesView {
   events: CounterpartyEvent[];
 }
 
+// Сводки и алерты (SPR4-04).
+export interface NotificationSettings {
+  company_id: string;
+  digest: boolean;
+  digest_time: string;
+  timezone: string;
+  threshold: number;
+  topics: string[];
+  counterparties: boolean;
+  quiet_from: string;
+  quiet_to: string;
+  alerts_per_day: number;
+  channels: { inapp: boolean; email: boolean; telegram: boolean };
+}
+
+export interface InboxMessage {
+  id: number;
+  kind: "digest" | "alert";
+  title: string;
+  created_at: string;
+  read: boolean;
+  items: { news_id: string; headline: string; score: number; href: string }[];
+}
+
+export interface Inbox {
+  items: InboxMessage[];
+  unread: number;
+}
+
 // Сценарии «что если» (SPR4-02).
 export type ScenarioKind = "key_rate" | "fx" | "commodity";
 

@@ -1,5 +1,6 @@
 import asyncio
 import json
+from pathlib import Path
 
 import httpx
 
@@ -161,6 +162,13 @@ def test_cors(client):
         assert response.headers["access-control-allow-origin"] == origin
     patch = client.options("/api/v1/companies/x/members/y", headers={"Origin": ORIGIN, "Access-Control-Request-Method": "PATCH"})
     assert "PATCH" in patch.headers["access-control-allow-methods"] and "DELETE" in patch.headers["access-control-allow-methods"]
+    # Каждый метод API проходит предварительный запрос браузера: без PUT настройки не сохранялись с localhost:3000.
+    contract = Path(__file__).resolve().parents[2] / "contracts" / "openapi.json"  # в тестовом образе контракта нет
+    methods = ({m.upper() for ops in json.loads(contract.read_text(encoding="utf-8"))["paths"].values() for m in ops}
+               if contract.exists() else {"GET", "POST", "PUT", "PATCH", "DELETE"})
+    for method in methods:
+        pre = client.options("/api/v1/companies/x/ai-settings", headers={"Origin": ORIGIN, "Access-Control-Request-Method": method})
+        assert pre.status_code == 200, f"CORS не пропускает {method}"
     for origin in ("http://evil.example", "http://127.0.0.1:3001", "http://localhost.evil.example:3000"):
         denied = client.options("/api/v1/feed", headers={"Origin": origin, "Access-Control-Request-Method": "GET"})
         assert denied.status_code == 400

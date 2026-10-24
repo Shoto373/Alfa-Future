@@ -9,6 +9,7 @@ from app.domain_config import loader as domain_config
 from app.domain_config import preview as config_preview
 from app.knowledge import ingest
 from app.news import store
+from app.notifications import delivery, service
 from app.worker import queue
 
 logger = logging.getLogger("app.worker")
@@ -55,6 +56,16 @@ def counterparty_monitor(payload: dict) -> dict:
     return {"edges": graph.sync(), "alerts": monitoring.scan()}
 
 
+def notify_tick(payload: dict) -> dict:
+    """Сводки и алерты подписчикам (SPR4-04): кому пора — запись в журнал и задачи доставки."""
+    return service.tick()
+
+
+def notify_deliver(payload: dict) -> dict:
+    """Одно письмо из журнала; сбой почты — исключение, очередь повторит с задержкой."""
+    return {"status": delivery.deliver(payload["id"])}
+
+
 def warm_feeds(payload: dict) -> dict:
     """Ленты привязанных компаний — в общий кэш (Redis): первое открытие ленты в любом экземпляре API быстрое."""
     pairs = pipeline.audience()
@@ -79,6 +90,8 @@ HANDLERS: dict[str, Callable[[dict], dict]] = {
     "kb_ingest": kb_ingest,
     "domain_config_apply": domain_config_apply,
     "counterparty_monitor": counterparty_monitor,
+    "notify_tick": notify_tick,
+    "notify_deliver": notify_deliver,
     "domain_config_preview": domain_config_preview,
     "warm_feeds": warm_feeds,
     "llm_sweep": llm_sweep,

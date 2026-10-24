@@ -31,6 +31,14 @@ function scenarioFor(ins: Insight): ScenarioKind | null {
 export default function InsightPage() {
   const { newsId } = useParams<{ newsId: string }>();
   const { session } = useSession();
+  // Переход из сводки или алерта (SPR4-04): ?from=digest|alert&d=<id записи> — отметка открытия для аналитики рассылок.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const id = Number(q.get("d"));
+    if ((q.get("from") === "digest" || q.get("from") === "alert") && Number.isInteger(id) && id > 0) {
+      api.notificationOpened(id).catch(() => { /* аналитика не мешает чтению */ });
+    }
+  }, [newsId]);
   // Смена компании или новости — разбор с чистого листа; ответ на старый запрос игнорируется.
   return (
     <div className={styles.split}>

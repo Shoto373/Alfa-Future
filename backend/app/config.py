@@ -419,6 +419,19 @@ def ranking_weights_file() -> str:
     return os.environ.get("RANKING_WEIGHTS_FILE", "").strip()
 
 
+def smtp_settings() -> dict:
+    """Почта для сводок и алертов (SPR4-04). Без SMTP_HOST письма не отправляются (в журнале — skipped).
+    Локально — MailHog из профиля mail (make up-mail), реальные почтовые сервисы банка не подключаются."""
+    return {"host": os.environ.get("SMTP_HOST", "").strip(), "port": int(_env("SMTP_PORT", "1025")),
+            "sender": _env("SMTP_FROM", "Альфа.Пульс <pulse@alfa.test>"), "user": os.environ.get("SMTP_USER", ""),
+            "password": secret("SMTP_PASSWORD"), "tls": _env("SMTP_TLS", "0") == "1"}
+
+
+def public_api_url() -> str:
+    """Адрес API для ссылок в письмах (отписка в один клик)."""
+    return _env("PUBLIC_API_URL", "http://localhost:8000").rstrip("/")
+
+
 def story_similarity() -> float:
     """Порог смысловой близости заголовков для объединения новостей в сюжет."""
     return float(_env("STORY_SIMILARITY", "0.78"))

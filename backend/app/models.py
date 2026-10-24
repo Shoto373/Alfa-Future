@@ -138,6 +138,36 @@ class CounterpartyAlert(Base, Payload):
                       Index("counterparty_alerts_company_idx", "company_id", "created_at"))
 
 
+class Subscription(Base, Payload):
+    """Подписка пользователя на компанию (SPR4-04): темы, порог, контрагенты, тихие часы, каналы, сводка."""
+    __tablename__ = "subscriptions"
+    user_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    company_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    unsubscribe_token: Mapped[str] = mapped_column(Text, unique=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class Delivery(Base, Payload):
+    """Журнал доставки сводок и алертов (SPR4-04): канал, статус, попытки; ключ не дает отправить дважды."""
+    __tablename__ = "deliveries"
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=False), primary_key=True)
+    user_id: Mapped[str] = mapped_column(Text)
+    company_id: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(Text)      # digest | alert
+    channel: Mapped[str] = mapped_column(Text)   # inapp | email | telegram
+    key: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, server_default="queued")  # queued | sent | failed | skipped
+    attempts: Mapped[int] = mapped_column(Integer, server_default="0")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    __table_args__ = (UniqueConstraint("key", "channel", name="deliveries_key_channel_uq"),
+                      Index("deliveries_user_idx", "user_id", "company_id", "created_at"),
+                      CheckConstraint("status IN ('queued', 'sent', 'failed', 'skipped')", name="deliveries_status_check"))
+
+
 class BankProduct(Base, Payload):
     __tablename__ = "bank_products"
     product_id: Mapped[str] = mapped_column(Text, primary_key=True)

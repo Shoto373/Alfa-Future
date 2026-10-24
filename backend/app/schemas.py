@@ -123,6 +123,34 @@ class ScenarioRequest(Strict):
     exposure: float | None = Field(None, ge=0, le=1)
 
 
+CLOCK = r"^([01]\d|2[0-3]):[0-5]\d$"
+
+
+class NotificationChannels(Strict):
+    inapp: bool = True
+    email: bool = True
+    telegram: bool = False
+
+
+class NotificationSettings(Strict):
+    """Подписка на компанию (SPR4-04). Поля необязательны в запросе: меняются только переданные."""
+    digest: bool | None = None
+    digest_time: str | None = Field(None, pattern=CLOCK)
+    timezone: str | None = Field(None, min_length=3, max_length=64)
+    threshold: int | None = Field(None, ge=50, le=100)
+    topics: list[str] | None = Field(None, max_length=40)
+    counterparties: bool | None = None
+    quiet_from: str | None = Field(None, pattern=CLOCK)
+    quiet_to: str | None = Field(None, pattern=CLOCK)
+    alerts_per_day: int | None = Field(None, ge=0, le=10)
+    channels: NotificationChannels | None = None
+
+
+class NotificationReadRequest(Strict):
+    company_id: str = Field(..., min_length=1, max_length=64)
+    ids: list[int] | None = Field(None, max_length=200)  # пусто — прочитать все
+
+
 class KbApproveRequest(Strict):
     supersedes: str | None = Field(None, max_length=64)
 
