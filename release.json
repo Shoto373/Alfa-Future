@@ -1,9 +1,9 @@
 {
-  "commit": "e474ae36a4b34177136366814959314d4e5acfd3",
-  "short": "e474ae3",
-  "subject": "Merge pull request #23 from dvaJf/ui/claim-badges",
+  "commit": "6c050be6e0efcc61693abad86943c3e14f61fc1e",
+  "short": "6c050be",
+  "subject": "Merge pull request #24 from dvaJf/fix/reasoning-default",
   "author": "Egor",
-  "url": "https://github.com/dvaJf/alfa/commit/e474ae36a4b34177136366814959314d4e5acfd3",
-  "run_url": "https://github.com/dvaJf/alfa/actions/runs/40090267536",
-  "built_at": "2026-10-24T11:36:48+00:00"
+  "url": "https://github.com/dvaJf/alfa/commit/6c050be6e0efcc61693abad86943c3e14f61fc1e",
+  "run_url": "https://github.com/dvaJf/alfa/actions/runs/40094276187",
+  "built_at": "2026-10-24T12:35:57+00:00"
 }
