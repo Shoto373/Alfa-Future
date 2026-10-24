@@ -1,9 +1,9 @@
 {
-  "commit": "b2304ab200564d733b925b95e098ee85d1215648",
-  "short": "b2304ab",
-  "subject": "Merge pull request #21 from dvaJf/perf/feed-load",
+  "commit": "c3c79d450af4714c53ae5f0f770947abb4421733",
+  "short": "c3c79d4",
+  "subject": "Merge pull request #22 from dvaJf/fix/gitops-nginx-reload",
   "author": "Egor",
-  "url": "https://github.com/dvaJf/alfa/commit/b2304ab200564d733b925b95e098ee85d1215648",
-  "run_url": "https://github.com/dvaJf/alfa/actions/runs/40079780951",
-  "built_at": "2026-10-24T08:57:37+00:00"
+  "url": "https://github.com/dvaJf/alfa/commit/c3c79d450af4714c53ae5f0f770947abb4421733",
+  "run_url": "https://github.com/dvaJf/alfa/actions/runs/40089920121",
+  "built_at": "2026-10-24T11:29:58+00:00"
 }
