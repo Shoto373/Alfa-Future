@@ -11,6 +11,8 @@
 #   4) ждет healthy у backend и frontend; при успехе — «✅ на проде»,
 #      при сбое — возвращает прежние файлы и образы и пишет «❌ откат».
 # Неудачный релиз повторно не выкатывается: агент ждет следующий коммит в `deploy`.
+# Тихая выкатка: `sudo touch /var/lib/alfa-gitops/silent-next` — следующая выкатка без сообщений
+# «началась» и «на проде» (о сбое и откате бот пишет всегда); флаг снимается при старте этой выкатки.
 # Ручной откат — `git revert` последнего коммита в ветке `deploy`.
 set -uo pipefail
 
@@ -34,7 +36,9 @@ mkdir -p "$STATE_DIR" "$BACKUP_DIR"
 
 esc() { sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
 
-send() {
+SILENT=
+send() {   # send <текст> [always] — always: и в тихой выкатке (сбой, откат)
+  if [ -n "$SILENT" ] && [ "${2:-}" != always ]; then echo "silent: $1"; return; fi
   if [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT_ID" ]; then echo "telegram not configured: $1"; return; fi
   curl -s -m 15 -o /dev/null "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
     --data-urlencode "chat_id=${TG_CHAT_ID}" --data-urlencode "text=$1" \
@@ -63,6 +67,7 @@ WHAT="<a href=\"${URL:-#}\">${SHORT}</a> — ${SUBJECT:-без описания}
 
 touch "$MAINT_FLAG"
 trap 'rm -f "$MAINT_FLAG"' EXIT
+if [ -f "$STATE_DIR/silent-next" ]; then SILENT=1; rm -f "$STATE_DIR/silent-next"; fi
 started=$(date +%s)
 echo "deploying $target ($SHORT)"
 send "🚀 <b>Выкатка на прод</b>: ${WHAT}"
@@ -97,7 +102,7 @@ fail() {   # fail <причина> [rollback]
   send "❌ <b>Выкатка не удалась</b>: ${WHAT}
 Причина: ${reason}
 Откат: ${restored}
-<pre>${logs:-нет логов}</pre>"
+<pre>${logs:-нет логов}</pre>" always
   exit 1
 }
 
