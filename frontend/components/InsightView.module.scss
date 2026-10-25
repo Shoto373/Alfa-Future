@@ -76,7 +76,7 @@
 @keyframes sectionIn {
   from {
     opacity: 0;
-    transform: translateY(16px);
+    transform: translateY(10px);
   }
 }
 
@@ -87,12 +87,12 @@
   gap: 20px;
 
   > * {
-    animation: sectionIn .42s var(--ease-out) backwards;
+    animation: sectionIn .7s var(--ease-out) backwards;
   }
 
   @for $i from 1 through 6 {
     > :nth-child(#{$i}) {
-      animation-delay: #{($i - 1) * 70}ms;
+      animation-delay: #{($i - 1) * 90}ms;
     }
   }
 }

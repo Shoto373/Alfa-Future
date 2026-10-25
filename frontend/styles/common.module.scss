@@ -75,7 +75,7 @@
   transition: background var(--dur-fast), box-shadow var(--dur-fast), transform var(--dur-fast) var(--ease-out), color var(--dur-fast);
 
   &:active:not(:disabled) {
-    transform: scale(.97);
+    transform: scale(.985);
   }
 
   &:disabled {
@@ -85,12 +85,14 @@
 }
 
 .btnPrimary {
-  background: var(--red);
+  // Легкий градиент и блик по верхней грани — кнопка выглядит объемной, а не плоской заливкой.
+  background: linear-gradient(180deg, #f4473b, var(--red));
   color: var(--white);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 1px 2px rgba(212, 31, 19, .25);
 
   &:hover:not(:disabled) {
-    background: var(--red-dark);
-    box-shadow: 0 8px 20px rgba(239, 49, 36, .28);
+    background: linear-gradient(180deg, #ea3b2f, var(--red-dark));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), 0 10px 24px rgba(239, 49, 36, .26);
   }
 }
 
@@ -172,15 +174,15 @@
 // для position: fixed, и панель чата на телефоне уезжала за верх экрана.
 @keyframes pageIn {
   from {
-    opacity: .35;
-    transform: translateY(10px);
+    opacity: .6;
+    transform: translateY(6px);
   }
 }
 
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateY(8px);
   }
 }
 
@@ -198,7 +200,7 @@
 
   @for $i from 1 through 8 {
     &:nth-child(#{$i}) {
-      animation-delay: #{($i - 1) * 50}ms;
+      animation-delay: #{($i - 1) * 70}ms;
     }
   }
 }

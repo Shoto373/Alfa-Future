@@ -8,6 +8,9 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className={styles.login}>
       <section className={styles.loginHero}>
+        {/* Плавающее красное свечение: два размытых круга с разными траекториями. */}
+        <span className={styles.orb} aria-hidden="true" />
+        <span className={styles.orbSmall} aria-hidden="true" />
         <div className={common.brand}>
           <AlfaMark size={40} />
           <span className={common.brandText}>Альфа-Бизнес</span>

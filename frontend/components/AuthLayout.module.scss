@@ -9,22 +9,102 @@
   background: var(--bg);
 }
 
+// Красный круг медленно «плавает» по панели: большая траектория за 26 с, малый круг — своя, за 19 с.
+@keyframes orbFloat {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  33% {
+    transform: translate(-18%, -14%) scale(1.08);
+  }
+
+  66% {
+    transform: translate(10%, -24%) scale(.94);
+  }
+
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+@keyframes orbFloatSmall {
+  0% {
+    transform: translate(0, 0);
+  }
+
+  50% {
+    transform: translate(40%, 30%);
+  }
+
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+@keyframes heroText {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
 .loginHero {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
   border-radius: 28px;
   padding: 32px;
   color: var(--white);
   display: flex;
   flex-direction: column;
   gap: 24px;
-  background: radial-gradient(70% 70% at 70% 105%, rgba(239, 49, 36, .75), transparent 70%), var(--dark);
+  background: var(--dark);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
 
-  > :first-child {
+  > :not(.orb, .orbSmall) {
+    position: relative;
+    z-index: 1;
+  }
+
+  // Логотип — третий элемент (после двух кругов свечения).
+  > :nth-child(3) {
     padding: 0;
   }
 }
 
+.orb,
+.orbSmall {
+  position: absolute;
+  z-index: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.orb {
+  width: 125%;
+  aspect-ratio: 1;
+  right: -40%;
+  bottom: -55%;
+  background: radial-gradient(circle, rgba(239, 49, 36, .95) 0%, rgba(239, 49, 36, .5) 35%, transparent 68%);
+  filter: blur(40px);
+  animation: orbFloat 26s ease-in-out infinite;
+}
+
+.orbSmall {
+  width: 34%;
+  aspect-ratio: 1;
+  left: 8%;
+  top: 12%;
+  background: radial-gradient(circle, rgba(255, 92, 72, .45) 0%, transparent 70%);
+  filter: blur(30px);
+  animation: orbFloatSmall 19s ease-in-out infinite;
+}
+
 .loginHeroText {
   margin-top: auto;
+  animation: heroText 1s var(--ease-out) .15s backwards;
 }
 
 .loginHero h1 {
