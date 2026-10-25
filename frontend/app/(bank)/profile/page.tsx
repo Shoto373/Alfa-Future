@@ -19,12 +19,11 @@ export default function ProfilePage() {
 
   return (
     <div className={common.page}>
-      <header className={styles.head}>
-        <h1>Профиль</h1>
-      </header>
-
       <div className={styles.layout}>
         <aside className={styles.side}>
+          <header className={styles.head}>
+            <h1>Профиль</h1>
+          </header>
           <div className={`${common.card} ${styles.profileHead}`}>
             <span className={`${common.avatar} ${styles.profileAvatar}`}>{user.name.slice(0, 1)}</span>
             <h2>{user.name}</h2>

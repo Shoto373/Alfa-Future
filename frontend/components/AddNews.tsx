@@ -40,7 +40,7 @@ export default function AddNews({ onAdded, compact = false }: { onAdded: () => v
   const valid = mode === "url" ? /^https?:\/\/.+/.test(url) : text.trim().length >= 40;
   const left = mode === "text" ? Math.max(0, 40 - text.trim().length) : 0;
   const hint = mode === "url"
-    ? (url && !valid ? "Ссылка должна начинаться с https://" : "Вставьте ссылку на статью — разберем ее для вашей компании")
+    ? (url && !valid ? "Ссылка должна начинаться с https://" : "")
     : (left > 0 ? `Еще хотя бы ${left} симв. — чтобы было что разбирать` : "Готово к разбору");
   return (
     <Card title={<><Icon name="spark" size={16} /> Проверить свою новость</>} className={`${styles.addNews} ${compact ? styles.addNewsCompact : ""}`}>
@@ -63,7 +63,7 @@ export default function AddNews({ onAdded, compact = false }: { onAdded: () => v
             maxLength={2000} inputMode="url" onKeyDown={(e) => { if (e.key === "Enter" && valid && !busy) void submit(); }} />
         )}
       </div>
-      <p className={`${styles.hint} ${valid ? styles.hintOk : ""}`}>{hint}</p>
+      {hint && <p className={`${styles.hint} ${valid ? styles.hintOk : ""}`}>{hint}</p>}
       {error && <ErrorState error={error} />}
       {note && <p className={`${common.muted} ${common.small}`}>{note}</p>}
       <button className={`${styles.btn} ${common.btnPrimary} ${styles.go}`} disabled={!valid || busy} onClick={submit}>

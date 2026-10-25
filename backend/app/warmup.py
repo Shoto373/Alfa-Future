@@ -7,10 +7,11 @@ API (role="api"): профили, модель и ее векторы из хр�
 """
 
 import logging
+import threading
 import time
 
 from app import config, embeddings, pipeline, ranking, vectors
-from app.companies import profiles
+from app.companies import graph, profiles
 from app.knowledge import kb
 from app.news import semantic, store
 
@@ -48,6 +49,8 @@ def run(role: str = "api") -> dict:
         _step(report, "feeds", _feeds)
     else:
         _step(report, "news", store.load)
+        # Граф платежей (~1,4 млн строк) строится секунды: в фоне после старта, а не в первом запросе контрагентов.
+        threading.Thread(target=_step, args=(report, "graph", graph.current), name="graph-warm", daemon=True).start()
     report["vectors"] = vectors.stats()
     logger.info("warmup done in %.1fs: %s", time.perf_counter() - started, report)
     return report

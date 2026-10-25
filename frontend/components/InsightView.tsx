@@ -92,7 +92,6 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
         </div>
       </div>
       {mentions}
-      <ImpactMap ins={ins} />
 
       <div className={styles.insightGrid}>
         <Card title="1. Что произошло" actions={fb("what_happened")}>
@@ -124,6 +123,8 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
         <SourceList groups={groups} reasons={ins.relevance.reasons} open={showSources}
           onToggle={() => { if (!showSources) track("section_expand", { section: "sources" }); setShowSources((v) => !v); }} focused={focused} />
       </div>
+
+      <ImpactMap ins={ins} />
 
       {flags?.dialog?.enabled !== false && <Chat insightId={ins.insight_id} suggestions={chatSuggestions(ins)} />}
     </div>

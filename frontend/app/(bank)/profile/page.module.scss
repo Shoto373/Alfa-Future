@@ -5,12 +5,9 @@
 }
 
 .head {
-  position: sticky;
-  top: 72px;
-  z-index: 15;
-  height: 84px;
-  padding-top: 4px;
-  background: var(--bg);
+  min-height: var(--block-head);
+  display: flex;
+  align-items: center;
 
   h1 {
     margin: 0;
@@ -21,7 +18,9 @@
   }
 }
 
+// Общая высота заголовков «Профиль» и «Мои компании»: они и карточки под ними стоят вровень.
 .layout {
+  --block-head: 40px;
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
   gap: 20px;
@@ -33,7 +32,7 @@
   flex-direction: column;
   gap: 16px;
   position: sticky;
-  top: 172px;
+  top: 88px;
 }
 
 .main {
@@ -47,10 +46,11 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  scroll-margin-top: 170px;
+  scroll-margin-top: 88px;
 }
 
 .blockHead {
+  min-height: var(--block-head);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -65,7 +65,7 @@
 }
 
 .anchor {
-  scroll-margin-top: 170px;
+  scroll-margin-top: 88px;
 }
 
 .profileHead {
@@ -357,10 +357,6 @@
     position: static;
   }
 
-  .head {
-    height: auto;
-    padding-bottom: 8px;
-  }
 
   .nav {
     flex-direction: row;
