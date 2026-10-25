@@ -80,15 +80,10 @@ $tile-colors: (
   font-weight: 700;
   padding: 3px 10px;
   border-radius: 8px;
-  white-space: nowrap;
-
-  &::before {
-    content: "";
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: currentColor;
-  }
+  max-width: 100%;
+  line-height: 1.3;
+  // Длинная метка («Есть риски и выгоды для компании») в узкой колонке переносится, а не вылезает за край.
+  white-space: normal;
 }
 
 .effectNeg {
