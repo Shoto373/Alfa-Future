@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import { Analytics } from "@/components/counterparties/Analytics";
 import { CounterpartyDrawer } from "@/components/counterparties/CounterpartyDrawer";
 import { Chain } from "@/components/counterparties/Chain";
@@ -43,16 +43,16 @@ const STEPS = [
   { icon: "search", title: "Ищем новости о них", text: "Только о тех, чье название известно. Если компания в данных безымянная, считаем лишь платежи." },
 ];
 
+const hiddenListeners = new Set<() => void>();
+const subscribeHidden = (cb: () => void) => { hiddenListeners.add(cb); return () => { hiddenListeners.delete(cb); }; };
+const readHidden = () => { try { return localStorage.getItem(HIDE_KEY) === "1"; } catch { return false; } };
+
 function HowItWorks() {
-  const [open, setOpen] = useState(true);
-  useEffect(() => {
-    try { if (localStorage.getItem(HIDE_KEY) === "1") setOpen(false); } catch { /* хранилище недоступно — оставляем открытым */ }
-  }, []);
+  // Свернутость запоминается в браузере; на сервере и без хранилища блок открыт.
+  const open = !useSyncExternalStore(subscribeHidden, readHidden, () => false);
   const toggle = () => {
-    setOpen((v) => {
-      try { localStorage.setItem(HIDE_KEY, v ? "1" : "0"); } catch { /* не критично */ }
-      return !v;
-    });
+    try { localStorage.setItem(HIDE_KEY, open ? "1" : "0"); } catch { /* не критично */ }
+    hiddenListeners.forEach((cb) => cb());
   };
   return (
     <section className={styles.how} aria-labelledby="how-title">
