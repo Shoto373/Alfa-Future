@@ -1,9 +1,9 @@
 {
-  "commit": "6ce4e5a3dc1f28151197ada0036fb07baa5d6414",
-  "short": "6ce4e5a",
-  "subject": "fix: профиль вровень с «Моими компаниями», отступ у «Разобрать», граф контрагентов строится в фоне",
+  "commit": "98c1cb6518c1b7e8aba4bd726e9738aa3674e947",
+  "short": "98c1cb6",
+  "subject": "fix(worker): превью конфигурации берется раньше плановых задач — UI-тест не ждет очередь",
   "author": "Egor",
-  "url": "https://github.com/dvaJf/alfa/commit/6ce4e5a3dc1f28151197ada0036fb07baa5d6414",
-  "run_url": "https://github.com/dvaJf/alfa/actions/runs/40236510092",
-  "built_at": "2026-10-25T21:45:38+00:00"
+  "url": "https://github.com/dvaJf/alfa/commit/98c1cb6518c1b7e8aba4bd726e9738aa3674e947",
+  "run_url": "https://github.com/dvaJf/alfa/actions/runs/40238746833",
+  "built_at": "2026-10-25T22:15:08+00:00"
 }
