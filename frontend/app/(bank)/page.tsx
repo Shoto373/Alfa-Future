@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Gauge from "@/components/home/Gauge";
 import HomeHero, { type TopicRow } from "@/components/home/HomeHero";
-import { EmptyState, Icon, OriginTag, Score, Skeleton } from "@/components/ui";
+import { EmptyState, Icon, Score, Skeleton } from "@/components/ui";
 import { date, IMPORTANT_SCORE as IMPORTANT } from "@/lib/format";
 import { useFeedWithTopics } from "@/lib/hooks";
 import { useRead } from "@/lib/notifications";
@@ -31,6 +31,7 @@ export default function HomePage() {
   // Новостной фон — по еще не прочитанному: прочитанное уже учтено, и после разбора важных новостей фон спокойнее.
   const { read } = useRead(session!.user.user_id, session!.companyId);
   const top5 = items.filter((i) => !read.has(i.news.news_id)).slice(0, 5);
+  const recent = items.filter((i) => read.has(i.news.news_id)).slice(0, 3);
   const level = top5.length ? top5.reduce((a, i) => a + i.relevance.score, 0) / top5.length : 0;
   const levelText = !top5.length && items.length ? "Все прочитано" : level >= 70 ? "Требует внимания" : level >= 45 ? "Умеренный фон" : "Спокойный фон";
 
@@ -71,14 +72,25 @@ export default function HomePage() {
             : "Непрочитанных новостей нет"}</p>
         </section>
 
-        <Link href="/pulse" className={styles.story}>
-          <strong>Как читать разбор</strong>
-          <span className={styles.storyLead}>У каждого вывода видно, откуда он взят</span>
-          <span className={styles.storyLegend}>
-            {["fact", "client_data", "bank", "ai"].map((o) => <OriginTag key={o} origin={o} />)}
-          </span>
-          <span className={styles.storyCta}>Открыть ленту <Icon name="chevronRight" size={16} /></span>
-        </Link>
+        <section className={styles.story} aria-label="Недавно прочитанное">
+          <strong>Недавно прочитанное</strong>
+          <span className={styles.storyLead}>Можно вернуться к разбору</span>
+          {recent.length === 0 ? (
+            <span className={styles.storyLead}>Вы пока ничего не открывали. Откройте новость в ленте, и она появится здесь.</span>
+          ) : (
+            <ul className={styles.quickLinks}>
+              {recent.map((it) => (
+                <li key={it.news.news_id}>
+                  <Link href={`/pulse/n/${encodeURIComponent(it.news.news_id)}`}>
+                    <span><b>{it.news.title}</b><small>{it.news.source} · {date(it.news.published_at)}</small></span>
+                    <Icon name="chevronRight" size={16} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+          <Link href="/pulse" className={styles.storyCta}>Открыть ленту <Icon name="chevronRight" size={16} /></Link>
+        </section>
       </div>
     </div>
   );
