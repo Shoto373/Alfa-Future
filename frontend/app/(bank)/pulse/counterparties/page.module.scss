@@ -10,14 +10,43 @@
   padding: 0;
 }
 
+// Свечение медленно дрейфует само и плавно идет за курсором (lib/glow.ts) — как на главной.
+@keyframes howGlow {
+  0% {
+    --gx: 100%;
+    --gy: 120%;
+  }
+
+  50% {
+    --gx: 78%;
+    --gy: 100%;
+  }
+
+  100% {
+    --gx: 92%;
+    --gy: 135%;
+  }
+}
+
 // Блок «Как это работает»: единственный темный акцент страницы
 .how {
+  --gx: 100%;
+  --gy: 120%;
   position: relative;
   border-radius: var(--radius);
   padding: 20px 24px;
   color: var(--white);
-  background: radial-gradient(70% 140% at 100% 120%, rgba(239, 49, 36, .55), transparent 70%), #1a0507;
+  background: radial-gradient(70% 140% at var(--gx) var(--gy), rgba(239, 49, 36, .55), transparent 70%), #1a0507;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
   overflow: hidden;
+  transition: --gx 1.8s var(--ease-out), --gy 1.8s var(--ease-out);
+  animation: howGlow 20s ease-in-out infinite alternate;
+
+  @media (hover: hover) {
+    &:hover {
+      animation: none;
+    }
+  }
 }
 
 .howHead {
