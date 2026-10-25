@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { glow } from "@/lib/glow";
 import type { Load } from "@/lib/hooks";
 import { ANALYTICS_SCOPE, useRead } from "@/lib/notifications";
 import type { BankDocument, FeedItem } from "@/lib/types";
@@ -33,7 +34,7 @@ export default function HomeHero({ feed, total, topics, userId }: {
   }, []);
 
   return (
-      <section className={styles.hero} aria-label="Альфа.Пульс на главной">
+      <section className={styles.hero} aria-label="Альфа.Пульс на главной" {...glow}>
         <div className={styles.heroMain}>
           <span className={styles.heroLabel}>Альфа.Пульс</span>
           {feed.loading ? <Skeleton lines={2} /> : (
@@ -100,12 +101,14 @@ export default function HomeHero({ feed, total, topics, userId }: {
               <filter id="pr-glow" filterUnits="userSpaceOnUse" x="-20" y="-20" width="280" height="160">
                 <feGaussianBlur stdDeviation="5" />
               </filter>
-              <path id="pr-line" d="M4 72H78c4 0 6-6 9-6s5 6 9 6h6l9-44c1-4 4-4 5 0l12 66c1 4 4 4 5 0l7-34c1-3 3-3 4 0l3 12h85"
+              <path id="pr-line" pathLength="100" d="M4 72H78c4 0 6-6 9-6s5 6 9 6h6l9-44c1-4 4-4 5 0l12 66c1 4 4 4 5 0l7-34c1-3 3-3 4 0l3 12h85"
                 fill="none" strokeLinecap="round" strokeLinejoin="round" />
             </defs>
             <use href="#pr-line" stroke="#ef3124" strokeWidth="9" opacity=".75" filter="url(#pr-glow)" />
             <use href="#pr-line" stroke="#ff6a5c" strokeWidth="4.5" opacity=".9" />
             <use href="#pr-line" stroke="url(#pr-fade)" strokeWidth="2.2" />
+            {/* Бегущий световой импульс по линии пульса. */}
+            <use href="#pr-line" stroke="#fff" strokeWidth="3" className={styles.promoRun} />
           </svg>
         </Link>
       </section>

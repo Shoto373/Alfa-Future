@@ -11,6 +11,7 @@ import { Hint } from "@/components/counterparties/Hint";
 import { CompanyTile, Icon, ErrorState, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
 import { date, money } from "@/lib/format";
+import { glow } from "@/lib/glow";
 import { useQuery } from "@/lib/query";
 import { useSession } from "@/lib/session";
 import type { CounterpartiesView, Counterparty, CounterpartyEvent } from "@/lib/types";
@@ -55,7 +56,7 @@ function HowItWorks() {
     hiddenListeners.forEach((cb) => cb());
   };
   return (
-    <section className={styles.how} aria-labelledby="how-title">
+    <section className={styles.how} aria-labelledby="how-title" {...glow}>
       <div className={styles.howHead}>
         <h2 id="how-title"><Icon name="spark" size={18} /> Как это работает</h2>
         <button type="button" className={styles.howToggle} aria-expanded={open} aria-controls="how-body" onClick={toggle}>

@@ -73,10 +73,28 @@
   align-items: center;
 }
 
+@keyframes sectionIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+// Разделы разбора собираются по очереди: «что произошло» → «почему важно» → последствия → действия.
 .insightGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
+
+  > * {
+    animation: sectionIn .7s var(--ease-out) backwards;
+  }
+
+  @for $i from 1 through 6 {
+    > :nth-child(#{$i}) {
+      animation-delay: #{($i - 1) * 90}ms;
+    }
+  }
 }
 
 .span2 {
@@ -731,4 +749,66 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+// «Ход анализа» раскрывается плавно: высота растет от нуля (сетка 0fr → 1fr), содержимое проявляется,
+// этапы появляются по очереди, как будто агент проходит их заново.
+.traceWrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  // Мягкий разгон и торможение: блок не «выпрыгивает» в первые доли секунды.
+  transition: grid-template-rows .8s cubic-bezier(.65, 0, .35, 1), opacity .6s ease, margin .8s cubic-bezier(.65, 0, .35, 1);
+}
+
+.traceOpen {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  margin-bottom: 20px;
+}
+
+.traceInner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+@keyframes traceStep {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.traceOpen .traceGroup,
+.traceOpen .checks {
+  animation: traceStep .55s var(--ease-out) backwards;
+}
+
+@for $i from 1 through 8 {
+  .traceOpen .traceGroup:nth-of-type(#{$i}) {
+    animation-delay: #{.15 + ($i - 1) * .09}s;
+  }
+}
+
+.traceOpen .checks {
+  animation-delay: .8s;
+}
+
+// Вывод, к которому привела ветка «Пути влияния», мягко подсвечивается.
+@keyframes flash {
+  0%,
+  35% {
+    background: color-mix(in srgb, var(--red) 12%, transparent);
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--red) 12%, transparent);
+  }
+
+  100% {
+    background: transparent;
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+
+.flash {
+  border-radius: 10px;
+  animation: flash 1.8s var(--ease-out);
 }

@@ -1,4 +1,5 @@
 @use "../../styles/breakpoints";
+@use "../../styles/glow";
 
 .badgeGreen {
   composes: badgeGreen from "../../styles/common.module.scss";
@@ -16,16 +17,73 @@
   composes: countRed from "../../styles/common.module.scss";
 }
 
+// Красное пятно медленно плавает само и ползет за курсором; уход мыши — плавный возврат (styles/_glow.scss).
+@keyframes glowDrift {
+  0% {
+    --dx: 70%;
+    --dy: 108%;
+  }
+
+  50% {
+    --dx: 86%;
+    --dy: 96%;
+  }
+
+  100% {
+    --dx: 62%;
+    --dy: 118%;
+  }
+}
+
+@keyframes glowDriftStory {
+  0% {
+    --dx: 40%;
+    --dy: 104%;
+  }
+
+  50% {
+    --dx: 62%;
+    --dy: 96%;
+  }
+
+  100% {
+    --dx: 48%;
+    --dy: 112%;
+  }
+}
+
 .hero {
+  --dx: 78%;
+  --dy: 110%;
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr) minmax(0, .95fr);
   gap: 12px;
   border-radius: 28px;
   padding: 12px;
-  background: radial-gradient(60% 90% at 78% 110%, rgba(239, 49, 36, .55), transparent 70%),
+  background: radial-gradient(60% 90% at #{glow.$at}, rgba(239, 49, 36, .55), transparent 70%),
     radial-gradient(40% 60% at 55% 0%, rgba(239, 49, 36, .18), transparent 70%),
     var(--dark);
   color: var(--white);
+  // Пятно плавает всегда (туда и обратно, без рывка в конце круга) и ползет за курсором.
+  animation: glowDrift 22s ease-in-out infinite alternate;
+  @include glow.follow-glow;
+}
+
+// Внутренние панели героя при наведении чуть всплывают и светлеют.
+.heroMain,
+.heroList,
+.heroPromo {
+  // Блик по верхней грани — «стеклянные» панели на темном фоне.
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07);
+  transition: transform var(--dur) var(--ease-out), background var(--dur), box-shadow var(--dur);
+
+  @media (hover: hover) {
+    &:hover {
+      transform: translateY(-2px);
+      background: rgba(255, 255, 255, .08);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1), 0 14px 34px rgba(0, 0, 0, .3);
+    }
+  }
 }
 
 .heroMain {
@@ -250,6 +308,29 @@
   overflow: visible;
 }
 
+// Световой импульс бежит по линии пульса; при наведении — быстрее.
+@keyframes pulseRun {
+  from {
+    stroke-dashoffset: 100;
+  }
+
+  to {
+    stroke-dashoffset: -14;
+  }
+}
+
+.promoRun {
+  stroke-dasharray: 14 100;
+  stroke-linecap: round;
+  opacity: .9;
+  filter: drop-shadow(0 0 4px #fff);
+  animation: pulseRun 4.2s cubic-bezier(.45, 0, .25, 1) infinite;
+}
+
+.heroPromo:hover .promoRun {
+  animation-duration: 2.4s;
+}
+
 .summaryTitle {
   margin: 0;
   padding: 6px 2px 0;
@@ -264,6 +345,18 @@
   grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr) minmax(0, .95fr);
   gap: 20px;
   align-items: stretch;
+
+  // Карточки сводки при наведении чуть всплывают (только мышь).
+  > * {
+    transition: transform var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
+  }
+
+  @media (hover: hover) {
+    > *:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-hover);
+    }
+  }
 }
 
 .topList {
@@ -333,11 +426,25 @@
   display: block;
 }
 
+// Кружок стрелки: мягкая тень, чтобы он читался поверх дуги во время подъема.
+.gaugeKnob {
+  filter: drop-shadow(0 2px 4px rgba(11, 31, 53, .25));
+}
+
+@keyframes gaugeText {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+// Подпись («Требует внимания») проявляется, когда стрелка почти поднялась.
 .gaugeValue {
   text-align: center;
   font-size: 18px;
   font-weight: 700;
   margin: 4px 0;
+  animation: gaugeText .8s var(--ease-out) 1s backwards;
 }
 
 .story {
@@ -349,7 +456,18 @@
   flex-direction: column;
   gap: 12px;
   min-width: 0;
-  background: radial-gradient(90% 55% at 50% 105%, rgba(239, 49, 36, .85), transparent 75%), #1a0507;
+  --dx: 50%;
+  --dy: 105%;
+  background: radial-gradient(90% 55% at #{glow.$at}, rgba(239, 49, 36, .85), transparent 75%), #1a0507;
+  animation: glowDriftStory 18s ease-in-out infinite alternate;
+  // Пятно ползет за курсором; вместе с ним — всплытие карточки при наведении.
+  @include glow.follow-glow((transform var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out)));
+
+  @media (hover: hover) {
+    &:hover {
+      box-shadow: 0 16px 40px rgba(239, 49, 36, .25);
+    }
+  }
 
   strong {
     font-size: 18px;

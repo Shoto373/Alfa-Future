@@ -43,6 +43,7 @@ describe("api — адреса спринтов 3–4", () => {
       [api.scenario({ company_id: "A", scenario: "fx", shock: 10 }), "POST", "/api/v1/scenarios"],
       // Диалог (SPR4-05).
       [api.dialog("i 1"), "GET", "/api/v1/insights/i%201/questions"],
+      [api.dialogSuggestions("i1"), "GET", "/api/v1/insights/i1/suggestions"],
       [api.rateAnswer("i1", 7, -1), "POST", "/api/v1/insights/i1/questions/7/rating"],
       // Связь с банком (SPR4-06).
       [api.insightOffers("i1"), "GET", "/api/v1/insights/i1/offers"],

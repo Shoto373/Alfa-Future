@@ -5,6 +5,8 @@ import Gauge from "@/components/home/Gauge";
 import HomeHero, { type TopicRow } from "@/components/home/HomeHero";
 import { EmptyState, Icon, Score, Skeleton } from "@/components/ui";
 import { date, IMPORTANT_SCORE as IMPORTANT } from "@/lib/format";
+import { glow } from "@/lib/glow";
+import { cardReasons } from "@/lib/reasons";
 import { useFeedWithTopics } from "@/lib/hooks";
 import { useRead } from "@/lib/notifications";
 import { useSession } from "@/lib/session";
@@ -54,7 +56,7 @@ export default function HomePage() {
                 <Link href={`/pulse/n/${encodeURIComponent(it.news.news_id)}`}>
                   <span className={styles.topTitle}>{it.news.title}</span>
                   <span className={styles.topMeta}>{it.news.source} · {date(it.news.published_at)}</span>
-                  {it.relevance.reasons[0] && <span className={styles.topReason}>{it.relevance.reasons[0].text}</span>}
+                  {cardReasons(it.relevance.reasons, 1).map((r) => <span key={r.text} className={styles.topReason}>{r.text}</span>)}
                 </Link>
                 <Score value={it.relevance.score} />
               </li>
@@ -72,7 +74,7 @@ export default function HomePage() {
             : "Непрочитанных новостей нет"}</p>
         </section>
 
-        <section className={styles.story} aria-label="Недавно прочитанное">
+        <section className={styles.story} aria-label="Недавно прочитанное" {...glow}>
           <strong>Недавно прочитанное</strong>
           <span className={styles.storyLead}>Можно вернуться к разбору</span>
           {recent.length === 0 ? (

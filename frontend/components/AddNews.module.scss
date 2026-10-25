@@ -10,49 +10,162 @@
   font-size: 15px;
 }
 
-.addNewsCompact .seg {
-  margin-bottom: 8px;
+.addNews h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  svg {
+    color: var(--red);
+  }
 }
 
 .addNewsCompact .seg button {
-  padding: 5px 12px;
+  padding: 6px 12px;
   font-size: 13px;
 }
 
-.addNewsCompact textarea {
-  padding: 8px 12px;
-  font-size: 14px;
-  margin-bottom: 8px;
-}
-
+.addNewsCompact textarea,
 .addNewsCompact input {
   font-size: 14px;
 }
 
 .addNewsCompact .btn {
-  padding: 8px 16px;
+  padding: 9px 18px;
   font-size: 14px;
   border-radius: 12px;
 }
 
+// Переключатель «Текст / Ссылка»: две равные кнопки, белая подложка плавно переезжает под выбранную.
 .seg {
-  display: inline-flex;
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
   background: var(--bg);
   border-radius: 12px;
   padding: 3px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 
   button {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
     border: 0;
     background: none;
     padding: 7px 16px;
     border-radius: 10px;
     cursor: pointer;
     font-weight: 500;
+    color: var(--ink-2);
+    transition: color var(--dur-fast);
   }
 
   button.on {
-    background: var(--card);
-    box-shadow: 0 1px 3px rgba(11, 31, 53, .12);
+    color: var(--ink);
   }
+
+  button.on svg {
+    color: var(--red);
+  }
+}
+
+.segThumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: 0 1px 2px rgba(11, 31, 53, .08), 0 4px 12px rgba(11, 31, 53, .06);
+  transition: transform var(--dur) var(--ease-out);
+
+  .seg[data-mode="url"] & {
+    transform: translateX(100%);
+  }
+}
+
+// Поле со значком внутри; при фокусе — мягкая красная подсветка вместо резкой рамки.
+.field {
+  position: relative;
+}
+
+.fieldIcon {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  color: var(--muted);
+  pointer-events: none;
+  transition: color var(--dur-fast);
+}
+
+.field:focus-within .fieldIcon {
+  color: var(--red);
+}
+
+.control {
+  width: 100%;
+  padding-left: 42px !important;
+  margin-bottom: 0 !important;
+  transition: border-color var(--dur-fast), box-shadow var(--dur), background var(--dur-fast);
+
+  &:focus {
+    outline: none;
+    border-color: rgba(239, 49, 36, .55) !important;
+    box-shadow: 0 0 0 4px rgba(239, 49, 36, .1);
+  }
+}
+
+textarea.control {
+  resize: vertical;
+  min-height: 88px;
+}
+
+.hint {
+  margin: 8px 2px 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+  transition: color var(--dur-fast);
+}
+
+.hintOk {
+  color: var(--green);
+}
+
+// Кнопка: пока разбирать нечего — спокойная серая (а не бледно-красная), готово — красная со стрелкой.
+.go {
+  gap: 6px;
+
+  svg {
+    transition: transform var(--dur-fast) var(--ease-out);
+  }
+
+  &:hover:not(:disabled) svg {
+    transform: translateX(3px);
+  }
+
+  &:disabled {
+    opacity: 1 !important;
+    background: var(--bg) !important;
+    color: var(--muted) !important;
+    box-shadow: none !important;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: spin .8s linear infinite;
 }

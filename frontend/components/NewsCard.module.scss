@@ -1,3 +1,10 @@
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
 .newsCard {
   background: var(--card);
   border-radius: var(--radius);
@@ -6,6 +13,23 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  // Лента появляется волной: первые восемь карточек по очереди, остальные — сразу.
+  animation: cardIn var(--dur) var(--ease-out) backwards;
+  transition: box-shadow var(--dur) var(--ease-out), transform var(--dur) var(--ease-out);
+
+  @for $i from 1 through 8 {
+    &:nth-child(#{$i}) {
+      animation-delay: #{($i - 1) * 65}ms;
+    }
+  }
+
+  // Наведение — карточка чуть приподнимается (только мышь: на телефоне «залипало» бы после касания).
+  @media (hover: hover) {
+    &:hover {
+      box-shadow: var(--shadow-hover);
+      transform: translateY(-1px);
+    }
+  }
 
   &.compact {
     padding: 14px 16px;

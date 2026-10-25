@@ -31,20 +31,22 @@ export function OriginTag({ origin }: { origin: string }) {
   return <span className={`${styles.origin} ${ORIGIN_STYLES[origin] ?? ""}`}>{ORIGIN_LABEL[origin] ?? origin}</span>;
 }
 
-const EFFECTS: Record<string, { label: string; className?: string }> = {
-  neg: { label: "Скорее риск", className: styles.effectNeg },
-  pos: { label: "Скорее возможность", className: styles.effectPos },
-  mixed: { label: "И риск, и возможность", className: styles.effectMixed },
-  unclear: { label: "Зависит от операций компании", className: styles.effectUnclear },
+// Метка понятна без подсказки: стрелка показывает направление, текст — что это значит для компании.
+const EFFECTS: Record<string, { label: string; icon: string; className?: string }> = {
+  neg: { label: "Риск для компании", icon: "↓", className: styles.effectNeg },
+  pos: { label: "Выгода для компании", icon: "↑", className: styles.effectPos },
+  mixed: { label: "Есть риски и выгоды для компании", icon: "↕", className: styles.effectMixed },
+  unclear: { label: "Зависит от операций компании", icon: "?", className: styles.effectUnclear },
 };
 
-// Метка «скорее риск / возможность» по готовому разбору; без влияния на бизнес или без разбора — не показывается.
+// Итог разбора для компании по готовому разбору; без влияния на бизнес или без разбора — не показывается.
 export function EffectBadge({ effect, className = "" }: { effect?: string | null; className?: string }) {
   const e = effect ? EFFECTS[effect] : undefined;
   if (!e) return null;
   return (
-    <span className={`${styles.effect} ${e.className ?? ""} ${className}`} title="Общий вывод для вашей компании: разделы «Риски» и «Возможности» разбора">
-      {e.label}
+    <span className={`${styles.effect} ${e.className ?? ""} ${className}`}
+      title="Итог разбора для вашей компании: риски и выгоды подробно — в разделе «Какие последствия возможны»">
+      <span aria-hidden="true">{e.icon}</span>{e.label}
     </span>
   );
 }

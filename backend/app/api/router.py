@@ -443,6 +443,17 @@ def dialog_history(insight_id: str, user: dict = Depends(current_user)) -> list[
     return dialog.history(insight_id, user["user_id"])
 
 
+@router.get("/insights/{insight_id}/suggestions", responses=ERRORS)
+def dialog_suggestions(insight_id: str, user: dict = Depends(current_user)) -> dict:
+    """Первые вопросы агенту — под компанию, новость и роль пользователя (без уже заданных)."""
+    ins = storage.get_insight(insight_id)
+    if ins is None:
+        raise ApiError("INSIGHT_NOT_FOUND")
+    role = member_of(user, ins["company_id"])["role"]
+    asked = {t["question"] for t in dialog.history(insight_id, user["user_id"])}
+    return {"suggestions": dialog.context_suggestions(ins, _company(ins["company_id"]), role, asked, limit=4)}
+
+
 @router.post("/insights/{insight_id}/questions/{turn_id}/rating", responses=ERRORS)
 def dialog_rate(insight_id: str, turn_id: int, payload: AnswerRatingRequest, user: dict = Depends(current_user)) -> dict:
     ins = storage.get_insight(insight_id)

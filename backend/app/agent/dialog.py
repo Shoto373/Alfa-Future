@@ -17,10 +17,12 @@ from app import database
 from app.agent import qa
 from app.agent.tools import ToolError, ToolRunner
 from app.agent.validators import claim_errors
-from app.companies import graph
+from app.companies import extra, graph, supply
+from app.domain_config import runtime
 from app.knowledge import kb
 from app.models import DialogTurn
 from app.news import store
+from app.news.taxonomy import TOPICS
 from app.scenarios import calc
 
 HISTORY = 10
@@ -38,7 +40,7 @@ OUT_OF_SCOPE = re.compile(r"погод|рецепт|анекдот|стих|фу
                           r"сколько тебе лет|расскажи о себе", re.I)
 SHOCK = re.compile(r"([+\-−–]?\s?\d+(?:[.,]\d+)?)\s*(п\.?\s?п|процентн\w* пункт|%|процент)", re.I)
 DEFAULT_SHOCK = {"key_rate": 1.0, "fx": 10.0, "commodity": -10.0}
-DOWN = re.compile(r"сниз|упад|подешев|укреп|уменьш|опуст", re.I)  # рубль укрепится — курс вниз
+DOWN = re.compile(r"сниз|сниж|паден|упад|подешев|укреп|уменьш|опуст", re.I)  # рубль укрепится — курс вниз
 SUGGESTIONS = {
     "cfo": ["Как изменятся процентные расходы, если ставка вырастет на 1 п.п.?", "Как это повлияет на налог на прибыль?",
             "Что думает Альфа-Банк об этом событии?", "Как это затронет наших поставщиков и покупателей?"],
@@ -57,6 +59,67 @@ CLIENT_SOURCES = {
     "client:graph": "Граф контрагентов по платежам (данные кейса)",
     "client:extra": "Сведения, которые сообщила компания",
 }
+
+
+COMMODITY_TOPICS = {"fuel_oil", "metals_steel", "gold"}
+SIDE_IN = {"customers": "покупателях", "suppliers": "поставщиках"}
+# Порядок подсказок по роли: финансовому директору — сначала расчеты, руководителю — цепочка и риски.
+ROLE_ORDER = {
+    "cfo": ["rate", "tax", "fx", "commodity", "chain", "bank", "risk", "act"],
+    "treasurer": ["fx", "rate", "bank", "commodity", "chain", "risk", "act", "tax"],
+    "accountant": ["tax", "rate", "risk", "act", "bank", "chain", "fx", "commodity"],
+    "ceo": ["chain", "risk", "commodity", "act", "bank", "rate", "fx", "tax"],
+    "owner": ["risk", "chain", "bank", "commodity", "rate", "fx", "act", "tax"],
+}
+
+
+def _short_name(company: dict) -> str:
+    """«Арматура Судьбы Трейд» из «АО «Арматура Судьбы Трейд»» — короче и узнаваемо."""
+    m = re.search(r"«([^«»]+)»", company.get("display_name") or "")
+    return f"«{m.group(1)}»" if m else ""
+
+
+def _candidates(insight: dict, company: dict) -> dict[str, str]:
+    """Вопросы под эту компанию и это событие; каждый попадает в намерение, на которое агент отвечает данными."""
+    news = store.get(insight["news_id"])
+    topics = [t["topic"] for t in news["classification"]["topics"][:3]] if news else []
+    sectors = set(news["classification"]["sectors"]) if news else set()
+    # Название в кавычках не склоняется — «компании «…»» звучит по-русски в любом вопросе.
+    name = f"компании {_short_name(company)}".strip()
+    shares = (extra.get(company["company_id"]) or {}).get("shares") or {}
+    out: dict[str, str] = {}
+    if "key_rate" in topics and (company["products"].get("loans") or shares.get("floating_debt_share")):
+        out["rate"] = f"Во что обойдется {name} рост ставки на 1 п.п.?"
+        out["tax"] = "Как это повлияет на налог на прибыль?"
+    if "fx" in topics and (company.get("fts_flag") or shares.get("fx_revenue_share") or shares.get("import_share")):
+        out["fx"] = "Что будет, если рубль ослабнет на 10%?"
+    model = runtime.SECTOR_FINANCE.get(company["sector"], {}).get("commodity")
+    if model and COMMODITY_TOPICS & set(topics):
+        out["commodity"] = f"Во что обойдется снижение цен на {model['label']} на 10%?"
+    links = sorted(supply.links(company), key=lambda link: -link["share"])
+    hit = next((link for link in links if link["sector"] in sectors), None)
+    if hit:
+        out["chain"] = (f"Как это скажется на {SIDE_IN[hit['side']]} из отрасли "
+                        f"«{runtime.SECTOR_NAMES.get(hit['sector'], hit['sector'])}»?")
+    elif links:
+        out["chain"] = "Как это затронет наших поставщиков и покупателей?"
+    if insight["bank_view"]["available"] and topics and topics[0] in TOPICS:
+        out["bank"] = f"Что думает Альфа-Банк о теме «{TOPICS[topics[0]]['name']}»?"
+    if insight["risks"]:
+        out["risk"] = f"Какой главный риск для {name}?"
+    if insight["actions"]:
+        out["act"] = "Что делать в ближайшие недели?"
+    return out
+
+
+def context_suggestions(insight: dict, company: dict, role: str, asked: set[str] | None = None, limit: int = 3) -> list[str]:
+    """Подсказки под компанию и новость в порядке роли; не хватает — общие вопросы роли."""
+    asked = asked or set()
+    cand = _candidates(insight, company)
+    order = ROLE_ORDER.get(role, ROLE_ORDER["owner"])
+    picked = [cand[k] for k in order if k in cand and cand[k] not in asked]
+    picked += [s for s in suggestions(role, asked | set(picked)) if s not in picked]
+    return picked[:limit]
 
 
 def suggestions(role: str, asked: set[str] | None = None) -> list[str]:
@@ -277,6 +340,6 @@ def answer(insight: dict, company: dict, question: str, user_id: str, role: str)
                                  "Спросите про риски, расчет в рублях, контрагентов или позицию банка.", "refused": True}
     out = base | {k: v for k, v in result.items() if k not in ("insight_id", "question")}
     out["turn_id"] = _save(insight, user_id, out)
-    out["suggestions"] = suggestions(role, asked)
+    out["suggestions"] = context_suggestions(insight, company, role, asked)
     out["history_summary"] = summary(turns + [out])
     return out

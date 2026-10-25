@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { errorText } from "@/lib/errors";
+import { useAnimatedNumber } from "@/lib/motion";
 import type { ScenarioKind, ScenarioResponse } from "@/lib/types";
 import { Card } from "./ui";
 import styles from "@/components/ScenarioPanel.module.scss";
@@ -57,6 +58,7 @@ export default function ScenarioPanel({ companyId, initial = "key_rate" }: { com
 
   const pick = (k: ScenarioKind) => { setKind(k); setShock(KINDS.find((x) => x.kind === k)!.start); setOwn({}); };
   const r = data?.result;
+  const effect = useAnimatedNumber(r?.effect_rub ?? 0);
   return (
     <Card title="Что если: во что это обойдется" className={styles.panel}>
       <div className={styles.tabs} role="tablist" aria-label="Сценарий">
@@ -75,7 +77,7 @@ export default function ScenarioPanel({ companyId, initial = "key_rate" }: { com
       {r && (
         <div className={styles.result} data-testid="scenario-result">
           <strong className={r.effect_rub < 0 ? styles.loss : r.effect_rub > 0 ? styles.gain : undefined}>
-            {r.effect_rub === 0 ? "0 ₽" : `${r.effect_rub < 0 ? "−" : "+"}${money(r.effect_rub)}`} в год
+            {Math.round(effect) === 0 ? "0 ₽" : `${effect < 0 ? "−" : "+"}${money(effect)}`} в год
           </strong>
           <p>{r.text}</p>
           <p className={styles.formula}>Формула: {r.formula}</p>

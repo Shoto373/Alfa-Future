@@ -27,6 +27,10 @@ export default function Chat({ insightId, suggestions }: { insightId: string; su
   useEffect(() => {
     if (!open || loaded.current) return;
     loaded.current = true;
+    // Подсказки под компанию, новость и роль — с сервера; общие из разбора остаются, пока они не пришли.
+    api.dialogSuggestions(insightId).then((r) => {
+      if (Array.isArray(r.suggestions) && r.suggestions.length) setNext((n) => n ?? r.suggestions);
+    }).catch(() => { /* остаются общие подсказки */ });
     api.dialog(insightId).then((turns) => {
       if (!Array.isArray(turns)) return;  // неожиданный ответ — чат работает без истории, а не падает
       setHistory((h) => (h.length ? h : turns));

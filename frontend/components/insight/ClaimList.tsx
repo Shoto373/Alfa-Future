@@ -30,13 +30,15 @@ function SourceRefs({ ids, index }: { ids: string[]; index: SourceIndex }) {
 }
 
 /** Утверждения разбора с меткой происхождения («факт новости», «позиция банка», «вывод AI»…) и сносками. */
-export default function ClaimList({ items, index, empty = "Нет данных" }: { items: Claim[]; index: SourceIndex; empty?: string }) {
+export default function ClaimList({ items, index, empty = "Нет данных", anchor }: {
+  items: Claim[]; index: SourceIndex; empty?: string; anchor?: string;
+}) {
   const rules = useContext(RulesMode);
   if (!items.length) return <p className={styles.muted}>{empty}</p>;
   return (
     <ul className={common.claims}>
       {items.map((c, i) => (
-        <li key={i}>
+        <li key={i} id={anchor ? `${anchor}-${i}` : undefined}>
           {/* Подряд одинаковые метки («Вывод AI», «Данные компании»…) — одна, у первого вывода группы;
               у остальных метка невидима и только держит отступ, чтобы текст оставался выровнен. */}
           <span className={i > 0 && items[i - 1].origin === c.origin ? styles.repeatOrigin : undefined}

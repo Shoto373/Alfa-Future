@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { date, RELATION_LABEL } from "@/lib/format";
+import { cardReasons } from "@/lib/reasons";
 import type { FeedItem } from "@/lib/types";
 import { EffectBadge, Score } from "./ui";
 import styles from "@/components/NewsCard.module.scss";
@@ -33,7 +34,7 @@ export default function NewsCard({ item, compact = false, read }: { item: FeedIt
       <h3><Link href={`/pulse/n/${encodeURIComponent(news.news_id)}`}>{news.title}</Link></h3>
       {!compact && <p className={styles.lead}>{news.lead}</p>}
       <div className={styles.reasons} aria-label="Почему эта новость важна для вас">
-        {relevance.reasons.slice(0, compact ? 2 : 4).map((r, i) => (
+        {cardReasons(relevance.reasons, compact ? 2 : 4).map((r, i) => (
           <span key={i} className={`${styles.reason} ${REASON_STYLES[r.origin] ?? ""}`} title={r.text}>{r.text}</span>
         ))}
       </div>
