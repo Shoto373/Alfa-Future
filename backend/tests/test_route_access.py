@@ -42,6 +42,7 @@ ROUTES = {
     ("GET", "/api/v1/insights/{insight_id}"): (None, {403, 404}),
     ("POST", "/api/v1/insights/{insight_id}/questions"): ({"question": "Что с долгом?"}, {403, 404}),
     ("GET", "/api/v1/insights/{insight_id}/questions"): (None, {403, 404}),
+    ("GET", "/api/v1/insights/{insight_id}/suggestions"): (None, {403, 404}),
     ("POST", "/api/v1/insights/{insight_id}/questions/{turn_id}/rating"): ({"rating": 1}, {403, 404}),
     ("POST", "/api/v1/feedback"): ({"rating": 1}, {403, 404}),
     ("GET", "/api/v1/insights/{insight_id}/offers"): (None, {403, 404}),

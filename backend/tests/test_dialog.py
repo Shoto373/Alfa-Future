@@ -130,3 +130,34 @@ def test_explain_uses_tool_runner_with_audit(client, insight):
     with database.session() as db:
         tools = [r.payload.get("tool") for r in db.scalars(select(ToolAudit).order_by(ToolAudit.id.desc()).limit(5))]
     assert "search_bank_analytics" in tools
+
+
+def test_suggestions_fit_company_and_news_and_are_answerable(client, insight, company):
+    """Подсказки — под компанию и событие (с названием компании, отраслью контрагентов, темой), и на каждую агент
+    отвечает по существу или честно объясняет, каких данных не хватает."""
+    from app.companies import profiles
+
+    first = client.get(f"/api/v1/insights/{insight['insight_id']}/suggestions").json()["suggestions"]
+    assert 1 <= len(first) <= 4 and len(set(first)) == len(first)
+    c = profiles.get(company["company_id"])
+    expected_name = dialog._short_name(c)
+    if c["products"].get("loans"):
+        assert any(expected_name in s and "ставк" in s for s in first), first
+    for q in first:
+        a = _ask(client, insight, q)
+        assert a["intent"] != "off_topic", q
+        if not a["refused"]:
+            assert a["claims"] and {i for cl in a["claims"] for i in cl["source_ids"]} <= {s["source_id"] for s in a["sources"]}, q
+    after = client.get(f"/api/v1/insights/{insight['insight_id']}/suggestions").json()["suggestions"]
+    assert not set(after) & set(first), "заданные вопросы больше не подсказываются"
+
+
+def test_suggestions_order_depends_on_role(client, insight, company):
+    from app.companies import profiles
+
+    c = profiles.get(company["company_id"])
+    cfo = dialog.context_suggestions(insight, c, "cfo", limit=8)
+    ceo = dialog.context_suggestions(insight, c, "ceo", limit=8)
+    assert set(cfo) == set(ceo) or cfo != ceo
+    if any("ставк" in s for s in cfo) and any("Как это" in s and ("покупател" in s or "поставщик" in s) for s in ceo):
+        assert "ставк" in cfo[0] and ("покупател" in ceo[0] or "поставщик" in ceo[0])

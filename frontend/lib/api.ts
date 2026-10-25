@@ -133,6 +133,8 @@ export const api = {
     request<Answer>(`/api/v1/insights/${insightId}/questions`, json("POST", { question }), { timeoutMs: 90_000 }),
   // Диалог по разбору (SPR4-05): история реплик пользователя и оценка ответа.
   dialog: (insightId: string) => request<DialogTurn[]>(`/api/v1/insights/${cid(insightId)}/questions`),
+  dialogSuggestions: (insightId: string) =>
+    request<{ suggestions: string[] }>(`/api/v1/insights/${cid(insightId)}/suggestions`),
   rateAnswer: (insightId: string, turnId: number, rating: 1 | -1) =>
     request<{ ok: boolean }>(`/api/v1/insights/${cid(insightId)}/questions/${turnId}/rating`, json("POST", { rating })),
   feedback: (insightId: string, rating: 1 | -1, section: string, comment?: string) =>
