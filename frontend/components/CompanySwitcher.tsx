@@ -44,8 +44,8 @@ export default function CompanySwitcher() {
         {many && (
           <button type="button" className={`${styles.switcherBtn} ${common.iconBtn}`} onClick={() => setOpen((v) => !v)} aria-expanded={open}
             aria-label="Сменить организацию" title="Сменить организацию">
+            <Icon name="swap" size={16} />
             <span className={styles.switcherBtnText}>Сменить</span>
-            <Icon name="chevron" size={16} />
           </button>
         )}
       </div>

@@ -21,20 +21,52 @@ export default function Clock() {
   const m = now.getMinutes();
   const hourAngle = ((h % 12) + m / 60) * 30;
   const minuteAngle = m * 6;
-  const text = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  const hh = String(h).padStart(2, "0");
+  const mm = String(m).padStart(2, "0");
+  const text = `${hh}:${mm}`;
+  const date = now.toLocaleDateString("ru-RU", { weekday: "short", day: "numeric", month: "short" }).replace(/\./g, "");
 
   return (
-    <div className={styles.clock} role="timer" aria-label={`Сейчас ${text}`}>
-      <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden>
-        <circle cx="16" cy="16" r="14.5" className={styles.face} />
-        {[0, 90, 180, 270].map((a) => (
-          <line key={a} x1="16" y1="3.8" x2="16" y2="5.6" className={styles.tick} transform={`rotate(${a} 16 16)`} />
-        ))}
-        <line x1="16" y1="16" x2="16" y2="9.6" className={`${styles.hand} ${styles.hour}`} style={{ "--a": `${hourAngle}deg` } as CSSProperties} />
-        <line x1="16" y1="16" x2="16" y2="6.4" className={`${styles.hand} ${styles.minute}`} style={{ "--a": `${minuteAngle}deg` } as CSSProperties} />
-        <circle cx="16" cy="16" r="1.7" className={styles.pin} />
-      </svg>
-      <span className={styles.time}>{text}</span>
+    <div className={styles.clock} role="timer" aria-label={`Сейчас ${text}, ${date}`}>
+      <span className={styles.dial}>
+        <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden>
+          {Array.from({ length: 12 }, (_, i) => {
+            const major = i % 3 === 0;
+            return (
+              <line
+                key={i}
+                x1="16"
+                y1={major ? 3.6 : 3.9}
+                x2="16"
+                y2={major ? 6.2 : 5.4}
+                className={major ? styles.tickMajor : styles.tick}
+                transform={`rotate(${i * 30} 16 16)`}
+              />
+            );
+          })}
+          <circle cx="16" cy="2.6" r="0.9" className={styles.marker} />
+          <polygon
+            points="14.7,17.2 16,9.6 17.3,17.2"
+            className={`${styles.hand} ${styles.hour}`}
+            style={{ "--a": `${hourAngle}deg` } as CSSProperties}
+          />
+          <polygon
+            points="15.3,17.6 16,5.8 16.7,17.6"
+            className={`${styles.hand} ${styles.minute}`}
+            style={{ "--a": `${minuteAngle}deg` } as CSSProperties}
+          />
+          <circle cx="16" cy="16" r="2" className={styles.pin} />
+          <circle cx="16" cy="16" r="0.8" className={styles.pinDot} />
+        </svg>
+      </span>
+      <span className={styles.digits}>
+        <span className={styles.time}>
+          {hh}
+          <span className={styles.colon}>:</span>
+          {mm}
+        </span>
+        <span className={styles.date}>{date}</span>
+      </span>
     </div>
   );
 }

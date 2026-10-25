@@ -30,17 +30,36 @@
 .switcherBtn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   width: auto;
-  padding: 8px 10px;
-  border-radius: 10px;
+  height: 32px;
+  margin-left: 4px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--red-dark);
-  background: var(--red-soft);
+  color: var(--ink-2);
+  background: var(--card);
+  transition: border-color .15s, color .15s;
+
+  svg {
+    color: var(--muted);
+    transition: color .15s;
+  }
+
+  &:hover {
+    border-color: var(--red);
+    color: var(--red-dark);
+
+    svg {
+      color: var(--red);
+    }
+  }
 
   @media (max-width: 860px) {
-    padding: 8px;
+    padding: 0 8px;
+    border: 0;
     background: none;
   }
 }
