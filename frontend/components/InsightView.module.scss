@@ -73,10 +73,28 @@
   align-items: center;
 }
 
+@keyframes sectionIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+// Разделы разбора собираются по очереди: «что произошло» → «почему важно» → последствия → действия.
 .insightGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
+
+  > * {
+    animation: sectionIn .42s var(--ease-out) backwards;
+  }
+
+  @for $i from 1 through 6 {
+    > :nth-child(#{$i}) {
+      animation-delay: #{($i - 1) * 70}ms;
+    }
+  }
 }
 
 .span2 {

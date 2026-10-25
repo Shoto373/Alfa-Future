@@ -69,6 +69,29 @@ code {
   }
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
+::selection {
+  background: var(--red-soft);
+  color: var(--red-dark);
+}
+
+// «Уменьшить движение» в системе — анимации и плавная прокрутка выключаются везде.
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}
+
 a:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 2px;
