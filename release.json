@@ -1,9 +1,9 @@
 {
-  "commit": "05524c2d931b395b77b09688bb5f93a26f74161b",
-  "short": "05524c2",
-  "subject": "fix: налог на прибыль снижается при росте процентных расходов; чище UI",
+  "commit": "6ce4e5a3dc1f28151197ada0036fb07baa5d6414",
+  "short": "6ce4e5a",
+  "subject": "fix: профиль вровень с «Моими компаниями», отступ у «Разобрать», граф контрагентов строится в фоне",
   "author": "Egor",
-  "url": "https://github.com/dvaJf/alfa/commit/05524c2d931b395b77b09688bb5f93a26f74161b",
-  "run_url": "https://github.com/dvaJf/alfa/actions/runs/40227151154",
-  "built_at": "2026-10-25T19:47:02+00:00"
+  "url": "https://github.com/dvaJf/alfa/commit/6ce4e5a3dc1f28151197ada0036fb07baa5d6414",
+  "run_url": "https://github.com/dvaJf/alfa/actions/runs/40236510092",
+  "built_at": "2026-10-25T21:45:38+00:00"
 }
