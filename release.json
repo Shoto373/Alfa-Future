@@ -1,9 +1,9 @@
 {
-  "commit": "ced771bfe03fb665a540d66db5a7ccc2bcd98baa",
-  "short": "ced771b",
-  "subject": "Feat/UI motion (#30)",
-  "author": "AZ",
-  "url": "https://github.com/dvaJf/alfa/commit/ced771bfe03fb665a540d66db5a7ccc2bcd98baa",
-  "run_url": "https://github.com/dvaJf/alfa/actions/runs/40223796074",
-  "built_at": "2026-10-25T19:06:57+00:00"
+  "commit": "05524c2d931b395b77b09688bb5f93a26f74161b",
+  "short": "05524c2",
+  "subject": "fix: налог на прибыль снижается при росте процентных расходов; чище UI",
+  "author": "Egor",
+  "url": "https://github.com/dvaJf/alfa/commit/05524c2d931b395b77b09688bb5f93a26f74161b",
+  "run_url": "https://github.com/dvaJf/alfa/actions/runs/40227151154",
+  "built_at": "2026-10-25T19:47:02+00:00"
 }
