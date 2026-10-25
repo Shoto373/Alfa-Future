@@ -1,0 +1,83 @@
+.clock {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  box-sizing: border-box;
+  padding: 0 14px 0 6px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  color: var(--ink);
+}
+
+.face {
+  fill: var(--bg);
+  stroke: var(--line);
+  stroke-width: 1.5;
+}
+
+.tick {
+  stroke: var(--muted);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+}
+
+.hand {
+  stroke: var(--ink);
+  stroke-linecap: round;
+  transform-box: view-box;
+  transform-origin: 16px 16px;
+  transform: rotate(var(--a));
+  transition: transform .6s ease;
+  // Полный оборот при загрузке: стрелка идет от (угол − 360°) к реальному углу.
+  animation: sweep 1.4s cubic-bezier(.22, .8, .25, 1) both;
+}
+
+.hour {
+  stroke-width: 2.4;
+  animation-duration: 1.7s;
+}
+
+.minute {
+  stroke: var(--red);
+  stroke-width: 1.8;
+}
+
+.pin {
+  fill: var(--ink);
+}
+
+.time {
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .02em;
+
+  @media (max-width: 700px) {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .clock {
+    padding: 0 6px;
+  }
+}
+
+@keyframes sweep {
+  from {
+    transform: rotate(calc(var(--a) - 360deg));
+  }
+
+  to {
+    transform: rotate(var(--a));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hand {
+    animation: none;
+    transition: none;
+  }
+}

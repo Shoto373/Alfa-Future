@@ -28,7 +28,27 @@
 }
 
 .switcherBtn {
-  padding: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: auto;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--red-dark);
+  background: var(--red-soft);
+
+  @media (max-width: 860px) {
+    padding: 8px;
+    background: none;
+  }
+}
+
+.switcherBtnText {
+  @media (max-width: 860px) {
+    display: none;
+  }
 }
 
 .switcherText {

@@ -1,0 +1,249 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  scroll-margin-top: 170px;
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 24px 28px 26px;
+  box-shadow: var(--shadow);
+  min-width: 0;
+
+  h2 {
+    margin: 0;
+  }
+
+  p {
+    margin: 0;
+  }
+}
+
+.lead {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.caption {
+  margin: 24px 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--red);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 64px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+
+  &:last-child {
+    border-bottom: 0;
+  }
+
+  @media (max-width: 520px) {
+    flex-wrap: wrap;
+  }
+}
+
+label.row {
+  cursor: pointer;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 180px;
+
+  @media (max-width: 520px) {
+    flex-basis: 140px;
+  }
+
+  b {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  small {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.35;
+  }
+}
+
+.control {
+  height: 42px;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0 12px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  margin: 0;
+  transition: border-color .15s;
+
+  &:hover:not(:disabled) {
+    border-color: #c9ced6;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--red);
+    outline-offset: 2px;
+    border-color: var(--red);
+  }
+
+  &:disabled {
+    background: var(--bg);
+    color: var(--muted);
+    cursor: not-allowed;
+  }
+}
+
+.range2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.switch {
+  appearance: none;
+  flex: none;
+  position: relative;
+  width: 44px;
+  height: 26px;
+  margin: 0;
+  border-radius: 999px;
+  background: #c9ced6;
+  cursor: pointer;
+  transition: background .18s;
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--white);
+    box-shadow: 0 1px 3px rgba(11, 31, 53, .3);
+    transition: transform .18s;
+  }
+
+  &:checked {
+    background: var(--red);
+  }
+
+  &:checked::after {
+    transform: translateX(18px);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--red);
+    outline-offset: 3px;
+  }
+}
+
+.slider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 1 280px;
+  min-width: 0;
+
+  @media (max-width: 520px) {
+    flex-basis: 100%;
+  }
+}
+
+.range {
+  appearance: none;
+  flex: 1;
+  min-width: 80px;
+  height: 6px;
+  margin: 0;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--red) var(--fill, 50%), var(--line) var(--fill, 50%));
+  cursor: pointer;
+
+  &::-webkit-slider-thumb {
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--white);
+    border: 3px solid var(--red);
+    box-shadow: 0 1px 3px rgba(11, 31, 53, .25);
+  }
+
+  &::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--white);
+    border: 3px solid var(--red);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--red);
+    outline-offset: 6px;
+  }
+}
+
+.pill {
+  flex: none;
+  min-width: 78px;
+  text-align: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--red-soft);
+  color: var(--red-dark);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.status {
+  color: var(--ink-2);
+  flex: 1 1 200px;
+}

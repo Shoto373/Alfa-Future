@@ -10,8 +10,8 @@ test("уведомления: настройки, тестовая сводка,
     .find((c) => !c.claimed)!;
   expect((await page.request.post(`${api}/api/v1/companies/${free.company_id}/claim`, { data: { role: "cfo" } })).ok()).toBeTruthy();
 
-  await page.goto("/settings/notifications");
-  await expect(page.getByRole("heading", { name: /^Сводки и алерты/ })).toBeVisible();
+  await page.goto("/profile");
+  await expect(page.getByRole("heading", { name: /^Уведомления · / })).toBeVisible();
   await page.getByLabel("Порог важности").fill("90");
   await page.getByRole("button", { name: "Сохранить" }).click();
   await expect(page.getByRole("status")).toContainText("Настройки сохранены");

@@ -146,7 +146,7 @@ def remove_member(company_id: str, member_id: str, user: dict = Depends(current_
 
 @router.delete("/companies/{company_id}", status_code=204, response_class=Response, responses=ERRORS)
 def disband_company(company_id: str, m: dict = Depends(require_member)) -> Response:
-    if not m["is_founder"]:
-        raise ApiError("FORBIDDEN")
+    if m["role"] != "owner":  # расформировать может только собственник
+        raise ApiError("FORBIDDEN", "Расформировать компанию может только собственник")
     store.disband(company_id)
     return Response(status_code=204)
