@@ -16,16 +16,76 @@
   composes: countRed from "../../styles/common.module.scss";
 }
 
+// Красное пятно медленно «дышит» само; при наведении мышью плавно идет за курсором (lib/glow.ts).
+@keyframes glowDrift {
+  0% {
+    --gx: 70%;
+    --gy: 108%;
+  }
+
+  50% {
+    --gx: 86%;
+    --gy: 96%;
+  }
+
+  100% {
+    --gx: 62%;
+    --gy: 118%;
+  }
+}
+
+@keyframes glowDriftStory {
+  0% {
+    --gx: 40%;
+    --gy: 104%;
+  }
+
+  50% {
+    --gx: 62%;
+    --gy: 96%;
+  }
+
+  100% {
+    --gx: 48%;
+    --gy: 112%;
+  }
+}
+
 .hero {
+  --gx: 78%;
+  --gy: 110%;
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr) minmax(0, .95fr);
   gap: 12px;
   border-radius: 28px;
   padding: 12px;
-  background: radial-gradient(60% 90% at 78% 110%, rgba(239, 49, 36, .55), transparent 70%),
+  background: radial-gradient(60% 90% at var(--gx) var(--gy), rgba(239, 49, 36, .55), transparent 70%),
     radial-gradient(40% 60% at 55% 0%, rgba(239, 49, 36, .18), transparent 70%),
     var(--dark);
   color: var(--white);
+  transition: --gx .9s var(--ease-out), --gy .9s var(--ease-out);
+  animation: glowDrift 12s ease-in-out infinite alternate;
+
+  @media (hover: hover) {
+    &:hover {
+      animation: none;
+    }
+  }
+}
+
+// Внутренние панели героя при наведении чуть всплывают и светлеют.
+.heroMain,
+.heroList,
+.heroPromo {
+  transition: transform var(--dur) var(--ease-out), background var(--dur), box-shadow var(--dur);
+
+  @media (hover: hover) {
+    &:hover {
+      transform: translateY(-3px);
+      background: rgba(255, 255, 255, .085);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, .35);
+    }
+  }
 }
 
 .heroMain {
@@ -250,6 +310,29 @@
   overflow: visible;
 }
 
+// Световой импульс бежит по линии пульса; при наведении — быстрее.
+@keyframes pulseRun {
+  from {
+    stroke-dashoffset: 100;
+  }
+
+  to {
+    stroke-dashoffset: -14;
+  }
+}
+
+.promoRun {
+  stroke-dasharray: 14 100;
+  stroke-linecap: round;
+  opacity: .9;
+  filter: drop-shadow(0 0 4px #fff);
+  animation: pulseRun 2.8s cubic-bezier(.45, 0, .25, 1) infinite;
+}
+
+.heroPromo:hover .promoRun {
+  animation-duration: 1.4s;
+}
+
 .summaryTitle {
   margin: 0;
   padding: 6px 2px 0;
@@ -264,6 +347,18 @@
   grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr) minmax(0, .95fr);
   gap: 20px;
   align-items: stretch;
+
+  // Карточки сводки при наведении чуть всплывают (только мышь).
+  > * {
+    transition: transform var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
+  }
+
+  @media (hover: hover) {
+    > *:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-hover);
+    }
+  }
 }
 
 .topList {
@@ -349,7 +444,19 @@
   flex-direction: column;
   gap: 12px;
   min-width: 0;
-  background: radial-gradient(90% 55% at 50% 105%, rgba(239, 49, 36, .85), transparent 75%), #1a0507;
+  --gx: 50%;
+  --gy: 105%;
+  background: radial-gradient(90% 55% at var(--gx) var(--gy), rgba(239, 49, 36, .85), transparent 75%), #1a0507;
+  transition: --gx .9s var(--ease-out), --gy .9s var(--ease-out), transform var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out);
+  animation: glowDriftStory 10s ease-in-out infinite alternate;
+
+  @media (hover: hover) {
+    &:hover {
+      animation: none;
+      box-shadow: 0 16px 40px rgba(239, 49, 36, .25);
+    }
+  }
 
   strong {
     font-size: 18px;

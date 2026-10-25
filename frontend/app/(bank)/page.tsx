@@ -5,6 +5,7 @@ import Gauge from "@/components/home/Gauge";
 import HomeHero, { type TopicRow } from "@/components/home/HomeHero";
 import { EmptyState, Icon, Score, Skeleton } from "@/components/ui";
 import { date, IMPORTANT_SCORE as IMPORTANT } from "@/lib/format";
+import { glow } from "@/lib/glow";
 import { useFeedWithTopics } from "@/lib/hooks";
 import { useRead } from "@/lib/notifications";
 import { useSession } from "@/lib/session";
@@ -72,7 +73,7 @@ export default function HomePage() {
             : "Непрочитанных новостей нет"}</p>
         </section>
 
-        <section className={styles.story} aria-label="Недавно прочитанное">
+        <section className={styles.story} aria-label="Недавно прочитанное" {...glow}>
           <strong>Недавно прочитанное</strong>
           <span className={styles.storyLead}>Можно вернуться к разбору</span>
           {recent.length === 0 ? (

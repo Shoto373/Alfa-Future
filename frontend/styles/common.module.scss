@@ -191,9 +191,9 @@
   animation: pageIn var(--dur) var(--ease-out) backwards;
 }
 
-// Карточки страницы появляются по очереди — первые восемь, дальше без задержки.
-.page > .card,
-.page > section {
+// Карточки страницы появляются по очереди — первые восемь, дальше без задержки. :where — нулевой вес селектора:
+// собственная анимация компонента (например, «дыхание» свечения на главной) всегда важнее общей.
+:where(.page) > :where(.card, section) {
   animation: rise var(--dur) var(--ease-out) backwards;
 
   @for $i from 1 through 8 {

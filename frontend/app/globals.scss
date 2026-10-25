@@ -73,6 +73,19 @@ html {
   scroll-behavior: smooth;
 }
 
+// Позиция красного свечения темных карточек главной: зарегистрированные свойства плавно анимируются и переходят.
+@property --gx {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 50%;
+}
+
+@property --gy {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 100%;
+}
+
 ::selection {
   background: var(--red-soft);
   color: var(--red-dark);
