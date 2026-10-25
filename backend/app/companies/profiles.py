@@ -16,7 +16,7 @@ from app import config, database
 from sqlalchemy import select, func
 from sqlalchemy.dialects.postgresql import insert
 from app.models import Company
-from app.companies import etl, extra, names
+from app.companies import etl, extra, names, supply
 from app.companies.sectors import SECTOR_NAMES, SECTOR_SENSITIVITY
 from app.domain_config import runtime
 
@@ -80,8 +80,9 @@ def _signature(data_dir) -> str | None:
     files = [data_dir / n for n in ("df_Uid_data_hack.csv", "df_Uid_payment_hack.csv", "df_Fid_Uid_link_hack.csv")]
     if not files[0].exists():
         return None
-    # Версия в подписи: при изменении правил ETL (v3 — доли выручки групп) профили пересобираются сами.
-    return "v3|" + str((data_dir / "SYNTHETIC").is_file()) + "|" + "|".join(
+    # Версия в подписи: при изменении правил ETL (v3 — доли выручки групп, v4 — известная часть платежей
+    # контрагентов и by_sector без «unknown») профили пересобираются сами.
+    return "v4|" + str((data_dir / "SYNTHETIC").is_file()) + "|" + "|".join(
         f"{f.name}:{f.stat().st_size}:{f.stat().st_mtime_ns}" for f in files if f.exists())
 
 
@@ -193,6 +194,35 @@ exposures.cache_clear = _clear_exposures  # type: ignore[attr-defined]
 runtime.on_change(_clear_exposures)
 
 
+def _supply_exposures(c: dict, add) -> None:
+    """Признаки цепочки поставок: отрасли поставщиков и покупателей и концентрация платежей на одном контрагенте.
+
+    Доли — от известной части платежей, вес умножен на уверенность по ее размеру (supply.py). Знак — чувствительность
+    отрасли контрагента; чем он отличается для поставщиков и покупателей, решает composer (поле side): проблема
+    покупателя — риск выручки и дебиторки, проблема поставщика — риск перебоев поставок и роста закупочных цен."""
+    for link in supply.links(c):
+        side = link["side"]
+        weight = round(0.7 * link["share"] * link["confidence"], 3)
+        if weight <= 0:
+            continue
+        for topic, by_sector in SECTOR_SENSITIVITY.items():
+            s = by_sector.get(link["sector"])
+            if s:
+                add(topic, weight, s.sign, f"{side}.by_sector",
+                    {"sector": link["sector"], "share": round(link["share"], 3), "known_share": round(link["known_share"], 3)},
+                    f"{supply.share_text(link)} — отрасль «{SECTOR_NAMES.get(link['sector'], link['sector'])}»: {s.why}",
+                    "payments", side)
+    top1 = c["suppliers"]["top1_share"]
+    if top1 and top1 > 0.5:
+        add("corporate_finance", 0.5, -1, "suppliers.top1_share", round(top1, 3),
+            f"{round(top1 * 100)}% платежей поставщикам уходит одному контрагенту — высокая концентрация цепочки поставок", "payments")
+    top1 = c["customers"]["top1_share"]
+    if top1 and top1 > 0.5:
+        add("corporate_finance", 0.5, -1, "customers.top1_share", round(top1, 3),
+            f"{round(top1 * 100)}% поступлений от покупателей приходит от одного контрагента — высокая концентрация выручки",
+            "payments")
+
+
 @lru_cache(maxsize=2048)
 def _base_exposures(company_id: str) -> tuple[dict, ...]:
     """Чувствительность компании к темам новостей с обоснованием по признакам."""
@@ -202,9 +232,10 @@ def _base_exposures(company_id: str) -> tuple[dict, ...]:
     p = c["products"]
     out: list[dict] = []
 
-    def add(topic: str, weight: float, sign: int, feature: str, value, why: str, origin: str = "client_data"):
+    def add(topic: str, weight: float, sign: int, feature: str, value, why: str, origin: str = "client_data",
+            side: str | None = None):
         out.append({"topic": topic, "weight": weight, "sign": sign, "feature": feature, "value": value,
-                    "why": why, "origin": origin})
+                    "why": why, "origin": origin, **({"side": side} if side else {})})
 
     for topic, by_sector in SECTOR_SENSITIVITY.items():
         s = by_sector.get(c["sector"])
@@ -242,17 +273,7 @@ def _base_exposures(company_id: str) -> tuple[dict, ...]:
     if (c.get("revenue") or 0) > 50e9:
         add("gdp_industry", 0.4, 1, "revenue", c["revenue"], f"Выручка {_bn(c['revenue'])}: масштаб делает компанию зависимой от общей динамики экономики")
 
-    for side, label in (("suppliers", "поставщиков"), ("customers", "покупателей")):
-        for item in c[side]["by_sector"]:
-            sector, share = item["sector"], item["share"]
-            if sector in ("unknown", c["sector"]) or share < 0.15:
-                continue
-            for topic, by_sector in SECTOR_SENSITIVITY.items():
-                s = by_sector.get(sector)
-                if s:
-                    add(topic, round(0.7 * share, 3), s.sign, f"{side}.by_sector", {"sector": sector, "share": round(share, 3)},
-                        f"{round(share * 100)}% платежей {label} — отрасль «{SECTOR_NAMES.get(sector, sector)}»: {s.why}",
-                        "payments")
+    _supply_exposures(c, add)
     # Группа компаний: отрасли других участников группы тоже делают событие значимым.
     g = group(c)
     if g:
@@ -269,8 +290,4 @@ def _base_exposures(company_id: str) -> tuple[dict, ...]:
             add("gdp_industry", 0.4, 1, "group", g["members"],
                 f"Совокупная выручка группы {_bn(g['revenue'])}: масштаб группы связывает ее с общей динамикой экономики", "group")
 
-    top1 = c["suppliers"]["top1_share"]
-    if top1 and top1 > 0.5:
-        add("corporate_finance", 0.5, -1, "suppliers.top1_share", round(top1, 3),
-            f"{round(top1 * 100)}% платежей поставщикам уходит одному контрагенту — высокая концентрация цепочки поставок", "payments")
     return tuple(out)

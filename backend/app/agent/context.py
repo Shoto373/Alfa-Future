@@ -3,7 +3,7 @@
 
 from app import llm
 from app.agent import composer, evidence, prompts, validators
-from app.companies import extra as company_extra
+from app.companies import extra as company_extra, supply
 from app.companies.sectors import SECTOR_NAMES
 from app.news import entities
 from app.text import INSTRUCTION
@@ -15,7 +15,8 @@ FEATURE_LABELS = {
     "products.deposits": "Депозиты", "products.factoring": "Факторинг", "products.guarantees": "Банковские гарантии",
     "workers_fns": "Численность (ФНС)", "fts_countries": "Страны ВЭД (ФТС)", "revenue": "Выручка",
     "suppliers.by_sector": "Отрасли поставщиков", "customers.by_sector": "Отрасли покупателей",
-    "suppliers.top1_share": "Концентрация поставщиков", "market": "Место в отрасли (выборка)",
+    "suppliers.top1_share": "Концентрация поставщиков", "customers.top1_share": "Концентрация покупателей",
+    "market": "Место в отрасли (выборка)",
     "group": "Группа компаний",
     **{f"extra.{k}": v["label"] for k, v in company_extra.SHARES.items()},
 }
@@ -177,14 +178,24 @@ def grounding_text(ctx: dict) -> str:
     parts += [str(m.get("okved_rank")), str(m.get("okved_peers")), c.get("okved_code") or "", composer.pct(m.get('okved_share') or 0),
               f"{(c.get('revenue') or 0) / 1e9:.1f}", c.get("workers_fns") or ""]
     parts += [composer.pct(s['share'], 0) for side in ("suppliers", "customers") for s in c[side]["by_sector"]]
-    if c["suppliers"]["top1_share"]:
-        parts.append(composer.pct(c['suppliers']['top1_share'], 0))
+    for side in ("suppliers", "customers"):  # доли известной части платежей и доля оборота с известной отраслью
+        view = supply.side_view(c[side])
+        parts += [composer.pct(i['share_known'], 0) for i in view["items"]] + [composer.pct(view["known_share"], 0)]
+        if c[side]["top1_share"]:
+            parts.append(composer.pct(c[side]['top1_share'], 0))
     g = c.get("group") or {}
     if g.get("revenue"):
         parts += [f"{g['revenue'] / 1e9:.1f}", str(g.get("members"))]
         parts += [f"{x['share'] * 100:.0f}%" for x in g.get("sector_shares", [])]
     parts += [c["company_id"], company_extra.text(c.get("extra"))]
     return " ".join(parts)
+
+
+def _sector_shares(d: dict) -> str:
+    """Отрасли контрагентов: доли известной части платежей (неизвестная часть названа отдельно, а не отраслью)."""
+    view = supply.side_view(d)
+    shares = ", ".join(f"{SECTOR_NAMES.get(i['sector'], i['sector'])} {i['share_known']:.0%}" for i in view["items"][:3])
+    return f"{shares} (от известной части, {view['known_share']:.0%} оборота)" if shares else "нет данных"
 
 
 def features_used(ctx: dict, draft: dict) -> list[dict]:
@@ -199,9 +210,10 @@ def features_used(ctx: dict, draft: dict) -> list[dict]:
         "products.guarantees": "есть" if c["products"].get("guarantees") else "нет",
         "workers_fns": c.get("workers_fns") or "н/д", "fts_countries": ", ".join(c["fts_countries"]) or "нет данных",
         "revenue": f"{(c.get('revenue') or 0) / 1e9:.1f} млрд ₽",
-        "suppliers.by_sector": ", ".join(f"{SECTOR_NAMES.get(s['sector'], 'вне выборки')} {s['share']:.0%}" for s in c["suppliers"]["by_sector"][:3]) or "нет данных",
-        "customers.by_sector": ", ".join(f"{SECTOR_NAMES.get(s['sector'], 'вне выборки')} {s['share']:.0%}" for s in c["customers"]["by_sector"][:3]) or "нет данных",
+        "suppliers.by_sector": _sector_shares(c["suppliers"]),
+        "customers.by_sector": _sector_shares(c["customers"]),
         "suppliers.top1_share": f"{(c['suppliers']['top1_share'] or 0):.0%}",
+        "customers.top1_share": f"{(c['customers']['top1_share'] or 0):.0%}",
         "market": f"№{c['market'].get('okved_rank')} из {c['market'].get('okved_peers')} по ОКВЭД {c['okved_code']}",
         **{f"extra.{k}": company_extra.fmt(v) for k, v in ((c.get("extra") or {}).get("shares") or {}).items()},
         "group": (f"{(c.get('group') or {}).get('members')} компаний, выручка "
