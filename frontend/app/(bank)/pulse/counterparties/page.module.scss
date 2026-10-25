@@ -1,67 +1,595 @@
-// Контрагенты (SPR4-01).
-.events,
-.chains {
+// Контрагенты (SPR4-01): объяснение, сводка, события, список связей, второй уровень.
+.page {
+  gap: 16px;
+}
+
+.page ul,
+.page ol {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 
-.events li {
+// Блок «Как это работает»: единственный темный акцент страницы
+.how {
+  position: relative;
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  color: var(--white);
+  background: radial-gradient(70% 140% at 100% 120%, rgba(239, 49, 36, .55), transparent 70%), #1a0507;
+  overflow: hidden;
+}
+
+.howHead {
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+
+  h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 17px;
+  }
+}
+
+.howToggle {
+  display: inline-flex;
+  align-items: center;
   gap: 4px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--line);
+  border: 0;
+  background: rgba(255, 255, 255, .12);
+  color: var(--white);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
 
-  a {
-    color: var(--ink);
-    text-decoration: none;
+  &:hover {
+    background: rgba(255, 255, 255, .2);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--white);
+    outline-offset: 2px;
   }
 }
 
-.chain {
-  font-size: 14px;
-  background: #fff1d6;
-  color: #6b4100;
-  border-radius: 8px;
-  padding: 4px 8px;
-  align-self: flex-start;
+.flip {
+  display: inline-flex;
+  transform: rotate(180deg);
 }
 
-.chains li {
-  font-size: 14px;
-}
+.steps {
+  margin-top: 16px !important;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
 
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-
-  th,
-  td {
-    text-align: left;
-    padding: 8px 6px;
-    border-bottom: 1px solid var(--line);
+  > li {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
   }
 
-  th {
-    color: var(--ink-2);
-    font-weight: 600;
+  b {
+    font-size: 14px;
+  }
+
+  p {
+    margin: 4px 0 0;
     font-size: 13px;
+    line-height: 1.45;
+    color: rgba(255, 255, 255, .72);
   }
 }
 
-.num {
-  text-align: right !important;
+.stepIcon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, .12);
+}
+
+.why {
+  margin: 16px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, .16);
+  font-size: 14px;
+  color: rgba(255, 255, 255, .9);
+}
+
+// Сводка
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+
+  > li {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  span {
+    font-size: 13px;
+    color: var(--ink-2);
+  }
+
+  strong {
+    font-size: 26px;
+    line-height: 1.2;
+    letter-spacing: -.01em;
+  }
+
+  small {
+    font-size: 12px;
+    color: var(--muted);
+  }
+}
+
+.stats > li strong .cover {
+  display: block;
+  font-size: 18px;
+  line-height: 1.35;
+  font-size: 18px;
+
+  small {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-2);
+  }
+}
+
+// Общие части секций
+.secHead {
+  margin-bottom: 14px;
+
+  h2 {
+    margin: 0;
+  }
+
+  p {
+    margin: 4px 0 0;
+    font-size: 14px;
+    color: var(--ink-2);
+  }
+}
+
+.more {
+  margin-top: 12px;
+  border: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+  }
+}
+
+.badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink-2);
   white-space: nowrap;
 }
 
-@media (max-width: 600px) {
-  .table th:nth-child(2),
-  .table td:nth-child(2) {
+.badgeDirect {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.badgeSecond {
+  background: var(--violet-soft);
+  color: var(--violet);
+}
+
+.badgeSupplier {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.badgeWatch {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.badgeNoWatch {
+  background: var(--bg);
+  color: var(--muted);
+}
+
+.anonName {
+  color: var(--ink-2);
+  font-weight: 600;
+
+  small {
+    font-weight: 400;
+    color: var(--muted);
+  }
+}
+
+.stats > li .watch {
+  color: var(--green);
+  font-weight: 600;
+}
+
+.badgeCustomer {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.bar {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg);
+  overflow: hidden;
+
+  i {
+    display: block;
+    height: 100%;
+    border-radius: 3px;
+    background: var(--red);
+  }
+}
+
+// События
+.events {
+  display: flex;
+  flex-direction: column;
+
+  > li {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 18px 0;
+    border-top: 1px solid var(--line);
+
+    &:first-child {
+      border-top: 0;
+      padding-top: 4px;
+    }
+
+    &:last-child {
+      padding-bottom: 0;
+    }
+  }
+}
+
+.evMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.evTitle {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--ink);
+  text-decoration: none;
+
+  &:hover {
+    color: var(--red);
+  }
+}
+
+.evWhy {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-2);
+  line-height: 1.45;
+
+  svg {
+    flex-shrink: 0;
+    margin-top: 2px;
+    color: var(--red);
+  }
+
+  b {
+    color: var(--ink);
+  }
+}
+
+.empty {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 4px 0;
+
+  b {
+    font-size: 15px;
+  }
+
+  p {
+    margin: 4px 0 0;
+    font-size: 14px;
+    color: var(--ink-2);
+    line-height: 1.5;
+  }
+}
+
+.emptyIcon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+// Переключатель и список «С кем вы связаны»
+.seg {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 4px;
+  gap: 2px;
+  border-radius: 14px;
+  background: var(--bg);
+  margin-bottom: 8px;
+
+  button {
+    border: 0;
+    background: none;
+    border-radius: 10px;
+    padding: 7px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink-2);
+    cursor: pointer;
+    white-space: nowrap;
+
+    span {
+      color: var(--muted);
+      font-weight: 500;
+      margin-left: 2px;
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: 1px;
+    }
+  }
+}
+
+.segOn {
+  background: var(--white) !important;
+  color: var(--ink) !important;
+  box-shadow: 0 1px 3px rgba(11, 31, 53, .12);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 8px;
+
+  .seg {
+    margin-bottom: 0;
+  }
+}
+
+.top > li {
+  border-top: 1px solid var(--line);
+
+  &:first-child {
+    border-top: 0;
+  }
+}
+
+.topRow {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1.6fr) minmax(0, 1.2fr) minmax(90px, auto) 18px;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 14px 8px;
+  margin: 0 -8px;
+  width: calc(100% + 16px);
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--bg);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 0;
+  }
+}
+
+.topGo {
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+}
+
+.risk_high {
+  background: var(--red-soft);
+  color: var(--red-dark);
+}
+
+.risk_medium {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.risk_low {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.topName {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+
+  strong {
+    font-size: 15px;
+    overflow-wrap: anywhere;
+  }
+
+  > span {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+  }
+
+  small {
+    font-size: 12px;
+    color: var(--muted);
+  }
+}
+
+.topShare {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.shareHead {
+  font-size: 13px;
+  color: var(--muted);
+
+  b {
+    font-size: 16px;
+    color: var(--ink);
+  }
+}
+
+.topAmount {
+  text-align: right;
+  font-weight: 600;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+// Возможные связи: приглушенный блок
+.links {
+  box-shadow: none;
+  border: 1px dashed var(--line);
+  background: transparent;
+
+  h2 {
+    font-size: 15px;
+    color: var(--ink-2);
+  }
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  li {
+    display: inline-flex;
+    flex-direction: column;
+    padding: 6px 12px;
+    border-radius: 12px;
+    background: var(--bg);
+    font-size: 13px;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+
+    small {
+      color: var(--muted);
+      font-size: 11px;
+    }
+  }
+}
+
+@media (max-width: 900px) {
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .steps {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .how {
+    padding: 18px;
+  }
+
+  .stats > li {
+    padding: 14px 16px;
+  }
+
+  .stats strong {
+    font-size: 22px;
+  }
+
+  .topRow {
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    gap: 10px 12px;
+  }
+
+  .topGo {
     display: none;
+  }
+
+  .topShare {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .topAmount {
+    grid-column: 3;
+    grid-row: 1;
+    align-self: start;
+  }
+
+  .seg {
+    display: flex;
+
+    button {
+      flex: 1;
+      padding: 7px 6px;
+      font-size: 13px;
+    }
   }
 }

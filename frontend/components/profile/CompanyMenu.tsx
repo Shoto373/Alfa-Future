@@ -9,14 +9,14 @@ import styles from "@/app/(bank)/profile/page.module.scss";
 import common from "@/styles/common.module.scss";
 import ui from "@/components/ui.module.scss";
 
-/** Ненавязчивое меню компании: участник видит только «Выйти», основатель — только «Расформировать». */
+/** Ненавязчивое меню компании: участник видит только «Выйти», собственник — только «Расформировать». */
 export default function CompanyMenu({ m, selfId, onChanged }: { m: Membership; selfId: string; onChanged: () => void }) {
   const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const box = useRef<HTMLDivElement>(null);
-  const disband = m.is_founder;
+  const disband = m.role === "owner";
 
   useEffect(() => {
     if (!open) return;
@@ -46,6 +46,8 @@ export default function CompanyMenu({ m, selfId, onChanged }: { m: Membership; s
       setBusy(false);
     }
   };
+
+  if (m.is_founder && !disband) return null; // основатель с другой ролью не уходит и не расформировывает
 
   return (
     <div className={styles.companyMenu} ref={box}>

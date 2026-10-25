@@ -5,7 +5,7 @@ const COMPANY = "ООО «Логист-Ниндзя Восток»";
 
 async function mockProfile(page: Page, admin = true) {
   let members: Member[] = [
-    { member_id: "self", user_id: "user", name: "Анна", email: "anna@example.com", role: "ceo", is_admin: admin, is_founder: true, status: "active" },
+    { member_id: "self", user_id: "user", name: "Анна", email: "anna@example.com", role: "ceo", is_admin: admin, is_founder: false, status: "active" },
     { member_id: "other", user_id: "colleague", name: "Мария", email: "maria@example.com", role: "cfo", is_admin: true, is_founder: false, status: "active" },
     { member_id: "invited", user_id: null, name: null, email: "invite@example.com", role: "accountant", is_admin: false, is_founder: false, status: "invited" },
   ];
@@ -16,7 +16,7 @@ async function mockProfile(page: Page, admin = true) {
     if (url.pathname.endsWith("/auth/me")) {
       await route.fulfill({ json: {
         user_id: "user", name: "Анна", email: "anna@example.com",
-        memberships: [{ company_id: "company", company_name: COMPANY, role: "ceo", is_admin: admin, is_founder: true }],
+        memberships: [{ company_id: "company", company_name: COMPANY, role: "ceo", is_admin: admin, is_founder: false }],
       } });
     } else if (url.pathname.endsWith("/members")) {
       await route.fulfill({ json: { members } });

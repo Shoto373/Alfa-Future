@@ -11,7 +11,7 @@ from typing import Callable
 
 from app import embeddings, vector_store, vectors
 from app.agent import audit
-from app.companies import graph, profiles
+from app.companies import graph, profiles, supply
 from app.companies.sectors import SECTOR_NAMES
 from app.knowledge import kb
 from app.scenarios import calc as scenarios
@@ -112,11 +112,14 @@ def _counterparties(company_id: str) -> dict:
         raise ToolError("Компания не найдена")
 
     def side(d: dict) -> dict:
+        # Только агрегаты по платежам клиента: отрасль, доля, число и концентрация. Без списка конкретных контрагентов.
+        view = supply.side_view(d)
         return {
             "counterparties": d["counterparties"], "total_amount": d["total_amount"], "top1_share": d["top1_share"],
             "intra_group_share": d["intra_group_share"],
-            "by_sector": [{"sector": SECTOR_NAMES.get(s["sector"], "вне выборки"), "share": round(s["share"], 3)}
-                          for s in d["by_sector"]],
+            "known_share": round(view["known_share"], 3), "unknown_share": round(1 - view["known_share"], 3),
+            "by_sector": [{"sector": SECTOR_NAMES.get(i["sector"], i["sector"]), "share": round(i["share_total"], 3),
+                           "share_known": round(i["share_known"], 3)} for i in view["items"]],
         }
     return {"suppliers": side(c["suppliers"]), "customers": side(c["customers"])}
 

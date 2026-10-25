@@ -7,6 +7,7 @@ import { useSession } from "@/lib/session";
 import { setTrackCompany, setTrackPath } from "@/lib/track";
 import AccessDenied from "./AccessDenied";
 import CompanySwitcher from "./CompanySwitcher";
+import Clock from "./Clock";
 import Notifications from "./Notifications";
 import { AlfaMark, Icon } from "./ui";
 import styles from "@/components/Shell.module.scss";
@@ -23,7 +24,6 @@ const NAV: (NavItem | "divider")[] = [
   { href: "/pulse", label: "Альфа.Пульс", icon: "pulse", accent: true },
   { href: "/pulse/counterparties", label: "Контрагенты", icon: "link" },
   { href: "/pulse/analytics", label: "Аналитика банка", icon: "doc" },
-  { href: "/settings/notifications", label: "Уведомления", icon: "bell" },
   { href: "/manager", label: "Кабинет менеджера", icon: "users", managerOnly: true },
   { href: "/quality", label: "Качество", icon: "shield", operatorOnly: true },
   { href: "/quality/product", label: "Продукт и эксперименты", icon: "spark", operatorOnly: true },
@@ -112,6 +112,7 @@ export default function Shell({ children }: { children: ReactNode }) {
             <Icon name="menu" />
           </button>
           <div className={styles.topbarRight}>
+            <Clock />
             {session.memberships.length > 0 && <Notifications />}
             <CompanySwitcher />
             <Link href="/profile" className={styles.userPill} aria-label={`Профиль: ${session.userName}`}>

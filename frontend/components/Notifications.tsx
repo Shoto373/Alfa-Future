@@ -117,7 +117,7 @@ export default function Notifications() {
           </div>
           <div className={styles.notifFoot}>
             <Link href="/pulse" className={styles.notifFooter} onClick={() => setOpen(false)}>Вся лента</Link>
-            <Link href="/settings/notifications" className={styles.notifFooter} onClick={() => setOpen(false)}>Настроить</Link>
+            <Link href="/profile#notifications" className={styles.notifFooter} onClick={() => setOpen(false)}>Настроить</Link>
           </div>
         </div>
       )}

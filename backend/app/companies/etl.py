@@ -203,12 +203,17 @@ def _counterparties(flows: dict, companies: dict[str, dict], group_id: str | Non
     total = sum(v[0] for v in flows.values())
     ranked = sorted(flows.items(), key=lambda kv: kv[1][0], reverse=True)
     sector_amounts: Counter = Counter()
+    unknown = 0.0
     intra = 0.0
     for cp, (amt, _) in flows.items():
         info = companies.get(cp)
-        sector_amounts[info["sector"] if info else "unknown"] += amt
+        if info is None or info["sector"] in (None, "unknown"):
+            unknown += amt
+        else:
+            sector_amounts[info["sector"]] += amt
         if info and group_id and info["group_id"] == group_id:
             intra += amt
+    known = total - unknown
     top = []
     for cp, (amt, cnt) in ranked[:TOP_COUNTERPARTIES]:
         info = companies.get(cp)
@@ -228,8 +233,13 @@ def _counterparties(flows: dict, companies: dict[str, dict], group_id: str | Non
         "top": top,
         "top1_share": top[0]["share"] if top else None,
         "intra_group_share": intra / total if total else None,
+        # Доля оборота с известной отраслью; «unknown» (контрагент вне выборки) не занимает место среди отраслей.
+        "known_share": known / total if total else 0.0,
+        "unknown_share": unknown / total if total else 0.0,
+        # share — от всего оборота (как раньше), share_known — от его известной части (по ней порог и веса).
         "by_sector": [
-            {"sector": s, "share": a / total} for s, a in sector_amounts.most_common(6) if total
+            {"sector": s, "share": a / total, "share_known": a / known if known else 0.0}
+            for s, a in sector_amounts.most_common(6) if total
         ],
     }
 

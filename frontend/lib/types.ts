@@ -362,6 +362,7 @@ export interface CounterpartyEvent {
   level: number;
   relation: string;
   chain: string;
+  weight?: number;
   title: string;
   published_at: string;
   strength: number;

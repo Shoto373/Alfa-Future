@@ -7,7 +7,7 @@ import json
 import re
 
 from app.agent import composer
-from app.companies import extra as company_extra
+from app.companies import extra as company_extra, supply
 from app.companies.profiles import group
 from app.text import INSTRUCTION, safe_text
 
@@ -41,9 +41,15 @@ def valid_features(company: dict) -> set[str]:
     return result
 
 
+def _no_top(side: dict | None) -> dict | None:
+    return {k: v for k, v in side.items() if k != "top"} if side else side
+
+
 def source_texts(ctx: dict) -> dict[str, str]:
     c = ctx["company"]
-    profile = json.dumps({k: v for k, v in c.items() if k != "extra"}, ensure_ascii=False)
+    # Платежи конкретных контрагентов (top: идентификаторы, суммы, регионы) в источники не попадают — они уходят и в запросы к модели.
+    profile = json.dumps({k: _no_top(v) if k in ("suppliers", "customers") else v for k, v in c.items() if k != "extra"},
+                         ensure_ascii=False)
     # Same display units as the deterministic composer, with explicit origin.
     profile += f" {c.get('company_id', '')} {(c.get('revenue') or 0) / 1e9:.1f}"
     profile += f" {(c.get('market', {}).get('okved_share') or 0) * 100:.1f}%"
@@ -51,11 +57,14 @@ def source_texts(ctx: dict) -> dict[str, str]:
     if g.get("revenue"):  # выручка группы — в тех же единицах, что в тексте вывода
         profile += f" {g['revenue'] / 1e9:.1f} млрд ₽ {g.get('members')}"
         profile += "".join(f" {x['share'] * 100:.0f}%" for x in g.get("sector_shares", []))
-    payments = json.dumps({k: c.get(k) for k in ("suppliers", "customers")}, ensure_ascii=False)
+    payments = json.dumps({k: _no_top(c.get(k)) for k in ("suppliers", "customers")}, ensure_ascii=False)
     for side in ("suppliers", "customers"):
         # Доли — и округленные, и с одним знаком: модель пишет «24,7%», правила — «25%».
         for s in c.get(side, {}).get("by_sector", []):
             payments += f" {s['share'] * 100:.0f}% {s['share'] * 100:.1f}%"
+        view = supply.side_view(c.get(side))
+        payments += "".join(f" {i['share_known'] * 100:.0f}% {i['share_known'] * 100:.1f}%" for i in view["items"])
+        payments += f" {view['known_share'] * 100:.0f}% {view['known_share'] * 100:.1f}%"
         if c.get(side, {}).get("top1_share") is not None:
             payments += f" {c[side]['top1_share'] * 100:.0f}% {c[side]['top1_share'] * 100:.1f}%"
         total = c.get(side, {}).get("total_amount")

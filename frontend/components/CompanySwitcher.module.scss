@@ -28,7 +28,46 @@
 }
 
 .switcherBtn {
-  padding: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  height: 32px;
+  margin-left: 4px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+  background: var(--card);
+  transition: border-color .15s, color .15s;
+
+  svg {
+    color: var(--muted);
+    transition: color .15s;
+  }
+
+  &:hover {
+    border-color: var(--red);
+    color: var(--red-dark);
+
+    svg {
+      color: var(--red);
+    }
+  }
+
+  @media (max-width: 860px) {
+    padding: 0 8px;
+    border: 0;
+    background: none;
+  }
+}
+
+.switcherBtnText {
+  @media (max-width: 860px) {
+    display: none;
+  }
 }
 
 .switcherText {

@@ -15,6 +15,7 @@ const PATHS: Record<string, string> = {
   menu: "M4 7h16M4 12h16M4 17h16",
   logout: "M15 12H4M8 8l-4 4 4 4M13 4h6v16h-6",
   chevron: "M7 10l5 5 5-5",
+  swap: "M4 8h14M14 4l4 4-4 4M20 16H6M10 12l-4 4 4 4",
   chevronRight: "M10 7l5 5-5 5",
   refresh: "M20 11a8 8 0 1 0-2 5.5M20 5v6h-6",
   plus: "M12 5v14M5 12h14",

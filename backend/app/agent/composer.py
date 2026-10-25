@@ -6,8 +6,9 @@
 цифры берутся только из новости, тезисов банка и данных компании.
 """
 
+from app.companies import supply
 from app.companies.profiles import _bn, group, group_mix
-from app.companies.sectors import SECTOR_NAMES
+from app.companies.sectors import SECTOR_NAMES, SECTOR_SENSITIVITY
 from app.domain_config.runtime import ACTIONS, DIRECTION_VALUE, QUESTIONS, TOPIC_EFFECT, TOPIC_EFFECT_DOWN
 from app.scenarios.calc import mln as scenario_mln
 from app.news.taxonomy import TOPICS
@@ -47,6 +48,19 @@ def _effect(topic: str, direction: str | None, sign: int) -> float:
     if sign == 0 or direction is None:
         return 0.0
     return sign * DIRECTION_VALUE.get(topic, {}).get(direction, 0)
+
+
+def side_effect(e: dict, topic: str, direction: str | None) -> float | None:
+    """Эффект признака компании на событие с учетом стороны цепочки поставок; None — признак в выводах не участвует.
+
+    Знак признака — по-прежнему чувствительность отрасли контрагента к теме: эффект = sign × DIRECTION_VALUE.
+    Покупатели: их проигрыш — риск для компании (спрос и выручка падают, дебиторка растет), выигрыш — возможность.
+    Поставщики: их проигрыш — риск перебоев поставок и роста закупочных цен; выигрыш отрасли поставщика
+    возможностью для компании не является (рост цен на его продукцию — скорее издержка), поэтому не засчитывается."""
+    eff = _effect(topic, direction, e["sign"])
+    if e.get("side") == "suppliers" and eff > 0:
+        return None
+    return eff
 
 
 def effect_terms(topic: str, direction: str | None, features: set[str] | None = None) -> tuple[str, str]:
@@ -126,7 +140,9 @@ def _topic_claims(t: str, exps: list[dict], d: str | None, theses: list[dict], n
     neg, pos = effect_terms(t, d, {e["feature"] for e in exps})
     groups = {"neg": [], "pos": [], "amb": []}
     for e in exps:
-        eff = _effect(t, d, e["sign"])
+        eff = side_effect(e, t, d)
+        if eff is None:
+            continue
         groups["neg" if eff < 0 else "pos" if eff > 0 else "amb"].append(e)
     forecast = next((th for th in sorted(theses, key=lambda x: x["doc_date"], reverse=True)
                      if t in th["topics"] and th.get("stance") == "forecast" and not th.get("stale")), None)
@@ -185,7 +201,7 @@ def _headline(company: dict, topics: list[str], by_topic: dict[str, list[dict]],
     main = next((t for t in topics if t in TOPIC_EFFECT and by_topic.get(t)), None)
     if main:
         neg, pos = effect_terms(main, topic_dirs.get(main, direction), {e["feature"] for e in by_topic[main]})
-        effs = [_effect(main, topic_dirs.get(main, direction), e["sign"]) for e in by_topic[main]]
+        effs = [x for x in (side_effect(e, main, topic_dirs.get(main, direction)) for e in by_topic[main]) if x is not None]
         if any(x < 0 for x in effs) and any(x > 0 for x in effs):
             headline = f"{who}: есть и минус, и плюс — {neg}, но {pos}."
         elif any(x < 0 for x in effs):
@@ -211,6 +227,62 @@ def _actions(topics: list[str], role: str, company: dict, theses: list[dict], ne
     if not actions:
         actions = [_claim(ACTIONS["default"]["default"][0][0], "ai", [news_src])]
     return _dedupe(actions)[:4]
+
+
+MAX_SUPPLY_CLAIMS = 2
+
+
+def _news_effect_on_sector(cls: dict, sector: str) -> float:
+    """Как событие меняет положение отрасли контрагента: чувствительность отрасли × направление по темам новости."""
+    topic_dirs = cls.get("topic_directions") or {}
+    total = 0.0
+    for t in [x["topic"] for x in cls["topics"]][:3]:
+        sens = SECTOR_SENSITIVITY.get(t, {}).get(sector)
+        direction = topic_dirs.get(t, cls["direction"])
+        if sens and direction:
+            total += _effect(t, direction, sens.sign)
+    return total
+
+
+def _supply_chain(ctx: dict, news_src: str) -> tuple[list[dict], list[dict], list[dict]]:
+    """Риски, возможности и действия по цепочке поставок: новость про отрасль, куда уходят платежи клиента
+    или откуда приходят его поступления. Только агрегаты по платежам клиента (отрасль, доля, концентрация);
+    конкретные контрагенты не называются. Проблема покупателя — риск выручки и дебиторки, проблема
+    поставщика — риск перебоев поставок и роста закупочных цен (правило знаков — в side_effect)."""
+    company, cls = ctx["company"], ctx["news"]["classification"]
+    risks, opps, actions = [], [], []
+    links = sorted((x for x in supply.links(company) if x["sector"] in cls["sectors"]), key=lambda x: -x["share"])
+    srcs = [news_src, "client:payments"]
+    for link in links[:MAX_SUPPLY_CLAIMS]:
+        eff = _news_effect_on_sector(cls, link["sector"])
+        side, name = link["side"], SECTOR_NAMES.get(link["sector"], link["sector"])
+        who = supply.SIDE_WORD[side]
+        feature = [f"{side}.by_sector"]
+        head = f"Через ваших {who}: {supply.share_text(link)} — отрасль «{name}»"
+        top1 = (company.get(side) or {}).get("top1_share")
+        concentration = top1 is not None and top1 > 0.5
+        if side == "suppliers" and eff < 0:
+            risks.append(_claim(f"{head}; ситуация в ней ухудшается — возможны перебои поставок и рост закупочных цен.",
+                                "ai", srcs, feature))
+            actions.append(_claim(f"Проверить альтернативных поставщиков в отрасли «{name}» и запас критичных материалов "
+                                  "на ближайший период", "ai", srcs))
+            if concentration:
+                actions.append(_claim(f"Оценить зависимость от крупнейшего поставщика ({pct(top1, 0)} платежей поставщикам): "
+                                      "проработать резервный источник поставок", "ai", srcs, ["suppliers.top1_share"]))
+        elif side == "customers" and eff < 0:
+            risks.append(_claim(f"{head}; ситуация в ней ухудшается — возможны снижение спроса и выручки, "
+                                "рост дебиторской задолженности и задержек оплаты.", "ai", srcs, feature))
+            actions.append(_claim(f"Пересмотреть лимиты и сроки отсрочки покупателям из отрасли «{name}» и проверить "
+                                  "дебиторскую задолженность", "ai", srcs))
+            if concentration:
+                actions.append(_claim(f"Оценить зависимость от крупнейшего покупателя ({pct(top1, 0)} поступлений): "
+                                      "проработать диверсификацию выручки и защиту дебиторской задолженности", "ai", srcs,
+                                      ["customers.top1_share"]))
+        elif side == "customers" and eff > 0:
+            opps.append(_claim(f"{head}; ситуация в ней улучшается — спрос покупателей может вырасти.", "ai", srcs, feature))
+            actions.append(_claim(f"Проверить, хватает ли запасов и мощностей для роста заказов от покупателей из отрасли «{name}»",
+                                  "ai", srcs))
+    return risks, opps, actions
 
 
 CHAIN_LABEL = {"supplier": "поставщика", "customer": "покупателя", "person": "возможно связанную компанию"}
@@ -265,6 +337,7 @@ def compose(ctx: dict) -> dict:
         risks += neg_claims
         opps += pos_claims
 
+    sc_risks, sc_opps, sc_actions = _supply_chain(ctx, news_src)
     products = [{"product_id": p["id"], "title": p["title"], "text": p["text"],
                  "reason": f"Связано с темой «{TOPICS.get(p['topics'][0], {}).get('name', p['topics'][0])}»"}
                 for p in ctx.get("products", [])]
@@ -274,9 +347,9 @@ def compose(ctx: dict) -> dict:
         "what_happened": {"summary": news["lead"], "facts": facts, "actors": cls["actors"], "dates": cls["dates"],
                           "assumptions": _assumptions(ctx, cls, news_src)},
         "why_important": (_chain_claims(ctx, news_src) + _why_important(exposures, company, event, news_src))[:WHY_MAX],
-        "risks": (_scenario_claims(ctx, news_src) + _dedupe(risks))[:4],
-        "opportunities": (_scenario_claims(ctx, news_src, gain=True) + _dedupe(opps))[:4],
-        "actions": _actions(topics, role, company, theses, news_src),
+        "risks": (_scenario_claims(ctx, news_src) + sc_risks + _dedupe(risks))[:4],
+        "opportunities": (_scenario_claims(ctx, news_src, gain=True) + sc_opps + _dedupe(opps))[:4],
+        "actions": _dedupe(sc_actions[:2] + _actions(topics, role, company, theses, news_src))[:4],
         "questions": [QUESTIONS[t] for t in topics if t in QUESTIONS][:3],
         "bank_view": _bank_view(ctx, theses),
         "products": products,

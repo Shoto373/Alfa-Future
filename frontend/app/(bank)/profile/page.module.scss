@@ -4,20 +4,147 @@
   composes: iconBtn from "../../../styles/common.module.scss";
 }
 
-.profileHead {
-  display: flex;
-  align-items: center;
-  gap: 16px;
+.head {
+  position: sticky;
+  top: 72px;
+  z-index: 15;
+  height: 84px;
+  padding-top: 4px;
+  background: var(--bg);
+
+  h1 {
+    margin: 0;
+  }
 
   p {
     margin: 4px 0 0;
   }
 }
 
+.layout {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: sticky;
+  top: 172px;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  min-width: 0;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  scroll-margin-top: 170px;
+}
+
+.blockHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.companyActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.anchor {
+  scroll-margin-top: 170px;
+}
+
+.profileHead {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+
+  h2 {
+    margin: 10px 0 0;
+    overflow-wrap: anywhere;
+  }
+
+  p {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
 .profileAvatar {
-  width: 56px;
-  height: 56px;
-  font-size: 22px;
+  width: 64px;
+  height: 64px;
+  font-size: 26px;
+}
+
+.facts {
+  align-self: stretch;
+  margin: 14px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 14px;
+
+  > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  dt {
+    color: var(--muted);
+  }
+
+  dd {
+    margin: 0;
+    font-weight: 600;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+
+  a {
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    color: var(--ink-2);
+    font-weight: 600;
+    font-size: 14px;
+    text-decoration: none;
+
+    &:hover {
+      background: var(--bg);
+      color: var(--red-dark);
+    }
+  }
+}
+
+.addCompany {
+  align-self: stretch;
+  margin-top: 14px;
+  justify-content: center;
+  text-align: center;
 }
 
 .members {
@@ -222,8 +349,28 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .profileHead {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .side {
+    position: static;
+  }
+
+  .head {
+    height: auto;
+    padding-bottom: 8px;
+  }
+
+  .nav {
     flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+
+    a {
+      background: var(--bg);
+      padding: 8px 14px;
+    }
   }
 }
 
