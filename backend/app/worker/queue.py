@@ -16,6 +16,7 @@ from app.models import Job
 LEASE = timedelta(minutes=30)          # дольше самого долгого цикла конвейера
 RETRY_BASE_SECONDS = 30                # повтор через 30 с, 60 с, 2 мин, 4 мин…
 KEEP_FINISHED = timedelta(days=7)      # выполненные и мертвые задачи хранятся неделю для разбора
+URGENT = ("domain_config_preview",)    # человек ждет результат на экране: берутся раньше плановых циклов
 
 
 def _now() -> datetime:
@@ -39,7 +40,7 @@ def claim(worker_id: str) -> dict | None:
         job = db.scalars(select(Job).where(or_(
             (Job.status == "queued") & (Job.run_at <= now),
             (Job.status == "running") & (Job.locked_until < now),
-        )).order_by(Job.run_at, Job.id).limit(1).with_for_update(skip_locked=True)).first()
+        )).order_by(Job.kind.not_in(URGENT), Job.run_at, Job.id).limit(1).with_for_update(skip_locked=True)).first()
         if job is None:
             return None
         job.status, job.locked_by, job.locked_until = "running", worker_id, now + LEASE

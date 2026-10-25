@@ -27,6 +27,13 @@ def test_two_workers_never_take_the_same_job(raw_client):
     assert sorted(j["id"] for j in taken) == sorted(ids), "каждая задача взята ровно один раз"
 
 
+def test_preview_is_taken_before_queued_cycles(raw_client):
+    for _ in range(3):
+        queue.enqueue("llm_sweep")
+    preview = queue.enqueue("domain_config_preview", {"id": "p"}, max_attempts=1)
+    assert queue.claim("w")["id"] == preview, "превью ждет оператор — оно идет раньше плановых задач"
+
+
 def test_failed_job_is_retried_with_backoff_then_dead(raw_client, monkeypatch):
     job_id = queue.enqueue("broken", max_attempts=3)
     for attempt in range(1, 4):

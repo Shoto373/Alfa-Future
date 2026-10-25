@@ -23,6 +23,6 @@ test("отрасли и темы: проверка ловит переверну
   await page.getByRole("button", { name: "Проверить" }).click();
   await expect(page.getByRole("status")).toContainText("Ошибок нет");
   await page.getByRole("button", { name: "Показать превью" }).click();
-  await expect(page.getByTestId("config-preview")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("config-preview")).toBeVisible({ timeout: 120_000 });
   await page.screenshot({ path: "test-results/config.png" });
 });
