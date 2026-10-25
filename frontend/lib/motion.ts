@@ -10,11 +10,12 @@ function reducedMotion(): boolean {
 
 /**
  * Число плавно «досчитывается» до нового значения (ease-out), например сумма в «что если» при движении ползунка.
- * Первое значение показывается сразу: анимируется только изменение.
+ * Без start первое значение показывается сразу (анимируется только изменение); со start — подъем от него
+ * при появлении (стрелка шкалы поднимается от нуля).
  */
-export function useAnimatedNumber(target: number, durationMs = 450): number {
-  const [shown, setShown] = useState(target);
-  const from = useRef(target);
+export function useAnimatedNumber(target: number, durationMs = 450, start?: number): number {
+  const [shown, setShown] = useState(start ?? target);
+  const from = useRef(start ?? target);
   const frame = useRef<number | null>(null);
 
   useEffect(() => {

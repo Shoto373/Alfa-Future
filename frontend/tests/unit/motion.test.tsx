@@ -27,3 +27,16 @@ describe("useAnimatedNumber", () => {
     expect(result.current).toBe(5);
   });
 });
+
+describe("useAnimatedNumber со стартовым значением", () => {
+  it("поднимается от старта к цели при появлении", async () => {
+    vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame", "performance"] });
+    const { result } = renderHook(() => useAnimatedNumber(72, 1000, 0));
+    expect(result.current).toBe(0);
+    await act(async () => { vi.advanceTimersByTime(500); });
+    expect(result.current).toBeGreaterThan(0);
+    expect(result.current).toBeLessThan(72);
+    await act(async () => { vi.advanceTimersByTime(600); });
+    expect(result.current).toBe(72);
+  });
+});
