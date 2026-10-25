@@ -1,9 +1,10 @@
 import type { PointerEvent } from "react";
 
 /**
- * Свечение за курсором на темных карточках главной: позиция мыши — в CSS-переменные --gx/--gy (в процентах
- * от карточки), по ним стили двигают красное пятно. Только мышь: на телефоне касание не должно дергать фон.
- * Без курсора переменные снимаются — пятно возвращается к своему медленному «дыханию».
+ * Свечение под курсором на темных блоках: позиция мыши — в CSS-переменные --mx/--my (в процентах от блока),
+ * по ним слой свечения (styles/_glow.scss) плавно следует за курсором. Только мышь: касание на телефоне
+ * не должно дергать фон. Когда курсор уходит, позиция не сбрасывается — свечение гаснет там, где было,
+ * а не уезжает в угол.
  */
 export const glow = {
   onPointerMove(e: PointerEvent<HTMLElement>) {
@@ -11,11 +12,7 @@ export const glow = {
     const el = e.currentTarget;
     const r = el.getBoundingClientRect();
     if (!r.width || !r.height) return;
-    el.style.setProperty("--gx", `${(((e.clientX - r.left) / r.width) * 100).toFixed(1)}%`);
-    el.style.setProperty("--gy", `${(((e.clientY - r.top) / r.height) * 100).toFixed(1)}%`);
-  },
-  onPointerLeave(e: PointerEvent<HTMLElement>) {
-    e.currentTarget.style.removeProperty("--gx");
-    e.currentTarget.style.removeProperty("--gy");
+    el.style.setProperty("--mx", `${(((e.clientX - r.left) / r.width) * 100).toFixed(1)}%`);
+    el.style.setProperty("--my", `${(((e.clientY - r.top) / r.height) * 100).toFixed(1)}%`);
   },
 };

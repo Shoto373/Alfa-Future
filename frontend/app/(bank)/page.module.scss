@@ -1,4 +1,5 @@
 @use "../../styles/breakpoints";
+@use "../../styles/glow";
 
 .badgeGreen {
   composes: badgeGreen from "../../styles/common.module.scss";
@@ -16,7 +17,7 @@
   composes: countRed from "../../styles/common.module.scss";
 }
 
-// Красное пятно медленно «дышит» само; при наведении мышью плавно идет за курсором (lib/glow.ts).
+// Красное пятно медленно «дышит» само и не прерывается; свечение под курсором — отдельный слой (styles/_glow.scss).
 @keyframes glowDrift {
   0% {
     --gx: 70%;
@@ -63,14 +64,9 @@
     radial-gradient(40% 60% at 55% 0%, rgba(239, 49, 36, .18), transparent 70%),
     var(--dark);
   color: var(--white);
-  transition: --gx 1.8s var(--ease-out), --gy 1.8s var(--ease-out);
+  // Фоновое пятно плавает всегда (туда и обратно, без рывка в конце круга); курсор — отдельный слой.
   animation: glowDrift 22s ease-in-out infinite alternate;
-
-  @media (hover: hover) {
-    &:hover {
-      animation: none;
-    }
-  }
+  @include glow.cursor-glow(38%, rgba(255, 84, 66, .3));
 }
 
 // Внутренние панели героя при наведении чуть всплывают и светлеют.
@@ -449,13 +445,12 @@
   --gx: 50%;
   --gy: 105%;
   background: radial-gradient(90% 55% at var(--gx) var(--gy), rgba(239, 49, 36, .85), transparent 75%), #1a0507;
-  transition: --gx 1.8s var(--ease-out), --gy 1.8s var(--ease-out), transform var(--dur) var(--ease-out),
-    box-shadow var(--dur) var(--ease-out);
+  transition: transform var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
   animation: glowDriftStory 18s ease-in-out infinite alternate;
+  @include glow.cursor-glow(55%, rgba(255, 84, 66, .32));
 
   @media (hover: hover) {
     &:hover {
-      animation: none;
       box-shadow: 0 16px 40px rgba(239, 49, 36, .25);
     }
   }

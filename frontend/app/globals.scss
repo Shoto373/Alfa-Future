@@ -91,6 +91,19 @@ html {
   initial-value: 100%;
 }
 
+// Позиция свечения под курсором (styles/_glow.scss, lib/glow.ts).
+@property --mx {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 50%;
+}
+
+@property --my {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 50%;
+}
+
 ::selection {
   background: var(--red-soft);
   color: var(--red-dark);

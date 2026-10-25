@@ -1,0 +1,31 @@
+// Свечение под курсором на темных блоках (главная, «Контрагенты»).
+// Отдельный слой поверх фона: фоновое пятно плавает всегда и никогда не прерывается, а этот слой
+// плавно проявляется под мышью и плавно гаснет на месте, когда курсор уходит, — без скачков.
+// Позицию курсора задает lib/glow.ts (--mx/--my в процентах от блока).
+@mixin cursor-glow($size: 42%, $color: rgba(255, 84, 66, .34)) {
+  position: relative;
+  isolation: isolate;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(circle at var(--mx) var(--my), $color, transparent $size);
+    opacity: 0;
+    transition: opacity 1.4s var(--ease-out), --mx 1.2s var(--ease-out), --my 1.2s var(--ease-out);
+  }
+
+  @media (hover: hover) {
+    &:hover::after {
+      opacity: 1;
+    }
+  }
+
+  > * {
+    position: relative;
+    z-index: 1;
+  }
+}

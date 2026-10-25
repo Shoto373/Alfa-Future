@@ -1,3 +1,4 @@
+@use "../../../../styles/glow";
 // Контрагенты (SPR4-01): объяснение, сводка, события, список связей, второй уровень.
 .page {
   gap: 16px;
@@ -10,7 +11,7 @@
   padding: 0;
 }
 
-// Свечение медленно дрейфует само и плавно идет за курсором (lib/glow.ts) — как на главной.
+// Свечение медленно дрейфует само; под курсором — отдельный мягкий слой (styles/_glow.scss), как на главной.
 @keyframes howGlow {
   0% {
     --gx: 100%;
@@ -39,14 +40,8 @@
   background: radial-gradient(70% 140% at var(--gx) var(--gy), rgba(239, 49, 36, .55), transparent 70%), #1a0507;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
   overflow: hidden;
-  transition: --gx 1.8s var(--ease-out), --gy 1.8s var(--ease-out);
   animation: howGlow 20s ease-in-out infinite alternate;
-
-  @media (hover: hover) {
-    &:hover {
-      animation: none;
-    }
-  }
+  @include glow.cursor-glow(32%, rgba(255, 84, 66, .3));
 }
 
 .howHead {
