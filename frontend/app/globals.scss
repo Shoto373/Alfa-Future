@@ -78,30 +78,36 @@ html {
   scroll-behavior: smooth;
 }
 
-// Позиция красного свечения темных карточек главной: зарегистрированные свойства плавно анимируются и переходят.
-@property --gx {
+// Красное пятно темных блоков (styles/_glow.scss): точка плавания, точка курсора и вес курсора.
+// Зарегистрированные свойства плавно анимируются и переходят — отсюда мягкое движение без рывков.
+@property --dx {
   syntax: "<percentage>";
   inherits: false;
   initial-value: 50%;
 }
 
-@property --gy {
+@property --dy {
   syntax: "<percentage>";
   inherits: false;
   initial-value: 100%;
 }
 
-// Позиция свечения под курсором (styles/_glow.scss, lib/glow.ts).
-@property --mx {
+@property --cx {
   syntax: "<percentage>";
   inherits: false;
   initial-value: 50%;
 }
 
-@property --my {
+@property --cy {
   syntax: "<percentage>";
   inherits: false;
   initial-value: 50%;
+}
+
+@property --w {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
 }
 
 ::selection {

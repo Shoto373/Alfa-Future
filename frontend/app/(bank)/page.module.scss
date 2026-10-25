@@ -17,56 +17,56 @@
   composes: countRed from "../../styles/common.module.scss";
 }
 
-// Красное пятно медленно «дышит» само и не прерывается; свечение под курсором — отдельный слой (styles/_glow.scss).
+// Красное пятно медленно плавает само и ползет за курсором; уход мыши — плавный возврат (styles/_glow.scss).
 @keyframes glowDrift {
   0% {
-    --gx: 70%;
-    --gy: 108%;
+    --dx: 70%;
+    --dy: 108%;
   }
 
   50% {
-    --gx: 86%;
-    --gy: 96%;
+    --dx: 86%;
+    --dy: 96%;
   }
 
   100% {
-    --gx: 62%;
-    --gy: 118%;
+    --dx: 62%;
+    --dy: 118%;
   }
 }
 
 @keyframes glowDriftStory {
   0% {
-    --gx: 40%;
-    --gy: 104%;
+    --dx: 40%;
+    --dy: 104%;
   }
 
   50% {
-    --gx: 62%;
-    --gy: 96%;
+    --dx: 62%;
+    --dy: 96%;
   }
 
   100% {
-    --gx: 48%;
-    --gy: 112%;
+    --dx: 48%;
+    --dy: 112%;
   }
 }
 
 .hero {
-  --gx: 78%;
-  --gy: 110%;
+  --dx: 78%;
+  --dy: 110%;
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr) minmax(0, .95fr);
   gap: 12px;
   border-radius: 28px;
   padding: 12px;
-  background: radial-gradient(60% 90% at var(--gx) var(--gy), rgba(239, 49, 36, .55), transparent 70%),
+  background: radial-gradient(60% 90% at #{glow.$at}, rgba(239, 49, 36, .55), transparent 70%),
     radial-gradient(40% 60% at 55% 0%, rgba(239, 49, 36, .18), transparent 70%),
     var(--dark);
   color: var(--white);
-  // Фоновое пятно плавает всегда (туда и обратно, без рывка в конце круга); курсор — отдельный слой.
+  // Пятно плавает всегда (туда и обратно, без рывка в конце круга) и ползет за курсором.
   animation: glowDrift 22s ease-in-out infinite alternate;
-  @include glow.cursor-glow(38%, rgba(255, 84, 66, .3));
+  @include glow.follow-glow;
 }
 
 // Внутренние панели героя при наведении чуть всплывают и светлеют.
@@ -442,12 +442,12 @@
   flex-direction: column;
   gap: 12px;
   min-width: 0;
-  --gx: 50%;
-  --gy: 105%;
-  background: radial-gradient(90% 55% at var(--gx) var(--gy), rgba(239, 49, 36, .85), transparent 75%), #1a0507;
-  transition: transform var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
+  --dx: 50%;
+  --dy: 105%;
+  background: radial-gradient(90% 55% at #{glow.$at}, rgba(239, 49, 36, .85), transparent 75%), #1a0507;
   animation: glowDriftStory 18s ease-in-out infinite alternate;
-  @include glow.cursor-glow(55%, rgba(255, 84, 66, .32));
+  // Пятно ползет за курсором; вместе с ним — всплытие карточки при наведении.
+  @include glow.follow-glow((transform var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out)));
 
   @media (hover: hover) {
     &:hover {
