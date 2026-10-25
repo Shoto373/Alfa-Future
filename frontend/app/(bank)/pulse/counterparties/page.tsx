@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useState } from "react";
 import { Analytics } from "@/components/counterparties/Analytics";
 import { CounterpartyDrawer } from "@/components/counterparties/CounterpartyDrawer";
 import { Chain } from "@/components/counterparties/Chain";
@@ -11,7 +11,6 @@ import { Hint } from "@/components/counterparties/Hint";
 import { CompanyTile, Icon, ErrorState, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
 import { date, money } from "@/lib/format";
-import { glow } from "@/lib/glow";
 import { useQuery } from "@/lib/query";
 import { useSession } from "@/lib/session";
 import type { CounterpartiesView, Counterparty, CounterpartyEvent } from "@/lib/types";
@@ -20,7 +19,6 @@ import common from "@/styles/common.module.scss";
 
 const ROLE: Record<Counterparty["relation"], string> = { supplier: "Поставщик", customer: "Покупатель", person: "Возможная связь" };
 const SHARE_OF: Record<string, string> = { supplier: "закупок", customer: "продаж" };
-const HIDE_KEY = "counterparties:how-hidden";
 const TOP_SHOWN = 6;
 const EVENTS_SHOWN = 5;
 
@@ -38,85 +36,7 @@ function whyImportant(e: CounterpartyEvent): string {
     : `Ваш прямой покупатель${w}: новость может повлиять на спрос и сроки оплаты.`;
 }
 
-const STEPS = [
-  { icon: "wallet", title: "Берем ваши платежи", text: "Смотрим, кому вы платите и кто платит вам, по данным компании." },
-  { icon: "users", title: "Находим главных", text: "Выбираем крупнейших поставщиков и покупателей по сумме платежей и считаем, насколько вы от них зависите." },
-  { icon: "search", title: "Ищем новости о них", text: "Только о тех, чье название известно. Если компания в данных безымянная, считаем лишь платежи." },
-];
-
-const hiddenListeners = new Set<() => void>();
-const subscribeHidden = (cb: () => void) => { hiddenListeners.add(cb); return () => { hiddenListeners.delete(cb); }; };
-const readHidden = () => { try { return localStorage.getItem(HIDE_KEY) === "1"; } catch { return false; } };
-
-function HowItWorks() {
-  // Свернутость запоминается в браузере; на сервере и без хранилища блок открыт.
-  const open = !useSyncExternalStore(subscribeHidden, readHidden, () => false);
-  const toggle = () => {
-    try { localStorage.setItem(HIDE_KEY, open ? "1" : "0"); } catch { /* не критично */ }
-    hiddenListeners.forEach((cb) => cb());
-  };
-  return (
-    <section className={styles.how} aria-labelledby="how-title" {...glow}>
-      <div className={styles.howHead}>
-        <h2 id="how-title"><Icon name="spark" size={18} /> Как это работает</h2>
-        <button type="button" className={styles.howToggle} aria-expanded={open} aria-controls="how-body" onClick={toggle}>
-          {open ? "Свернуть" : "Показать"} <span className={open ? styles.flip : ""}><Icon name="chevron" size={16} /></span>
-        </button>
-      </div>
-      {open && (
-        <div id="how-body">
-          <ol className={styles.steps}>
-            {STEPS.map((s, i) => (
-              <li key={s.title}>
-                <span className={styles.stepIcon}><Icon name={s.icon} size={20} /></span>
-                <div><b>{i + 1}. {s.title}</b><p>{s.text}</p></div>
-              </li>
-            ))}
-          </ol>
-          <p className={styles.why}><b>Почему это важно.</b> Сбой у крупного поставщика или уход крупного покупателя бьет по марже и выручке раньше, чем это видно по вашей отчетности.</p>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function Stats({ data }: { data: CounterpartiesView }) {
-  const sup = data.top.filter((c) => c.relation === "supplier");
-  const cus = data.top.filter((c) => c.relation === "customer");
-  const sum = (a: Counterparty[]) => a.reduce((s, c) => s + c.weight, 0);
-  const cover: [string, string][] = [];
-  if (sup.length) cover.push([pct(sum(sup)), "закупок"]);
-  if (cus.length) cover.push([pct(sum(cus)), "продаж"]);
-  const n = data.top.length, ev = data.events.length;
-  const lead = [...data.top].sort((a, b) => b.weight - a.weight)[0];
-  return (
-    <ul className={styles.stats}>
-      <li>
-        <span>Главных контрагентов</span>
-        <strong>{n}</strong>
-        <small>{sup.length} {plural(sup.length, "поставщик", "поставщика", "поставщиков")}, {cus.length} {plural(cus.length, "покупатель", "покупателя", "покупателей")}</small>
-        <small className={styles.watch}>Новости отслеживаем: {data.top.filter(isKnown).length} из {n}</small>
-      </li>
-      <li>
-        <span>Покрывают платежи</span>
-        <strong>{cover.length ? cover.map((c) => <span key={c[1]} className={styles.cover}>{c[0]} <small>{c[1]}</small></span>) : "—"}</strong>
-        <small>доля платежей, на которую приходятся главные</small>
-      </li>
-      <li>
-        <span>Событий за 2 недели</span>
-        <strong>{ev}</strong>
-        <small>{ev ? "новости о ваших контрагентах" : "пока спокойно"}</small>
-      </li>
-      <li>
-        <span>Главная зависимость</span>
-        <strong>{lead ? pct(lead.weight) : "—"}</strong>
-        <small>{lead ? `${SHARE_OF[lead.relation]} приходится на ${isKnown(lead) ? lead.name : "компанию без названия"}` : "нет данных о платежах"}</small>
-      </li>
-    </ul>
-  );
-}
-
-function Events({ events, watched, total }: { events: CounterpartyEvent[]; watched: number; total: number }) {
+function Events({ events, watched, total, sectorNews }: { events: CounterpartyEvent[]; watched: number; total: number; sectorNews: number }) {
   const [all, setAll] = useState(false);
   const shown = all ? events : events.slice(0, EVENTS_SHOWN);
   return (
@@ -129,7 +49,8 @@ function Events({ events, watched, total }: { events: CounterpartyEvent[]; watch
         <div className={styles.empty}>
           <span className={styles.emptyIcon}><Icon name="check" size={22} /></span>
           <div>
-            <b>За две недели новостей о ваших контрагентах нет</b>
+            <b>{sectorNews ? "За две недели новостей о самих контрагентах нет" : "За две недели новостей о ваших контрагентах нет"}</b>
+            {sectorNews > 0 && <p>Зато есть {sectorNews} {plural(sectorNews, "новость", "новости", "новостей")} об отраслях, где они работают: смотрите «Главные новости по главным контрагентам» ниже.</p>}
             {watched ? (
               <p>Сейчас отслеживаем новости о {watched} из {total} контрагентов: у остальных в данных нет названия. Проверка идет каждые 5 минут, и как только появится новость, здесь будет карточка: что произошло, как контрагент связан с вами и почему это важно.</p>
             ) : (
@@ -256,10 +177,9 @@ function Content({ data, companyId }: { data: CounterpartiesView; companyId: str
   const known = data.top.filter(isKnown).length;
   return (
     <>
-      <Stats data={data} />
-      <Events events={data.events} watched={known} total={data.top.length} />
-      <Analytics news={news} top={data.top} events={data.events} />
       <TopList top={data.top} keys={news.keys} onOpen={setOpen} />
+      <Events events={data.events} watched={known} total={data.top.length} sectorNews={news.keys.filter((k) => k.kind === "sector").length} />
+      <Analytics news={news} top={data.top} events={data.events} />
       {data.possible_links.length > 0 && <PossibleLinks items={data.possible_links} />}
       {open && <CounterpartyDrawer c={open} keys={news.keys} onClose={close} />}
     </>
@@ -278,10 +198,8 @@ export default function CounterpartiesPage() {
         <div>
           <span className={common.eyebrow}><Icon name="link" /> Цепочка поставок</span>
           <h1>Контрагенты {session!.companyName}</h1>
-          <p className={common.muted}>Мы следим за новостями о тех, от кого зависит ваш бизнес, и подсказываем, что с этим делать.</p>
         </div>
       </div>
-      <HowItWorks />
       {error && <ErrorState error={error} onRetry={reload} />}
       {!data && !error && <Skeleton lines={8} />}
       {data && <Content data={data} companyId={companyId} />}

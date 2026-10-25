@@ -94,7 +94,6 @@ export default function Members({ m, selfId, onChanged }: { m: Membership; selfI
                     <span className={styles.roleControl} title={self ? SELF_HINT : undefined}>{ROLE_NAMES[mem.role]}</span>
                   )}
                   <span className={`${common.tag} ${mem.status === "active" ? common.tagOn : common.tagWarn}`}>{mem.status === "active" ? "Активен" : "Приглашён"}</span>
-                  {mem.is_admin && <span className={`${common.tag} ${common.tagAdmin}`}>Администратор</span>}
                 </div>
                 {m.is_admin && !self && (
                   <MemberMenu member={mem} busy={off}

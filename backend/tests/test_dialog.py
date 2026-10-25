@@ -89,6 +89,7 @@ def test_five_turn_dialog_with_scenario_and_graph(client, insight):
     a3 = _ask(client, insight, "Как это повлияет на налог на прибыль?")
     tax = [c for c in a3["claims"] if c["text"].startswith("Налог на прибыль")]
     assert tax and "25%" in tax[0]["text"], "налог — по формуле со ставкой"
+    assert "снизится" in tax[0]["text"], "рост ставки увеличивает процентные расходы и уменьшает налог на прибыль"
     a4 = _ask(client, insight, "Кто наши главные контрагенты?")
     assert a4["intent"] == "counterparties" and any("client:graph" in c["source_ids"] for c in a4["claims"])
     a5 = _ask(client, insight, "Что думает Альфа-Банк об этом событии?")

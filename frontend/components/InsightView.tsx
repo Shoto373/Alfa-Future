@@ -43,8 +43,6 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
   const [focused, setFocused] = useState<number | null>(sourceFromHash);
 
   const flags = useFlags(ins.company_id);
-  // Эксперимент SPR4-07: вариант actions_first ставит «Что можно сделать» перед последствиями.
-  const actionsFirst = flags?.insight_section_order?.variant === "actions_first";
 
   const openSource = useCallback((n?: number) => {
     track("source_click", { kind: n ? "claim" : "list" });
@@ -61,7 +59,7 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
   }, [ins.insight_id]);
   const fb = (section: string) => <Feedback insightId={ins.insight_id} section={section} />;
   const consequences = (
-    <Card title={`${actionsFirst ? 4 : 3}. Какие последствия возможны`} actions={fb("consequences")} className={styles.span2}>
+    <Card title="3. Какие последствия возможны" actions={fb("consequences")} className={styles.span2}>
       <div className={styles.twoCol}>
         <div><h4 className={styles.neg}>Риски</h4><ClaimList items={ins.risks} index={index} empty="Существенных рисков не выявлено" anchor="risk" /></div>
         <div><h4 className={styles.pos}>Возможности</h4><ClaimList items={ins.opportunities} index={index} empty="Явных возможностей не выявлено" anchor="opp" /></div>
@@ -69,7 +67,7 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
     </Card>
   );
   const actionsCard = (
-    <Card title={`${actionsFirst ? 3 : 4}. Что можно сделать`} actions={fb("actions")} className={actionsFirst ? styles.span2 : ""}>
+    <Card title="4. Что можно сделать" actions={fb("actions")}>
       <ClaimList items={ins.actions} index={index} anchor="act" />
       {ins.questions.length > 0 && (<><h4>Вопросы для дополнительного анализа</h4><ul className={common.plain}>{ins.questions.map((q) => <li key={q}>{q}</li>)}</ul></>)}
       <BankOffers insightId={ins.insight_id} />
@@ -118,7 +116,8 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
           )}
         </Card>
 
-        {actionsFirst ? <>{actionsCard}{consequences}</> : <>{consequences}{actionsCard}</>}
+        {consequences}
+        {actionsCard}
 
         <BankPosition view={ins.bank_view} index={index} actions={fb("bank_view")} />
 

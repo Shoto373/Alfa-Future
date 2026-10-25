@@ -34,7 +34,7 @@ function money(rub: number): string {
   return `${(m < 10 ? m.toFixed(1) : Math.round(m).toString()).replace(".", ",")} млн ₽`;
 }
 
-/** «Что если» (SPR4-02): чувствительность к ставке, курсу и цене сырья — по формулам, без модели. */
+/** Калькулятор рисков (SPR4-02): чувствительность к ставке, курсу и цене сырья — по формулам, без модели. */
 export default function ScenarioPanel({ companyId, initial = "key_rate" }: { companyId: string; initial?: ScenarioKind }) {
   const [kind, setKind] = useState<ScenarioKind>(initial);
   const spec = KINDS.find((k) => k.kind === kind)!;
@@ -60,7 +60,7 @@ export default function ScenarioPanel({ companyId, initial = "key_rate" }: { com
   const r = data?.result;
   const effect = useAnimatedNumber(r?.effect_rub ?? 0);
   return (
-    <Card title="Что если: во что это обойдется" className={styles.panel}>
+    <Card title="Калькулятор рисков" className={styles.panel}>
       <div className={styles.tabs} role="tablist" aria-label="Сценарий">
         {KINDS.map((k) => <button key={k.kind} type="button" role="tab" aria-selected={kind === k.kind}
           className={kind === k.kind ? styles.on : undefined} onClick={() => pick(k.kind)}>{k.label}</button>)}
@@ -80,7 +80,6 @@ export default function ScenarioPanel({ companyId, initial = "key_rate" }: { com
             {Math.round(effect) === 0 ? "0 ₽" : `${effect < 0 ? "−" : "+"}${money(effect)}`} в год
           </strong>
           <p>{r.text}</p>
-          <p className={styles.formula}>Формула: {r.formula}</p>
           <ul className={styles.inputs}>
             {r.inputs.map((i) => (
               <li key={i.name}><span>{i.label}</span>
@@ -106,7 +105,7 @@ export default function ScenarioPanel({ companyId, initial = "key_rate" }: { com
           </label>
         ))}
       </div>
-      <p className={common.muted}>Оценка чувствительности по прозрачной формуле, а не инвестиционная рекомендация.</p>
+      <p className={common.muted}>Ориентировочная оценка, а не инвестиционная рекомендация.</p>
       {error && <p className={styles.loss}>{error}</p>}
     </Card>
   );

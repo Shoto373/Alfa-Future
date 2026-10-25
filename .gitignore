@@ -50,11 +50,11 @@ playwright-report/
 /контекст/
 
 # Not needed on the server: local docs, agent notes, generators, e2e tools, legacy app
-# docs/ (отчеты спринтов), contracts/ (контракт API) и infra/ (мониторинг, бэкапы) — часть репозитория.
+# contracts/ (контракт API) и infra/ (мониторинг, бэкапы) — часть репозитория; docs/ и THIRD_PARTY_NOTICES — только локально.
 *.md
 !/README.md
-!/docs/
-!/docs/**/*.md
+/docs/
+/THIRD_PARTY_NOTICES
 /tests/
 /app/
 /Dockerfile

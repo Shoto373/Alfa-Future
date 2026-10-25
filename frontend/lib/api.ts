@@ -181,7 +181,8 @@ export const api = {
     request<{ id: number; warnings: ConfigIssue[] }>("/api/v1/admin/config/publish", json("POST", { ...texts, note })),
   configRollback: (id: number) => request<{ id: number }>(`/api/v1/admin/config/versions/${id}/rollback`, { method: "POST" }),
   counterparties: (companyId: string, signal?: AbortSignal) =>
-    request<CounterpartiesView>(`/api/v1/companies/${cid(companyId)}/counterparties`, {}, { signal }),
+    // Первый расчет по компании (и после обновления новостей) идет до минуты-полутора.
+    request<CounterpartiesView>(`/api/v1/companies/${cid(companyId)}/counterparties`, {}, { signal, timeoutMs: 120_000 }),
   scenario: (body: { company_id: string; scenario: ScenarioKind; shock: number; debt?: number; floating_share?: number;
     fx_revenue_share?: number; import_share?: number; exposure?: number }) =>
     request<ScenarioResponse>("/api/v1/scenarios", json("POST", body)),

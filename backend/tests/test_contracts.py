@@ -52,6 +52,7 @@ def test_every_response_has_api_version(raw_client):
 
 
 @needs_repo
+@pytest.mark.skipif(not (ROOT / "docs" / "api-versioning.md").exists(), reason="docs/ не входит в репозиторий")
 def test_error_catalog_lists_every_code():
     doc = (ROOT / "docs" / "api-versioning.md").read_text(encoding="utf-8")
     rows = dict(re.findall(r"^\| `([A-Z_]+)` \| (\d{3}) \|", doc, re.M))

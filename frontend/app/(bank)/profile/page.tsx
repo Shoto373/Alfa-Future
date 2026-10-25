@@ -21,7 +21,6 @@ export default function ProfilePage() {
     <div className={common.page}>
       <header className={styles.head}>
         <h1>Профиль</h1>
-        <p className={common.muted}>Доступ к данным определяется вашим членством в компаниях.</p>
       </header>
 
       <div className={styles.layout}>

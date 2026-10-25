@@ -61,7 +61,6 @@ export default function NotificationSettings() {
   return (
     <section id="notifications" className={styles.section} aria-label="Уведомления">
       <h2>Уведомления · {session!.companyName}</h2>
-      <p className={styles.lead}>Утренняя сводка и алерты по важным событиям. Дубли из разных источников приходят одним сообщением.</p>
       {settings.error && <ErrorState error={settings.error} onRetry={settings.reload} />}
       {!value && !settings.error && <Skeleton lines={8} />}
       {value && (

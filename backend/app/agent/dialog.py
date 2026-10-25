@@ -226,9 +226,10 @@ def _quantify(insight: dict, company: dict, question: str, turns: list[dict], ru
     claims = [_claim(result["text"], "client_data", [sid]), _claim(f"Расчет: {result['formula']}", "client_data", [sid])]
     evidence = f"{result['text']} {result['formula']}"
     if re.search(r"налог|прибыл", question, re.I) and result["effect_rub"]:
-        tax = -result["effect_rub"] * PROFIT_TAX
+        # effect_rub < 0 — прибыль до налога падает (например, растут процентные расходы), и налог падает вместе с ней.
+        tax = result["effect_rub"] * PROFIT_TAX
         tax_text = (f"Налог на прибыль {'снизится' if tax < 0 else 'вырастет'} ≈ на {calc.mln(tax)} в год: "
-                    f"изменение прибыли до налога {calc.mln(result['effect_rub'])} × ставка налога 25%")
+                    f"изменение прибыли до налога {'−' if result['effect_rub'] < 0 else '+'}{calc.mln(result['effect_rub'])} × ставка налога 25%")
         claims.append(_claim(tax_text, "client_data", [sid]))
         evidence += f" {tax_text}"
     claims += [_claim(c, "client_data", [sid]) for c in result["caveats"][:1]]
