@@ -1,0 +1,421 @@
+// Аналитика на странице «Контрагенты»: выводы, главные новости, зависимость, отрасли, баланс.
+.head {
+  margin-bottom: 16px;
+
+  h2 {
+    margin: 0;
+  }
+
+  p {
+    margin: 4px 0 0;
+    font-size: 14px;
+    color: var(--ink-2);
+  }
+}
+
+.muted {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+// Блоки идут друг за другом, разделены линией, без вложенных карточек
+.insightsWrap,
+.grid,
+.block + .block {
+  padding-top: 20px;
+  margin-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.insightsWrap:first-of-type {
+  padding-top: 0;
+  margin-top: 0;
+  border-top: 0;
+}
+
+.block + .block {
+  padding-top: 0;
+  margin-top: 0;
+  border-top: 0;
+}
+
+.insightsWrap h3,
+.block h4 {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.block.sep {
+  padding-top: 20px;
+  margin-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.grid:empty {
+  display: none;
+}
+
+.note,
+.how {
+  margin: 14px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+// Серьезность: цвет + текст + значок, не только цвет
+.high {
+  color: var(--red-dark);
+}
+
+.medium {
+  color: var(--amber);
+}
+
+.info {
+  color: var(--ink-2);
+}
+
+.insights {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+
+  > li {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  small {
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  p {
+    margin: 2px 0 0;
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--ink);
+  }
+}
+
+.insIcon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+
+  &.high {
+    background: var(--red-soft);
+  }
+
+  &.medium {
+    background: var(--amber-soft);
+  }
+}
+
+// Главные новости
+.news {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+
+  > li {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px 0;
+    border-top: 1px solid var(--line);
+
+    &:first-child {
+      border-top: 0;
+      padding-top: 0;
+    }
+  }
+}
+
+.newsMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 13px;
+  color: var(--muted);
+
+  time {
+    margin-left: auto;
+  }
+}
+
+.tagKind {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 8px;
+}
+
+.tagDirect {
+  background: var(--red-soft);
+  color: var(--red-dark);
+}
+
+.tagSector {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.newsTitle {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--ink);
+  text-decoration: none;
+
+  &:hover {
+    color: var(--red);
+  }
+}
+
+.newsWho {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.chip {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.newsWhy {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-2);
+  line-height: 1.45;
+}
+
+.more {
+  margin-top: 10px;
+  border: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+  }
+}
+
+// Концентрация
+.verdict {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+
+  svg {
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+}
+
+.stack {
+  display: flex;
+  height: 14px;
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--bg);
+
+  i {
+    display: block;
+    height: 100%;
+  }
+}
+
+.seg1 {
+  background: var(--red);
+}
+
+.seg2 {
+  background: #f47b72;
+}
+
+.seg3 {
+  background: #f9b7b2;
+}
+
+.segRest {
+  background: var(--bg-hover);
+}
+
+.legend {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+  }
+}
+
+.dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.legendName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Отрасли и баланс: горизонтальные полосы
+.sectors,
+.balance {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sectorHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  margin-bottom: 4px;
+
+  b {
+    white-space: nowrap;
+  }
+}
+
+.unknown {
+  color: var(--muted);
+}
+
+.track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--bg);
+  overflow: hidden;
+
+  i {
+    display: block;
+    height: 100%;
+    border-radius: 4px;
+    background: var(--blue);
+  }
+}
+
+.unknownBar {
+  background: var(--muted) !important;
+  opacity: .5;
+}
+
+.barBuy {
+  background: var(--ink) !important;
+}
+
+.barSell {
+  background: var(--green-acid) !important;
+}
+
+@media (max-width: 760px) {
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .grid .block + .block {
+    border-top: 0;
+  }
+}
+
+.step {
+  color: var(--ink-2) !important;
+  font-size: 13px !important;
+
+  b {
+    color: var(--ink);
+  }
+}
+
+.chartsToggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 20px;
+  padding: 10px 16px;
+  width: 100%;
+  justify-content: space-between;
+  border: 0;
+  border-radius: 14px;
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+  }
+}
+
+.flip {
+  display: inline-flex;
+  transform: rotate(180deg);
+}

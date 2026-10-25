@@ -245,6 +245,7 @@
 }
 
 .bar {
+  display: block;
   height: 6px;
   border-radius: 3px;
   background: var(--bg);
@@ -390,17 +391,71 @@
   box-shadow: 0 1px 3px rgba(11, 31, 53, .12);
 }
 
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 8px;
+
+  .seg {
+    margin-bottom: 0;
+  }
+}
+
 .top > li {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1.6fr) minmax(0, 1.2fr) minmax(90px, auto);
-  align-items: center;
-  gap: 16px;
-  padding: 14px 0;
   border-top: 1px solid var(--line);
 
   &:first-child {
     border-top: 0;
   }
+}
+
+.topRow {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1.6fr) minmax(0, 1.2fr) minmax(90px, auto) 18px;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 14px 8px;
+  margin: 0 -8px;
+  width: calc(100% + 16px);
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--bg);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 0;
+  }
+}
+
+.topGo {
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+}
+
+.risk_high {
+  background: var(--red-soft);
+  color: var(--red-dark);
+}
+
+.risk_medium {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.risk_low {
+  background: var(--green-soft);
+  color: var(--green);
 }
 
 .topName {
@@ -448,34 +503,6 @@
   font-weight: 600;
   font-size: 14px;
   white-space: nowrap;
-}
-
-// Второй уровень
-.second > li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px 20px;
-  padding: 14px 0;
-  border-top: 1px solid var(--line);
-
-  &:first-child {
-    border-top: 0;
-  }
-}
-
-.weight {
-  flex: 0 0 120px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--muted);
-
-  b {
-    color: var(--ink);
-    font-size: 16px;
-  }
 }
 
 // Возможные связи: приглушенный блок
@@ -536,9 +563,13 @@
     font-size: 22px;
   }
 
-  .top > li {
+  .topRow {
     grid-template-columns: 40px minmax(0, 1fr) auto;
     gap: 10px 12px;
+  }
+
+  .topGo {
+    display: none;
   }
 
   .topShare {
@@ -550,15 +581,6 @@
     grid-column: 3;
     grid-row: 1;
     align-self: start;
-  }
-
-  .second > li {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .weight {
-    flex: none;
   }
 
   .seg {
