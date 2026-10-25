@@ -1,0 +1,333 @@
+@use "../../styles/breakpoints";
+
+// «Путь влияния»: светлая карточка в общей гамме разбора; цвет итога — только в акцентах (линии, узел компании).
+.map {
+  --tone: var(--red);
+  --tone-soft: var(--red-soft);
+  --tone-ink: var(--red-dark);
+
+  position: relative;
+  margin-bottom: 20px;
+  padding: 20px 24px 24px;
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  animation: mapIn .6s var(--ease-out) backwards;
+}
+
+.neg {
+  --tone: var(--red);
+  --tone-soft: var(--red-soft);
+  --tone-ink: var(--red-dark);
+}
+
+.pos {
+  --tone: var(--green);
+  --tone-soft: var(--green-soft);
+  --tone-ink: var(--green);
+}
+
+.mixed {
+  --tone: #e09a1a;
+  --tone-soft: var(--amber-soft);
+  --tone-ink: var(--amber);
+}
+
+.neutral {
+  --tone: var(--muted);
+  --tone-soft: var(--bg);
+  --tone-ink: var(--ink-2);
+}
+
+@keyframes mapIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin-bottom: 18px;
+
+  h2 {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 18px;
+
+    svg {
+      color: var(--tone);
+    }
+  }
+
+  span {
+    color: var(--muted);
+    font-size: 13px;
+  }
+}
+
+// Колонки: событие | связи | каналы | связи | компания. Высота — по числу каналов: центры строк совпадают с концами линий.
+.stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: 29fr 7fr 28fr 7fr 29fr;
+  height: calc(var(--n) * 74px);
+  min-height: 160px;
+}
+
+.wires {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+@keyframes draw {
+  from {
+    stroke-dashoffset: 100;
+  }
+}
+
+@keyframes flow {
+  from {
+    stroke-dashoffset: 100;
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.wire,
+.flow {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+}
+
+// Основа линии прорисовывается при появлении.
+.wire {
+  stroke: var(--line);
+  stroke-width: 2;
+  stroke-dasharray: 100;
+  animation: draw 1s var(--ease-out) var(--d, 0s) backwards;
+}
+
+.wireOut {
+  stroke: color-mix(in srgb, var(--tone) 35%, var(--line));
+  animation-delay: calc(var(--d, 0s) + .35s);
+}
+
+// Импульс бежит от события к компании: сначала спокойный, у компании — цвета итога.
+.flow {
+  stroke: var(--ink-2);
+  stroke-width: 2.5;
+  stroke-dasharray: 8 92;
+  opacity: .55;
+  animation: flow 2.6s cubic-bezier(.45, 0, .25, 1) calc(var(--d, 0s) + 1s) infinite backwards;
+}
+
+.flowOut {
+  stroke: var(--tone);
+  opacity: .9;
+  animation-delay: calc(var(--d, 0s) + 1.7s);
+}
+
+.kicker {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+@keyframes nodeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.event,
+.company {
+  position: relative;
+  z-index: 1;
+  align-self: center;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--bg);
+  animation: nodeIn .6s var(--ease-out) backwards;
+}
+
+.event {
+  grid-column: 1;
+
+  p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.4;
+    font-weight: 600;
+  }
+}
+
+.channels {
+  grid-column: 3;
+  position: relative;
+  z-index: 1;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-rows: repeat(var(--n), 1fr);
+
+  li {
+    align-self: center;
+    min-width: 0;
+    animation: nodeIn .55s var(--ease-out) var(--d, 0s) backwards;
+  }
+
+  // Ветка — кнопка: ведет к выводу в разборе.
+  button {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 9px 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--card);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color var(--dur-fast), box-shadow var(--dur) var(--ease-out), transform var(--dur) var(--ease-out);
+
+    @media (hover: hover) {
+      &:hover {
+        border-color: color-mix(in srgb, var(--tone) 45%, var(--line));
+        box-shadow: var(--shadow-hover);
+        transform: translateX(2px);
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: 2px;
+    }
+  }
+
+  strong {
+    font-size: 13.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  span {
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+.company {
+  grid-column: 5;
+  animation-delay: .9s;
+  background: var(--tone-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 30%, transparent);
+
+  strong {
+    display: block;
+    font-size: 15px;
+    color: var(--tone-ink);
+  }
+}
+
+// Узел компании мягко «пульсирует» кольцом цвета итога.
+@keyframes ring {
+  0% {
+    opacity: .45;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.1);
+  }
+}
+
+.ring {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 2px var(--tone);
+  pointer-events: none;
+  animation: ring 2.6s var(--ease-out) 1.7s infinite backwards;
+}
+
+.amount {
+  margin: 8px 0 0;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  color: var(--ink);
+
+  small {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: var(--muted);
+  }
+}
+
+// Телефон и узкие экраны: колонки друг под другом, линии не нужны — между блоками бегущие стрелки.
+@include breakpoints.down(breakpoints.$mobile) {
+  .stage {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    gap: 22px;
+  }
+
+  .wires {
+    display: none;
+  }
+
+  .event,
+  .channels,
+  .company {
+    grid-column: 1;
+  }
+
+  .channels {
+    grid-template-rows: none;
+    gap: 8px;
+  }
+
+  .event::after,
+  .channels::after {
+    content: "↓";
+    position: absolute;
+    left: 50%;
+    bottom: -20px;
+    transform: translateX(-50%);
+    color: var(--tone);
+    animation: nudge 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes nudge {
+  50% {
+    transform: translate(-50%, 4px);
+  }
+}

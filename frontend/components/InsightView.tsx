@@ -7,6 +7,7 @@ import BankOffers from "./insight/BankOffers";
 import BankPosition from "./insight/BankPosition";
 import ClaimList, { OpenSource, RulesMode } from "./insight/ClaimList";
 import Feedback from "./insight/Feedback";
+import ImpactMap from "./insight/ImpactMap";
 import InsightHeader from "./insight/InsightHeader";
 import SourceList from "./insight/SourceList";
 import { groupSources } from "./insight/sources";
@@ -35,6 +36,9 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
 }) {
   const { groups, index } = groupSources(ins);
   const [showTrace, setShowTrace] = useState(false);
+  // «Ход анализа» раскрывается плавно: после первого открытия он остается в разметке, чтобы и сворачиваться плавно;
+  // каждое открытие — новый ключ, шаги заново проявляются по очереди.
+  const [traceOpens, setTraceOpens] = useState(0);
   const [showSources, setShowSources] = useState(() => sourceFromHash() !== null);
   const [focused, setFocused] = useState<number | null>(sourceFromHash);
 
@@ -59,14 +63,14 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
   const consequences = (
     <Card title={`${actionsFirst ? 4 : 3}. Какие последствия возможны`} actions={fb("consequences")} className={styles.span2}>
       <div className={styles.twoCol}>
-        <div><h4 className={styles.neg}>Риски</h4><ClaimList items={ins.risks} index={index} empty="Существенных рисков не выявлено" /></div>
-        <div><h4 className={styles.pos}>Возможности</h4><ClaimList items={ins.opportunities} index={index} empty="Явных возможностей не выявлено" /></div>
+        <div><h4 className={styles.neg}>Риски</h4><ClaimList items={ins.risks} index={index} empty="Существенных рисков не выявлено" anchor="risk" /></div>
+        <div><h4 className={styles.pos}>Возможности</h4><ClaimList items={ins.opportunities} index={index} empty="Явных возможностей не выявлено" anchor="opp" /></div>
       </div>
     </Card>
   );
   const actionsCard = (
     <Card title={`${actionsFirst ? 3 : 4}. Что можно сделать`} actions={fb("actions")} className={actionsFirst ? styles.span2 : ""}>
-      <ClaimList items={ins.actions} index={index} />
+      <ClaimList items={ins.actions} index={index} anchor="act" />
       {ins.questions.length > 0 && (<><h4>Вопросы для дополнительного анализа</h4><ul className={common.plain}>{ins.questions.map((q) => <li key={q}>{q}</li>)}</ul></>)}
       <BankOffers insightId={ins.insight_id} />
     </Card>
@@ -78,11 +82,19 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
     <div className={styles.insight}>
       <InsightHeader ins={ins} onRefresh={onRefresh} refreshing={refreshing} upgrading={upgrading} upgradeFailed={upgradeFailed}
         upgradeStage={upgradeStage}
-        showTrace={showTrace} onToggleTrace={() => { if (!showTrace) track("section_expand", { section: "trace" }); setShowTrace((v) => !v); }}
+        showTrace={showTrace} onToggleTrace={() => {
+          if (!showTrace) { track("section_expand", { section: "trace" }); setTraceOpens((n) => n + 1); }
+          setShowTrace((v) => !v);
+        }}
         perspective={perspective} ownRole={ownRole} onPerspective={onPerspective} />
 
-      {showTrace && <TraceView trace={ins.trace} checks={ins.quality.checks} />}
+      <div className={`${styles.traceWrap} ${showTrace ? styles.traceOpen : ""}`} inert={!showTrace}>
+        <div className={styles.traceInner}>
+          {traceOpens > 0 && <TraceView key={traceOpens} trace={ins.trace} checks={ins.quality.checks} />}
+        </div>
+      </div>
       {mentions}
+      <ImpactMap ins={ins} />
 
       <div className={styles.insightGrid}>
         <Card title="1. Что произошло" actions={fb("what_happened")}>
@@ -97,7 +109,7 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
         </Card>
 
         <Card title="2. Почему это важно для компании" actions={fb("why_important")}>
-          <ClaimList items={ins.why_important} index={index} />
+          <ClaimList items={ins.why_important} index={index} anchor="why" />
           {ins.features_used.length > 0 && (
             <div className={styles.features}>
               <h4>Признаки компании, повлиявшие на вывод</h4>

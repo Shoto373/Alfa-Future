@@ -135,10 +135,11 @@
 
 .topbar {
   height: 72px;
-  // «Стеклянная» шапка: при прокрутке содержимое мягко просвечивает под ней.
-  background: rgba(242, 243, 245, .82);
-  backdrop-filter: saturate(180%) blur(14px);
-  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  // Матовая шапка: содержимое под ней лишь угадывается (сильное размытие, почти непрозрачный фон),
+  // а не просвечивает — кнопки и текст страницы не читаются сквозь шапку.
+  background: rgba(242, 243, 245, .95);
+  backdrop-filter: saturate(160%) blur(24px);
+  -webkit-backdrop-filter: saturate(160%) blur(24px);
   display: flex;
   align-items: center;
   gap: 12px;
