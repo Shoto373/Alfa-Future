@@ -38,11 +38,7 @@ export default function HomePage() {
     <div className={common.page}>
       <HomeHero feed={feed} total={total} topics={topics} userId={session!.user.user_id} />
 
-      <div className={styles.tabs} role="tablist" aria-label="Разделы главной">
-        <span className={`${styles.tab} ${styles.on}`} role="tab" aria-selected="true">Сводка</span>
-        <Link href="/pulse" className={styles.tab} role="tab" aria-selected="false">Лента Пульса</Link>
-        <Link href="/pulse/analytics" className={`${styles.tab} ${common.hideSm}`} role="tab" aria-selected="false">Аналитика банка</Link>
-      </div>
+      <h2 className={styles.summaryTitle}>Сводка</h2>
 
       <div className={styles.homeGrid}>
         <section className={common.card}>
