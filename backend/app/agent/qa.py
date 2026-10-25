@@ -16,6 +16,7 @@ from app import llm
 from app.agent import prompts
 from app.agent.tools import ToolRunner
 from app.agent.validators import claim_errors
+from app.companies import supply
 from app.companies.sectors import SECTOR_NAMES
 from app.knowledge import kb
 from app.news.classifier import classify
@@ -70,9 +71,11 @@ def rules_answer(insight: dict, company: dict, question: str, runner: ToolRunner
     elif intent == "counterparties":
         for side, label in (("suppliers", "Поставщики"), ("customers", "Покупатели")):
             d = company[side]
-            parts = ", ".join(f"{SECTOR_NAMES.get(s['sector'], 'вне выборки')} — {s['share']:.0%}" for s in d["by_sector"][:4])
+            view = supply.side_view(d)
+            parts = ", ".join(f"{SECTOR_NAMES.get(i['sector'], i['sector'])} — {i['share_known']:.0%}" for i in view["items"][:4])
+            scope = f" (доли от известной части оборота, отрасль известна у {view['known_share']:.0%})" if parts else ""
             top1 = f"; крупнейший контрагент — {d['top1_share']:.0%} оборота" if d["top1_share"] else ""
-            claims.append(_claim(f"{label}: {d['counterparties']} контрагентов. По отраслям: {parts or 'нет данных'}{top1}.",
+            claims.append(_claim(f"{label}: {d['counterparties']} контрагентов. По отраслям: {parts or 'нет данных'}{scope}{top1}.",
                                  "client_data", ["client:payments"]))
         answer = "Структура платежей компании по данным кейса:"
     elif intent == "peers":

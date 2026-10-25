@@ -11,8 +11,9 @@ test("контрагенты: топ по платежам и второй ур�
   expect((await page.request.post(`${api}/api/v1/companies/${free.company_id}/claim`, { data: { role: "cfo" } })).ok()).toBeTruthy();
   await page.goto("/pulse/counterparties");
   await expect(page.getByRole("heading", { name: /^Контрагенты / })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Главные контрагенты по платежам" })).toBeVisible();
-  await expect(page.locator("table tbody tr").first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^С кем вы связаны/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Что произошло у контрагентов" })).toBeVisible();
+  await expect(page.locator("section[aria-labelledby=top-title] ul li").first()).toBeVisible();
   await page.setViewportSize({ width: 375, height: 812 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
   await page.screenshot({ path: "test-results/counterparties.png", fullPage: true });

@@ -159,9 +159,9 @@
      "feature": "suppliers.by_sector",
      "kind": "exposure",
      "origin": "payments",
-     "text": "15% платежей поставщиков — отрасль «Строительство»: проектное финансирование и спрос на ипотеку зависят от стоимости денег",
+     "text": "31% известной части платежей поставщикам (отрасль известна у 50% оборота) — отрасль «Строительство»: проектное финансирование и спрос на ипотеку зависят от стоимости денег",
      "topic": "key_rate",
-     "weight": 0.161
+     "weight": 0.241
     },
     {
      "feature": "role",
@@ -172,7 +172,7 @@
      "weight": 1.4
     }
    ],
-   "score": 71.6
+   "score": 72.0
   },
   "risks": [
    {
@@ -661,15 +661,24 @@
  {
   "actions": [
    {
-    "features": [
-     "suppliers.by_sector"
-    ],
+    "features": [],
     "origin": "ai",
     "source_ids": [
      "news:seed-inflation-week",
-     "client:profile"
+     "client:profile",
+     "bank:infl-01"
     ],
-    "text": "Обсудить с банком влияние события на план финансирования."
+    "text": "Обновить бюджет с учетом прогноза инфляции банка и проверить индексацию в договорах"
+   },
+   {
+    "features": [],
+    "origin": "ai",
+    "source_ids": [
+     "news:seed-inflation-week",
+     "client:profile",
+     "bank:infl-01"
+    ],
+    "text": "Пересчитать логистические издержки и проверить условия топливных надбавок в договорах перевозки"
    }
   ],
   "bank_view": {
@@ -700,39 +709,60 @@
   "company_id": "U_9",
   "disclaimer": "Прототип для хакатона. Данные о компаниях обезличены, новости демо-ленты пересказывают материалы кейса. Материал не является инвестиционной рекомендацией. Выводы с пометкой «AI» сформированы автоматически.",
   "effect": "mixed",
-  "fallback_reason": null,
+  "fallback_reason": "checks",
   "features_used": [
    {
     "label": "Отрасли покупателей",
     "name": "customers.by_sector",
-    "value": "ИТ и телекоммуникации 60%, Сельское хозяйство и пищевая промышленность 39%, Транспорт и логистика 1%"
+    "value": "ИТ и телекоммуникации 60%, Сельское хозяйство и пищевая промышленность 39%, Транспорт и логистика 1% (от известной части, 100% оборота)"
+   },
+   {
+    "label": "Группа компаний",
+    "name": "group",
+    "value": "3 компаний, выручка 178.9 млрд ₽"
    },
    {
     "label": "Отрасли поставщиков",
     "name": "suppliers.by_sector",
-    "value": "вне выборки 50%, Сельское хозяйство и пищевая промышленность 33%, Строительство 15%"
+    "value": "Сельское хозяйство и пищевая промышленность 67%, Строительство 31%, Транспорт и логистика 2% (от известной части, 50% оборота)"
    }
   ],
   "headline": "ООО «Полный Привод Групп»: издержки растут быстрее, чем их удается переложить в цены.",
-  "mode": "llm",
-  "model": "recorded/compose",
+  "mode": "rules",
+  "model": null,
   "news_id": "seed-inflation-week",
   "opportunities": [
    {
     "features": [
-     "suppliers.by_sector"
+     "group",
+     "suppliers.by_sector",
+     "customers.by_sector"
     ],
     "origin": "ai",
     "source_ids": [
      "news:seed-inflation-week",
-     "bank:infl-01"
+     "client:payments",
+     "client:profile"
     ],
-    "text": "Компания может пересмотреть условия финансирования."
+    "text": "«Инфляция»: номинальная выручка растет вместе с ценами — если ситуация сложится в пользу компании."
+   },
+   {
+    "features": [
+     "group",
+     "customers.by_sector"
+    ],
+    "origin": "ai",
+    "source_ids": [
+     "news:seed-inflation-week",
+     "client:payments",
+     "client:profile"
+    ],
+    "text": "Могут снизиться топливные и транспортные издержки: 36% выручки группы приходится на отрасль «Сельское хозяйство и пищевая промышленность» — дорожают топливо для техники и доставка."
    }
   ],
   "products": [],
   "quality": {
-   "attempts": 2,
+   "attempts": 3,
    "checks": [
     {
      "detail": "Все разделы заполнены",
@@ -765,7 +795,7 @@
      "passed": true
     },
     {
-     "detail": "Использовано признаков компании: 2",
+     "detail": "Использовано признаков компании: 3",
      "name": "personalized",
      "passed": true
     },
@@ -783,17 +813,13 @@
      "detail": "Резюме банка соответствует проверенному тезису",
      "name": "bank_summary_grounded",
      "passed": true
-    },
-    {
-     "detail": "Проверено выводов AI: 4; подтверждено 3, частично 0, убрано 1: Событие касается компании через ее профиль и операции. — нет опоры в источниках",
-     "name": "semantic_review",
-     "passed": true
     }
    ],
    "passed": true
   },
   "questions": [
-   "Какая доля обязательств компании зависит от ставки?"
+   "Есть ли в договорах механизмы индексации цен?",
+   "Какую долю себестоимости составляют топливо и логистика?"
   ],
   "relevance": {
    "reasons": [
@@ -814,10 +840,18 @@
      "weight": 0.405
     },
     {
+     "feature": "suppliers.by_sector",
+     "kind": "exposure",
+     "origin": "payments",
+     "text": "67% известной части платежей поставщикам (отрасль известна у 50% оборота) — отрасль «Сельское хозяйство и пищевая промышленность»: цены реализации растут, но дорожают корма, топливо и логистика",
+     "topic": "inflation",
+     "weight": 0.397
+    },
+    {
      "feature": "customers.by_sector",
      "kind": "exposure",
      "origin": "payments",
-     "text": "39% платежей покупателей — отрасль «Сельское хозяйство и пищевая промышленность»: цены реализации растут, но дорожают корма, топливо и логистика",
+     "text": "39% известной части поступлений от покупателей — отрасль «Сельское хозяйство и пищевая промышленность»: цены реализации растут, но дорожают корма, топливо и логистика",
      "topic": "inflation",
      "weight": 0.309
     },
@@ -833,25 +867,17 @@
      "feature": "suppliers.by_sector",
      "kind": "exposure",
      "origin": "payments",
-     "text": "33% платежей поставщиков — отрасль «Сельское хозяйство и пищевая промышленность»: цены реализации растут, но дорожают корма, топливо и логистика",
-     "topic": "inflation",
-     "weight": 0.264
+     "text": "67% известной части платежей поставщикам (отрасль известна у 50% оборота) — отрасль «Сельское хозяйство и пищевая промышленность»: дорожают топливо для техники и доставка",
+     "topic": "fuel_oil",
+     "weight": 0.301
     },
     {
      "feature": "customers.by_sector",
      "kind": "exposure",
      "origin": "payments",
-     "text": "39% платежей покупателей — отрасль «Сельское хозяйство и пищевая промышленность»: дорожают топливо для техники и доставка",
+     "text": "39% известной части поступлений от покупателей — отрасль «Сельское хозяйство и пищевая промышленность»: дорожают топливо для техники и доставка",
      "topic": "fuel_oil",
      "weight": 0.235
-    },
-    {
-     "feature": "suppliers.by_sector",
-     "kind": "exposure",
-     "origin": "payments",
-     "text": "33% платежей поставщиков — отрасль «Сельское хозяйство и пищевая промышленность»: дорожают топливо для техники и доставка",
-     "topic": "fuel_oil",
-     "weight": 0.2
     },
     {
      "feature": "role",
@@ -862,7 +888,7 @@
      "weight": 1.13
     }
    ],
-   "score": 41.2
+   "score": 44.1
   },
   "risks": [
    {
@@ -872,9 +898,9 @@
     "origin": "ai",
     "source_ids": [
      "news:seed-inflation-week",
-     "client:profile"
+     "client:payments"
     ],
-    "text": "Расходы компании могут вырасти из-за события."
+    "text": "Издержки растут быстрее, чем их удается переложить в цены: 31% известной части платежей поставщикам (отрасль известна у 50% оборота) — отрасль «Строительство» — растет стоимость материалов и работ по фиксированным контрактам."
    }
   ],
   "role": "cfo",
@@ -1157,7 +1183,7 @@
     "step": 12
    },
    {
-    "detail": "Не пройдено: numbers_grounded, evidence_boundaries",
+    "detail": "Не пройдено: numbers_grounded, personalized, evidence_boundaries",
     "name": "self_check_1",
     "output": {
      "checks": [
@@ -1187,7 +1213,7 @@
       },
       {
        "name": "personalized",
-       "passed": true
+       "passed": false
       },
       {
        "name": "evidence_boundaries",
@@ -1219,7 +1245,7 @@
     "step": 14
    },
    {
-    "detail": "Модель recorded/review исправила утверждений: 1, убрала: 0 (из 1 с ошибками)",
+    "detail": "Модель recorded/review исправила утверждений: 1, убрала: 0 (из 1 с ошибками); разделы дополнены быстрым разбором",
     "name": "adapt_1",
     "output": null,
     "stage": "adapt",
@@ -1227,7 +1253,7 @@
     "step": 15
    },
    {
-    "detail": "Все проверки пройдены",
+    "detail": "Не пройдено: personalized",
     "name": "self_check_2",
     "output": {
      "checks": [
@@ -1257,7 +1283,7 @@
       },
       {
        "name": "personalized",
-       "passed": true
+       "passed": false
       },
       {
        "name": "evidence_boundaries",
@@ -1275,24 +1301,84 @@
      "claim_errors": {}
     },
     "stage": "check",
-    "status": "ok",
+    "status": "warning",
     "step": 16
    },
    {
-    "detail": "Проверено выводов AI: 4; подтверждено 3, частично 0, убрано 1: Событие касается компании через ее профиль и операции. — нет опоры в источниках",
-    "name": "semantic_review",
+    "detail": "разделы дополнены быстрым разбором",
+    "name": "adapt_2",
     "output": null,
-    "stage": "check",
+    "stage": "adapt",
     "status": "ok",
     "step": 17
    },
    {
-    "detail": "AI-разбор готов, источников: 7",
+    "detail": "Не пройдено: personalized",
+    "name": "self_check_3",
+    "output": {
+     "checks": [
+      {
+       "name": "completeness",
+       "passed": true
+      },
+      {
+       "name": "sources_linked",
+       "passed": true
+      },
+      {
+       "name": "bank_view_grounded",
+       "passed": true
+      },
+      {
+       "name": "bank_view_found",
+       "passed": true
+      },
+      {
+       "name": "numbers_grounded",
+       "passed": true
+      },
+      {
+       "name": "consistent_with_client",
+       "passed": true
+      },
+      {
+       "name": "personalized",
+       "passed": false
+      },
+      {
+       "name": "evidence_boundaries",
+       "passed": true
+      },
+      {
+       "name": "headline_grounded",
+       "passed": true
+      },
+      {
+       "name": "bank_summary_grounded",
+       "passed": true
+      }
+     ],
+     "claim_errors": {}
+    },
+    "stage": "check",
+    "status": "warning",
+    "step": 18
+   },
+   {
+    "detail": "Лимит коррекций исчерпан; повторно проверен быстрый разбор",
+    "name": "safe_fallback",
+    "output": null,
+    "stage": "adapt",
+    "status": "warning",
+    "step": 19
+   },
+   {
+    "detail": "Быстрый разбор готов, источников: 7",
     "name": "finalize",
     "output": {},
     "stage": "finalize",
     "status": "ok",
-    "step": 18
+    "step": 20
    }
   ],
   "what_happened": {
@@ -1351,13 +1437,34 @@
   "why_important": [
    {
     "features": [
+     "group"
+    ],
+    "origin": "ai",
+    "source_ids": [
+     "news:seed-inflation-week",
+     "client:profile"
+    ],
+    "text": "В новости: «По данным Росстата, за неделю с 25 по 31 августа цены снизились на 0,01%». Для компании это важно: 36% выручки группы приходится на отрасль «Сельское хозяйство и пищевая промышленность» — цены реализации растут, но дорожают корма, топливо и логистика."
+   },
+   {
+    "features": [
+     "suppliers.by_sector"
+    ],
+    "origin": "client_data",
+    "source_ids": [
+     "client:payments"
+    ],
+    "text": "67% известной части платежей поставщикам (отрасль известна у 50% оборота) — отрасль «Сельское хозяйство и пищевая промышленность» — цены реализации растут, но дорожают корма, топливо и логистика"
+   },
+   {
+    "features": [
      "customers.by_sector"
     ],
     "origin": "client_data",
     "source_ids": [
      "client:payments"
     ],
-    "text": "39% платежей покупателей — отрасль «Сельское хозяйство и пищевая промышленность» — цены реализации растут, но дорожают корма, топливо и логистика"
+    "text": "39% известной части поступлений от покупателей — отрасль «Сельское хозяйство и пищевая промышленность» — цены реализации растут, но дорожают корма, топливо и логистика"
    }
   ]
  }

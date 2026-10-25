@@ -1,0 +1,189 @@
+// Мелкие части экрана «Контрагенты»: подсказка «?» и схема цепочки.
+.hint {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 6px;
+  font-weight: 400;
+}
+
+.hintBtn {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--bg);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+  display: grid;
+  place-items: center;
+
+  &:hover,
+  &[aria-expanded="true"] {
+    background: var(--ink);
+    color: var(--white);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+  }
+}
+
+.hintPop {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  left: -8px;
+  width: 260px;
+  max-width: calc(100vw - 48px);
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--ink);
+  color: var(--white);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  font-weight: 400;
+  box-shadow: var(--shadow-pop);
+  display: none;
+  pointer-events: none;
+}
+
+.hintEnd {
+  left: auto;
+  right: -8px;
+}
+
+.hint:hover .hintPop,
+.hint:focus-within .hintPop,
+.hintOpen {
+  display: block;
+}
+
+@media (max-width: 640px) {
+  // На телефоне подсказка — плашка над нижней панелью, чтобы не вылезать за край
+  .hintPop,
+  .hintEnd {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    top: auto;
+    bottom: 88px;
+    width: auto;
+    max-width: none;
+  }
+}
+
+// Схема цепочки
+.chain {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 0;
+  min-width: 0;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.arrow {
+  display: inline-grid;
+  place-items: center;
+  color: var(--muted);
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
+.node {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 6px 12px;
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 13px;
+
+  small {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+  }
+
+  b {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+
+  em {
+    font-style: normal;
+    font-size: 12px;
+    color: var(--ink-2);
+  }
+}
+
+.nodeYou {
+  background: var(--ink);
+  color: var(--white);
+  white-space: nowrap;
+
+  small {
+    color: rgba(255, 255, 255, .6);
+  }
+}
+
+.nodeLast {
+  background: var(--red-soft);
+
+  small {
+    color: var(--red-dark);
+  }
+}
+
+// На телефоне цепочка идет сверху вниз: каждый узел — одна строка
+@media (max-width: 640px) {
+  .chain {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
+
+  .link {
+    flex-direction: column;
+    align-items: flex-start;
+    max-width: 100%;
+  }
+
+  .arrow {
+    transform: rotate(90deg);
+    padding: 2px 0 2px 14px;
+  }
+
+  .node {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 8px;
+  }
+}
+
+.anon {
+  color: var(--muted);
+  font-weight: 500 !important;
+  font-style: italic;
+}

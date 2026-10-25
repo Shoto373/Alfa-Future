@@ -252,9 +252,13 @@ def test_disband_company(client, company, new_client):
     register(bob, "bob@example.com")
     client.post(f"{API}/companies/{cid}/members", json={"email": "bob@example.com", "role": "ceo"})
     client.post(f"{API}/companies/{cid}/members", json={"email": "pending@example.com", "role": "cfo"})
-    # Не администратор расформировать не может.
+    # Расформировать может только собственник: ни обычный участник, ни основатель-администратор с другой ролью не могут.
     assert_error(bob.delete(f"{API}/companies/{cid}"), 403, "FORBIDDEN")
-    assert client.delete(f"{API}/companies/{cid}").status_code == 204
+    assert_error(client.delete(f"{API}/companies/{cid}"), 403, "FORBIDDEN")
+    carol = new_client()
+    register(carol, "carol@example.com")
+    client.post(f"{API}/companies/{cid}/members", json={"email": "carol@example.com", "role": "owner"})
+    assert carol.delete(f"{API}/companies/{cid}").status_code == 204
     # Доступ у всех пропал, компания снова свободна для регистрации.
     assert_error(client.get(f"{API}/companies/{cid}/members"), 403, "FORBIDDEN")
     assert_error(bob.get(f"{API}/feed", params={"company_id": cid}), 403, "FORBIDDEN")

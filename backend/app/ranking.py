@@ -30,7 +30,7 @@ import numpy as np
 from sqlalchemy import select
 
 from app import cache, config, database, embeddings
-from app.companies import extra, graph, profiles
+from app.companies import extra, graph, profiles, supply
 from app.companies.sectors import SECTOR_NAMES
 from app.models import Feedback, Insight
 from app.domain_config import runtime
@@ -80,7 +80,7 @@ REGION_WEIGHT = 0.5
 # «Москва» в новостях чаще означает государство («Москва заявила»), а «московское время» и «Мосбиржа»
 # не про регион; к тому же здесь половина компаний — сигнал региона для них не различает новости.
 REGION_SKIP = {"москв", "московск"}
-COUNTERPARTY_MIN_SHARE = 0.15
+COUNTERPARTY_MIN_SHARE = supply.MIN_SHARE  # доля отрасли контрагентов в ИЗВЕСТНОЙ части платежей
 FEEDBACK_STEP, FEEDBACK_MIN, FEEDBACK_MAX = 0.1, 0.6, 1.3
 STORY_SIMILARITY = 0.88  # заголовки ближе этого — один сюжет из разных источников
 NOW_OVERRIDE: datetime | None = None  # для тестов
@@ -191,17 +191,19 @@ def _direct_signals(c: dict | None, cls: dict, news: dict, reasons: list[dict]) 
                         "text": f"Новость про вашу отрасль — {SECTOR_NAMES.get(c['sector'], '').lower()}"})
     supply_chain = 0.0
     if c:
-        for side, label in (("suppliers", "поставщикам"), ("customers", "от покупателей")):
-            for item in c[side]["by_sector"]:
-                if item["sector"] in cls["sectors"] and item["sector"] not in ("unknown", c["sector"]) \
-                        and item["share"] >= COUNTERPARTY_MIN_SHARE:
-                    supply_chain += item["share"]
-                    reasons.append({"kind": "supply_chain", "feature": f"{side}.by_sector", "origin": "payments",
-                                    "weight": round(item["share"], 3),
-                                    "text": f"Затрагивает ваших {'поставщиков' if side == 'suppliers' else 'покупателей'}: "
-                                            f"{round(item['share'] * 100)}% платежей {label} — отрасль "
-                                            f"«{SECTOR_NAMES.get(item['sector'], item['sector'])}»"})
-        supply_chain = min(supply_chain, 1.0)
+        # Доли — от известной части платежей, с поправкой на ее размер (supply.links). Сумма по обеим сторонам,
+        # затем вогнутое преобразование: доля 30% уже даёт 0,55, а не 0,3, и новость про крупную отрасль
+        # контрагентов может конкурировать с новостью про отрасль самой компании (вес — в ranking_weights.json).
+        total = 0.0
+        for link in supply.links(c):
+            if link["sector"] in cls["sectors"]:
+                value = link["share"] * link["confidence"]
+                total += value
+                reasons.append({"kind": "supply_chain", "feature": f"{link['side']}.by_sector", "origin": "payments",
+                                "weight": round(value, 3),
+                                "text": f"Через ваших {supply.SIDE_WORD[link['side']]}: отрасль "
+                                        f"«{SECTOR_NAMES.get(link['sector'], link['sector'])}», {supply.share_text(link)}"})
+        supply_chain = min(math.sqrt(total), 1.0)
     country_hit = 0.0
     if c:
         # Страна должна быть предметом новости (заголовок и начало), а не упоминанием в хвосте текста.
@@ -335,8 +337,14 @@ def score(news: dict, company_id: str, role: str) -> dict:
     reasons = x["reasons"]
     # Роль — общий признак, а не связь с компанией: в конце списка причин.
     reasons.sort(key=lambda r: (r["kind"] == "role", -r["weight"]))
+    top = reasons[:8]
+    # Связь через цепочку поставок не выпадает из причин, даже когда у новости больше восьми более весомых.
+    if not any(r["kind"] == "supply_chain" for r in top):
+        chain = next((r for r in reasons if r["kind"] == "supply_chain"), None)
+        if chain:
+            top = top[:7] + [chain]
     return {"score": value, "raw": round(raw, 3), "freshness": round(x["freshness"], 3),
-            "age_days": round(x["age_days"], 1), "reasons": reasons[:8]}
+            "age_days": round(x["age_days"], 1), "reasons": top}
 
 
 def _collapse_stories(ranked: list[dict]) -> list[dict]:
@@ -398,7 +406,66 @@ def feed(items: list[dict], company_id: str, role: str, topic: str | None = None
             continue
         ranked.append({"news": news, "relevance": relevance})
     ranked.sort(key=lambda r: r["relevance"]["score"], reverse=True)
-    return _diversify(_collapse_stories(ranked[: limit * 2]))[:limit]
+    result = _diversify(_collapse_stories(ranked[: limit * 2]))[:limit]
+    return result if topic or limit < SUPPLY_QUOTA_TOP else _supply_quota(result, ranked)[:limit]
+
+
+# Мягкая квота цепочки поставок: у компании с релевантными новостями про отрасли ее поставщиков или покупателей
+# в первых SUPPLY_QUOTA_TOP позициях ленты есть хотя бы SUPPLY_QUOTA таких новостей. Они вытесняют только
+# самые слабые новости без этой связи и только если оценка не ниже порога: слабая связь квоту не получает.
+SUPPLY_QUOTA_TOP = 20
+SUPPLY_QUOTA = 2
+SUPPLY_QUOTA_MIN_SCORE = 20.0
+
+
+def _is_supply(r: dict) -> bool:
+    return any(x["kind"] == "supply_chain" for x in r["relevance"]["reasons"])
+
+
+def _story_id(r: dict) -> str | None:
+    news_id = r["news"].get("news_id")
+    info = store.story(news_id) if news_id else None
+    return info["story_id"] if info is not None and info["size"] >= 2 else None
+
+
+def _same_story(candidate: dict, kept: list[dict], head: list[dict]) -> bool:
+    """Тот же сюжет, что у новости, уже стоящей в ленте: по сюжету хранилища или по близкому заголовку (первые позиции)."""
+    story = _story_id(candidate)
+    if story is not None and any(_story_id(r) == story for r in kept):
+        return True
+    if not head:
+        return False
+    vectors = embeddings.embed([candidate["news"]["title"]] + [r["news"]["title"] for r in head])
+    if vectors is None:
+        return False
+    matrix = embeddings.as_matrix(vectors)
+    return bool(((matrix[1:] @ matrix[0]) >= STORY_SIMILARITY).any())
+
+
+def _supply_quota(result: list[dict], ranked: list[dict]) -> list[dict]:
+    head = result[:SUPPLY_QUOTA_TOP]
+    need = SUPPLY_QUOTA - sum(1 for r in head if _is_supply(r))
+    if need <= 0:
+        return result
+    in_head = {r["news"].get("news_id") for r in head}
+    picked: list[dict] = []
+    for r in ranked:  # от самой релевантной; пул — все новости, прошедшие отбор, а не только первые limit
+        if len(picked) >= need:
+            break
+        if not _is_supply(r) or r["relevance"]["score"] < SUPPLY_QUOTA_MIN_SCORE or r["news"].get("news_id") in in_head:
+            continue
+        if _same_story(r, result + picked, head + picked):
+            continue
+        picked.append(r)
+    if not picked:
+        return result
+    # Уходят самые слабые из первых позиций, не относящиеся к цепочке поставок (свободные места — без вытеснения).
+    victims = [i for i, r in sorted(enumerate(head), key=lambda ir: ir[1]["relevance"]["score"]) if not _is_supply(r)]         if len(head) >= SUPPLY_QUOTA_TOP else []
+    drop = set(victims[:len(picked)])
+    kept = sorted((r for i, r in enumerate(head) if i not in drop), key=lambda r: -r["relevance"]["score"])
+    moved = {r["news"].get("news_id") for r in picked}
+    tail = [r for r in result[SUPPLY_QUOTA_TOP:] if r["news"].get("news_id") not in moved]
+    return kept + sorted(picked, key=lambda r: -r["relevance"]["score"]) + tail
 
 
 DIVERSITY_STEP, DIVERSITY_FLOOR = 0.85, 0.6
@@ -450,7 +517,7 @@ def company_feed(company_id: str, role: str, limit: int = 500) -> list[dict]:
         return feed(store.all_items(), company_id, role, None, limit)
     # Оценки пользователей меняют ранжирование — их отпечаток входит в ключ.
     feedback = hashlib.sha1(repr(sorted(_topic_feedback(company_id, role).items())).encode()).hexdigest()[:10]
-    key = (f"feed:v2:{company_id}:{role}:{limit}:{store.revision()}:{profiles.signature()}:{embeddings.signature()}"
+    key = (f"feed:v3:{company_id}:{role}:{limit}:{store.revision()}:{profiles.signature()}:{embeddings.signature()}"
            f":fb{feedback}:x{extra.signature(company_id)}:w{weights()['signature']}:d{runtime.signature()}")
     found = _cached_feed(key)
     if found is not None:

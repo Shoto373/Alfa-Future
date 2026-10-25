@@ -32,7 +32,7 @@ export default function CompanySwitcher() {
       <CompanyTile id={session.companyId} name={session.companyName} size={36} />
       <span className={styles.switcherText}>
         <span className={styles.switcherName} data-testid="company-name">{session.companyName}</span>
-        <span className={styles.switcherLabel} data-testid="company-role">{ROLE_NAMES[session.role]}{session.isAdmin ? " · администратор" : ""}</span>
+        <span className={styles.switcherLabel} data-testid="company-role">{ROLE_NAMES[session.role]}</span>
       </span>
     </>
   );
@@ -44,7 +44,8 @@ export default function CompanySwitcher() {
         {many && (
           <button type="button" className={`${styles.switcherBtn} ${common.iconBtn}`} onClick={() => setOpen((v) => !v)} aria-expanded={open}
             aria-label="Сменить организацию" title="Сменить организацию">
-            <Icon name="chevron" size={16} />
+            <Icon name="swap" size={16} />
+            <span className={styles.switcherBtnText}>Сменить</span>
           </button>
         )}
       </div>
@@ -57,7 +58,7 @@ export default function CompanySwitcher() {
                 <button type="button" className={m.company_id === session.companyId ? styles.current : ""}
                   onClick={() => { setActiveCompany(m.company_id); setOpen(false); }}>
                   <CompanyTile id={m.company_id} name={m.company_name} size={32} />
-                  <span><strong>{m.company_name}</strong><small>{ROLE_NAMES[m.role]}{m.is_admin ? " · администратор" : ""}</small></span>
+                  <span><strong>{m.company_name}</strong><small>{ROLE_NAMES[m.role]}</small></span>
                 </button>
               </li>
             ))}
