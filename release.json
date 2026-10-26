@@ -1,9 +1,9 @@
 {
-  "commit": "98c1cb6518c1b7e8aba4bd726e9738aa3674e947",
-  "short": "98c1cb6",
-  "subject": "fix(worker): превью конфигурации берется раньше плановых задач — UI-тест не ждет очередь",
-  "author": "Egor",
-  "url": "https://github.com/dvaJf/alfa/commit/98c1cb6518c1b7e8aba4bd726e9738aa3674e947",
-  "run_url": "https://github.com/dvaJf/alfa/actions/runs/40238746833",
-  "built_at": "2026-10-25T22:15:08+00:00"
+  "commit": "65c109b023a516cbfa891cf50dbf253ac3327b29",
+  "short": "65c109b",
+  "subject": "Merge pull request #31 from dvaJf/maksim",
+  "author": "Shoto373",
+  "url": "https://github.com/dvaJf/alfa/commit/65c109b023a516cbfa891cf50dbf253ac3327b29",
+  "run_url": "https://github.com/dvaJf/alfa/actions/runs/40279737798",
+  "built_at": "2026-10-26T06:31:15+00:00"
 }
