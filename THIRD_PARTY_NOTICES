@@ -1,0 +1,128 @@
+THIRD PARTY NOTICES — «Альфа.Пульс»
+
+Версии — по backend/requirements.txt и frontend/package-lock.json (сверено 26.10.2026).
+Транзитивные Python-версии закреплены в backend/constraints.txt.
+Тексты лицензий распространяются вместе с пакетами.
+
+Backend (Python, PyPI)
+  SQLAlchemy         2.0.55   MIT          (ORM и транзакции)
+  alembic            1.20.1   MIT          (миграции схемы)
+  psycopg, psycopg-binary 3.2.12 LGPL-3.0-only (метаданные пакета); бинарная сборка включает libpq
+  pgvector (Python) 0.3.6    MIT          (адаптер векторного типа PostgreSQL)
+  redis (Python)     5.2.1   MIT          (клиент кэша лент)
+  PyYAML             6.0.3   MIT          (доменная конфигурация backend/config/sectors)
+  tzdata             2026.5  Apache-2.0   (часовые пояса пользователей, расписание сводок)
+  fastapi            0.158.0   MIT
+  starlette          1.9.0     BSD-3-Clause  (зависимость fastapi)
+  pydantic           2.14.1    MIT
+  uvicorn            0.54.0    BSD-3-Clause
+  httpx              0.28.1    BSD-3-Clause   (RSS/URL-парсер, LLM-клиент, тесты)
+  pytest             9.1.1     MIT            (тесты)
+  pytest-asyncio     1.4.0     Apache-2.0     (тесты)
+  pypdf              6.20.1    BSD-3-Clause   (текст из PDF, приложенных компанией)
+  Транзитивные (constraints.txt): requests, tzdata, flatbuffers, opentelemetry-api, hf-xet — Apache-2.0;
+  anyio, Mako, loguru, mmh3, h11, urllib3 — MIT; click, idna, httpcore — BSD-3-Clause;
+  certifi (MPL-2.0), tqdm (MPL-2.0 AND MIT), protobuf (BSD-3-Clause), pillow (MIT-CMU/HPND).
+
+Frontend (npm)
+  @playwright/test    1.56.1   Apache-2.0    (только браузерная приемка)
+  next               16.4.3    MIT
+  react, react-dom   19.3.0    MIT
+  typescript         5.9.3     Apache-2.0     (сборка)
+  @types/node, @types/react, @types/react-dom   MIT   (сборка)
+  Инструменты разработки и проверки (devDependencies, в образ продакшена не попадают):
+    vitest, @vitest/coverage-v8   3.2.4    MIT   (unit-тесты интерфейса, покрытие)
+    jsdom                         27.4.0   MIT   (DOM для unit-тестов)
+    @testing-library/react        16.3.3   MIT
+    @testing-library/dom          10.4.1   MIT
+    eslint                        9.39.5   MIT   (статический анализ)
+    eslint-config-next            16.4.3   MIT
+    openapi-typescript            7.13.0   MIT   (типы API из contracts/openapi.json)
+    sass                          1.93.2   MIT   (стили SCSS)
+  sharp              0.35.5    Apache-2.0     (необязательная зависимость Next.js; бинарные
+                                                @img/sharp-libvips-* — LGPL-3.0-or-later)
+  Прочие транзитивные пакеты (по package-lock.json): MIT, ISC, BSD-2/3-Clause, 0BSD, Apache-2.0,
+  MIT-0, CC0-1.0, BlueOak-1.0.0, Python-2.0 (argparse), MPL-2.0 (axe-core, только dev),
+  CC-BY-4.0 (caniuse-lite). Шрифты и иконки с внешних CDN не подгружаются.
+
+Смысловой слой (backend, PyPI)
+  fastembed          0.9.0     Apache-2.0
+  onnxruntime        1.31.0    MIT
+  tokenizers         0.23.3    Apache-2.0
+  huggingface_hub    1.33.0    Apache-2.0     (загрузка модели при сборке образа)
+  numpy              2.4.6     BSD-3-Clause
+  Прочие зависимости fastembed: MIT, BSD, Apache-2.0, HPND (pillow)
+
+Runtime-образы Docker
+  Приложение (docker-compose.yml / compose.yaml):
+    python:3.11-slim (PSF License + Debian), node:20-alpine (MIT, Alpine), nginx:alpine и
+    nginx:1.27.5-alpine (BSD-2-Clause) — прокси
+    postgres:17.6 (production) и pgvector/pgvector:0.8.1-pg17-trixie (локально, бэкапы) —
+      PostgreSQL License; постоянное хранилище приложения и векторов
+    redis:7.4.6-alpine — общий кэш лент. Лицензия Redis с версии 7.4: RSALv2 / SSPLv1; образ
+      используется без изменений как внутренний сервис, не предлагается третьим лицам как услуга
+    axllent/mailpit:v1.21.8 (MIT) — локальный приемник писем (профиль mail), наружу не отправляет
+    quay.io/keycloak/keycloak:26.0.7 (Apache-2.0) — демо-IdP «Альфа-ID» (профиль auth)
+  Наблюдаемость (профиль monitoring, необязательно, образы без изменений):
+    grafana/grafana:11.3.0 (AGPL-3.0), grafana/tempo:2.6.1 (AGPL-3.0),
+    prom/prometheus:v2.55.1 и prom/alertmanager:v0.27.0 (Apache-2.0)
+
+Embedding-модель (локальная, не генеративная)
+  sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 — Apache-2.0, Hugging Face.
+  Используется для смыслового сравнения новостей с темами и тезисами банка; организаторы
+  разрешили локальные embedding-модели (ограничение списка касается только генеративных LLM).
+
+Модели (LLM)
+  Используются только модели из Приложения 3 кейса, через OpenAI-совместимый API провайдера
+  кейса: Gemma 4 26B A4B, GLM-5.3-Flash, Qwen3.6 35B A3B, DeepSeek-V4.1-Flash,
+  Qwen3-VL-30B-A3B-Instruct, Kimi-K2.6. Ключ в репозиторий не входит. Без ключа сервис
+  работает без вызовов LLM (режим правил). Внешние AI-сервисы и готовые агентные фреймворки
+  не используются: планирование, инструменты, самопроверка и ранжирование реализованы командой.
+
+Прочее, используемое в проекте
+  - Playwright (@playwright/test) для браузерной приемки скачивает браузер Chromium (BSD-3-Clause);
+    только для разработки, в образы не входит.
+  - GitHub Actions и GHCR — CI и реестр образов (условия GitHub).
+
+Данные
+  - Обезличенные данные о юрлицах, платежах и связанных физлицах кейса (df_Uid_data_hack.csv,
+    df_Uid_payment_hack.csv, df_Fid_Uid_link_hack.csv) — в репозиторий не входят, подключаются
+    через CASE_DATA_DIR.
+  - data/synthetic — синтетический набор той же схемы, сгенерированный командой;
+    реальных компаний не описывает.
+  - Аналитические материалы Альфа-Банка из кейса (© АО «Альфа-Банк»): в репозитории только
+    краткие тезисы с указанием документа и страницы (backend/app/knowledge/bank_analytics.json);
+    PDF не распространяются и подключаются через BANK_PDF_HOST_DIR.
+  - Демо-лента (backend/app/news/seed_news.json) — пересказ событий из материалов кейса,
+    не является публикацией СМИ.
+
+Демо-названия компаний
+  Названия вида «ООО «Бензобак»» придуманы командой (app/companies/names.py) вместо
+  обезличенных ID кейса; совпадение с реальными организациями случайно.
+
+Смоделированные интеграции
+  - Интернет-банк Альфа-Бизнес: интерфейс — демонстрационный макет, вход — демо-пользователи,
+    балансы и платежи не подключены.
+  - Новости: публичные RSS-ленты (Банк России, Интерфакс, РБК, ТАСС, Коммерсантъ). Для анализа
+    по ссылке из ленты загружается текст статьи (до 8000 символов; RSS_FULL_TEXT=0 — только анонс
+    ленты). В интерфейсе показываются заголовок, анонс, до четырех ключевых предложений как факты
+    новости и ссылка на первоисточник; права на тексты
+    принадлежат изданиям. Для коммерческого использования нужны условия изданий или
+    лицензированный поток новостей.
+  - Альфа-ID (SSO): вход по OIDC проверяется на демо-IdP Keycloak с вымышленными пользователями
+    (infra/keycloak/realm-alfa.json); реальный Альфа-ID не подключен. Демо-учетные записи
+    demo@/demo-ceo@/operator@/manager@alfa.test (app/demo_accounts.py) — вымышленные, только
+    при DEMO_ACCOUNTS=1 в локальном запуске.
+  - CRM банка: заявки «Обсудить с менеджером» остаются в базе, вебхук CRM — заглушка
+    (app/offers/leads.py), наружу ничего не отправляется.
+  - Почта: сводки и алерты уходят по SMTP; локально — в Mailpit, без SMTP_HOST письма не отправляются.
+  - Лицензированные ленты агентств (Интерфакс/ПРАЙМ): без договора не подключены, локально работает
+    заглушка с вымышленными новостями в формате агентств (backend/app/news/sources/demo).
+  - Внешний LLM-шлюз (OpenAI-совместимый API кейса): единственный внешний платный сервис; ключ в
+    репозиторий не входит.
+  - Telegram Bot API (Telegram) — ежедневная сводка метрик качества в чат команды; включается
+    только при заданных TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID, данные клиентов не передаются.
+  - Продукты банка в карточках — справочные описания, помечены «Предложение банка».
+  - Оформление в стилистике Альфа-Бизнеса — по экранам десктоп-версии, переданным организаторами;
+    знак «А» Альфа-Банка (© АО «Альфа-Банк») воспроизведен в SVG для прототипа с разрешения
+    организаторов использовать реальные ассеты и иконки банка. Дизайн-система банка не используется.
