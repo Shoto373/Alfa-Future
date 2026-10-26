@@ -50,11 +50,11 @@ playwright-report/
 /контекст/
 
 # Not needed on the server: local docs, agent notes, generators, e2e tools, legacy app
-# contracts/ (контракт API) и infra/ (мониторинг, бэкапы) — часть репозитория; docs/ и THIRD_PARTY_NOTICES — только локально.
+# docs/ (отчеты спринтов), contracts/ (контракт API), infra/ (мониторинг, бэкапы) и THIRD_PARTY_NOTICES (обязательный файл сдачи) — часть репозитория.
 *.md
 !/README.md
-/docs/
-/THIRD_PARTY_NOTICES
+!/docs/
+!/docs/**/*.md
 /tests/
 /app/
 /Dockerfile
@@ -64,6 +64,8 @@ playwright-report/
 !/backend/scripts/_labels.py
 !/backend/scripts/eval_ranking.py
 !/backend/scripts/fit_ranking.py
+# Генератор синтетического набора data/synthetic (воспроизводимость данных для жюри).
+!/backend/scripts/make_synthetic_data.py
 .idea/
 
 coverage/
