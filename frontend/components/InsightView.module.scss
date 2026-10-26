@@ -419,6 +419,18 @@
       margin-top: 20px;
     }
 
+    .upgradeNoteBare {
+      margin-top: 0;
+    }
+
+    .upgradeExit {
+      margin-top: 20px;
+    }
+
+    .upgradeExiting {
+      margin-top: 0;
+    }
+
     h1 {
       font-size: 22px;
     }
@@ -500,6 +512,195 @@
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+// Плашка «быстрый разбор» с индикатором хода модели: общий фон, внутри — фраза и прогресс.
+.upgradeBox {
+  margin: 0;
+  border-radius: var(--radius-sm);
+  background: var(--blue-soft);
+  color: var(--ink-2);
+}
+
+.upgradeNoteBare {
+  margin: 0;
+  background: none;
+}
+
+// Обертка схлопывания: отступ сверху и высота уходят в ноль, остальное содержимое плавно поднимается.
+.upgradeExit {
+  display: grid;
+  grid-template-rows: 1fr;
+  margin-top: 28px;
+  opacity: 1;
+  transform: none;
+  transition: grid-template-rows .6s var(--ease-out), margin-top .6s var(--ease-out),
+    opacity .45s var(--ease-out), transform .6s var(--ease-out);
+}
+
+.upgradeExiting {
+  grid-template-rows: 0fr;
+  margin-top: 0;
+  opacity: 0;
+  transform: translateY(-10px);
+  pointer-events: none;
+}
+
+.upgradeExitInner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+// «Готово»: вместо вращающегося индикатора — зеленая галочка.
+.upgradeNoteDone::before {
+  animation: none;
+  background: var(--green);
+  border-color: var(--green);
+}
+
+.upgradeNoteDone::after {
+  content: "";
+  position: absolute;
+  left: 17px;
+  top: 15px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--white);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.progressFill.progressFillDone {
+  background: var(--green);
+}
+
+.progress {
+  padding: 0 12px 14px;
+  font-size: 13px;
+}
+
+.progressStage {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+// Полоса: заливка — сумма весов завершенных этапов; идущий этап подсвечен, но число на месте.
+.progressTrack {
+  position: relative;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.progressFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--red);
+  transition: width .5s var(--ease-out), background-color .4s var(--ease-out);
+}
+
+.progressActive {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  overflow: hidden;
+  // Мягкий край у красной заливки (12 px), дальше ровный розовый до конца полосы: без резкой границы.
+  background: linear-gradient(90deg, rgba(239, 49, 36, .6) 0, rgba(239, 49, 36, .24) 12px, rgba(239, 49, 36, .24) 100%);
+  transition: left .5s var(--ease-out), width .5s var(--ease-out);
+}
+
+.progressActive::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(239, 49, 36, .35), transparent);
+  animation: progressShimmer 1.6s ease-in-out infinite;
+}
+
+.progressSteps {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    line-height: 1.3;
+  }
+}
+
+.stepMark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.stepDone {
+  color: var(--ink-2);
+
+  .stepMark {
+    border-color: var(--green);
+    background: var(--green);
+    color: var(--white);
+  }
+}
+
+.stepNow {
+  color: var(--ink);
+  font-weight: 600;
+
+  .stepMark {
+    border-color: var(--red);
+    background: var(--card);
+    color: var(--red);
+  }
+}
+
+.stepWait {
+  color: var(--muted);
+}
+
+@keyframes progressShimmer {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .upgradeExit {
+    transition: opacity .2s linear;
+  }
+
+  .upgradeExiting {
+    transform: none;
+  }
+
+  .progressFill,
+  .progressActive {
+    transition: none;
+  }
+
+  .progressActive::after {
+    animation: none;
   }
 }
 

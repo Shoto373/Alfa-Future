@@ -1,5 +1,6 @@
 import type {
   AISettings, Answer, BankDocument, CompanyExtra, CompanyProfile, Exposure, FeedPage, Insight, LLMBudget, LLMSwitch, ConfigPreview, ConfigState, ConfigTexts, ConfigIssue, BankOffer, CounterpartiesView, DialogTurn, FlagSetting, ProductReport, Lead, ManagerClient, Inbox, NotificationSettings, ScenarioKind, ScenarioResponse, KbDocument, KbDraft, KbUploadItem, LabelingState, LookupCompany, Member, Membership, Mention, Meta, NewsBrief, QualityOverview, Role, User, } from "./types";
+import type { ProgressEvent } from "@/components/insight/progress";
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
@@ -116,7 +117,7 @@ export const api = {
     }), { signal, timeoutMs: opts.fast ? 30_000 : 180_000 }),
   // Потоковый разбор (SSE, SPR4-03): проверенный разбор правил сразу, затем ход модели и итог. Возвращает «закрыть поток».
   insightStream: (companyId: string, newsId: string, perspective: Role | undefined, on: {
-    insight: (ins: Insight) => void; stage: (stage: string) => void; done: (ins: Insight) => void; failed: () => void;
+    insight: (ins: Insight) => void; stage: (stage: string) => void; progress?: (e: ProgressEvent) => void; done: (ins: Insight) => void; failed: () => void;
   }) => {
     const q = new URLSearchParams({ company_id: companyId, news_id: newsId, ...(perspective ? { perspective } : {}) });
     const source = new EventSource(`${API_BASE_URL}/api/v1/insights/stream?${q}`, { withCredentials: true });
@@ -124,6 +125,7 @@ export const api = {
     const parse = (e: Event) => JSON.parse((e as MessageEvent).data);
     source.addEventListener("insight", (e) => on.insight(parse(e)));
     source.addEventListener("stage", (e) => on.stage(parse(e).stage));
+    source.addEventListener("progress", (e) => on.progress?.(parse(e)));
     source.addEventListener("done", (e) => { finished = true; source.close(); on.done(parse(e)); });
     // Обрыв до итога (прокси без SSE, сеть): закрываем — интерфейс перейдет на обычный запрос.
     source.onerror = () => { if (!finished) { source.close(); on.failed(); } };

@@ -1,7 +1,9 @@
 import { date } from "@/lib/format";
 import type { Insight, Role } from "@/lib/types";
 import { EffectBadge, Icon, Score } from "../ui";
+import { emptyProgress, hasProgress, useUpgradeExit, type ProgressState } from "./progress";
 import RoleMenu from "./RoleMenu";
+import UpgradeProgress from "./UpgradeProgress";
 import styles from "@/components/InsightView.module.scss";
 import common from "@/styles/common.module.scss";
 
@@ -39,12 +41,15 @@ const STAGE_TEXT: Record<string, string> = {
   check: "проверяет выводы и источники", adapt: "исправляет непроверенное", finalize: "оформляет карточку",
 };
 
-export default function InsightHeader({ ins, onRefresh, refreshing, upgrading, upgradeFailed, upgradeStage, showTrace, onToggleTrace,
+export default function InsightHeader({ ins, onRefresh, refreshing, upgrading, upgradeFailed, upgradeStage, upgradeProgress, showTrace, onToggleTrace,
   perspective, ownRole, onPerspective }: {
-  ins: Insight; onRefresh: () => void; refreshing: boolean; upgrading: boolean; upgradeFailed: boolean; upgradeStage?: string;
+  ins: Insight; onRefresh: () => void; refreshing: boolean; upgrading: boolean; upgradeFailed: boolean; upgradeStage?: string; upgradeProgress?: ProgressState;
   showTrace: boolean; onToggleTrace: () => void;
   perspective?: Role; ownRole?: Role; onPerspective?: (role: Role) => void;
 }) {
+  // Плашка с полосой: пока идет ход модели — живая; после штатного завершения — «готово» и плавный уход.
+  const live = upgrading && !!upgradeProgress && hasProgress(upgradeProgress);
+  const exit = useUpgradeExit(live, !upgradeFailed && !refreshing && ins.mode === "llm", refreshing);
   return (
     <div className={styles.insightHead} data-testid="insight-header">
       <div className={styles.insightBadges}>
@@ -65,7 +70,22 @@ export default function InsightHeader({ ins, onRefresh, refreshing, upgrading, u
         )}
         <span className={`${styles.muted} ${common.small}`}>{date(ins.created_at)}</span>
       </div>
-      {upgrading && (
+      {exit !== "gone" && (
+        // Ход модели известен по событиям потока: полоса и этапы вместо общей фразы «сейчас модель…».
+        <div className={`${styles.upgradeExit} ${exit === "exiting" ? styles.upgradeExiting : ""}`} aria-hidden={exit === "exiting" || undefined}>
+          <div className={styles.upgradeExitInner}>
+            <div className={styles.upgradeBox}>
+              <p className={`${styles.upgradeNote} ${styles.upgradeNoteBare} ${exit === "live" ? "" : styles.upgradeNoteDone}`} role="status">
+                {exit === "live"
+                  ? "Это быстрый разбор: данные компании и аналитика банка уже учтены. AI-модель дополняет выводы — карточка обновится сама."
+                  : "Готово: AI-модель дополнила выводы, разбор обновлён."}
+              </p>
+              <UpgradeProgress state={upgradeProgress ?? emptyProgress} completed={exit !== "live"} />
+            </div>
+          </div>
+        </div>
+      )}
+      {upgrading && !live && (
         <p className={styles.upgradeNote} role="status">
           Это быстрый разбор: данные компании и аналитика банка уже учтены. AI-модель дополняет выводы — карточка обновится сама.
           {upgradeStage && STAGE_TEXT[upgradeStage] && <> Сейчас модель {STAGE_TEXT[upgradeStage]}.</>}

@@ -241,3 +241,16 @@ button.clock {
   background: var(--red-soft);
   color: var(--red-dark);
 }
+
+// На телефоне часы стоят не у края экрана: окно «Ваш день» привязано к экрану, а не к кнопке, иначе уходит за левый край.
+@media (max-width: 700px) {
+  .pop {
+    position: fixed;
+    top: 80px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+    max-height: calc(100dvh - 96px);
+    overflow-y: auto;
+  }
+}
