@@ -6,7 +6,7 @@
 
 Основной сценарий: регистрация и вход → привязка компании и роль → персональная лента → разбор новости → вопрос → первоисточник → оценка. Пошаговая проверка — в разделе «Демонстрация». Это демонстрационный интерфейс Альфа-Бизнеса, без подключения к реальному интернет-банку.
 
-**Содержание:** [Версия сдачи](#версия-сдачи) · [Для жюри](#для-жюри) · [Запуск](#запуск) · [Команды Makefile](#команды-makefile) · [Архитектура](#архитектура-и-хранение) · [Схема API](#схема-api) · [Prometheus и Grafana](#prometheus-и-grafana) · [Качество](#качество-разборов) · [LLM](#llm) · [Тесты](#тесты-и-разработка) · [Демонстрация](#демонстрация) · [Конфигурация](#конфигурация) · [Выкладка](#выкладка-на-прод-и-защита) · [Безопасность](#безопасность-ai-компонентов) · [Масштабирование](#масштабирование-и-сопровождение)
+**Содержание:** [Версия сдачи](#версия-сдачи) · [Для жюри](#для-жюри) · [Запуск](#запуск) · [Команды Makefile](#команды-makefile) · [Архитектура](#архитектура-и-хранение) · [Схема API](#схема-api) · [Качество](#качество-разборов) · [LLM](#llm) · [Тесты](#тесты-и-разработка) · [Демонстрация](#демонстрация) · [Конфигурация](#конфигурация) · [Выкладка](#выкладка-на-прод-и-защита) · [Безопасность](#безопасность-ai-компонентов) · [Масштабирование](#масштабирование-и-сопровождение)
 
 ## Версия сдачи
 
@@ -161,132 +161,80 @@ docker compose -f compose.yaml exec backend python -m app.legacy_import --path /
 
 Полный контракт — `contracts/openapi.json`, живая документация Swagger — `/docs` (локально http://localhost:8000/docs, на демо-сервере https://pointers-team.online/docs). Все маршруты, кроме системных, находятся под `/api/v1`. Ниже — карта по доменам и главный сценарий «открыть разбор».
 
-**Карта API.** Красная рамка — потоковый ответ (SSE), пунктир — только для сотрудников банка (`operator`) или менеджера (`manager`); остальные маршруты требуют входа, а данные компании — членства в ней.
+**Карта API.** Красная рамка — потоковый ответ (SSE), пунктир — только для сотрудников банка (`operator`) и менеджеров (`manager`); остальные маршруты требуют входа, а данные компании — членства в ней.
 
 ```mermaid
-%%{init: {"theme": "base", "flowchart": {"curve": "basis"}, "themeVariables": {"primaryColor": "#fff5f4", "primaryBorderColor": "#ef3124", "primaryTextColor": "#1a1a1a", "lineColor": "#8a8a8a", "fontFamily": "Arial, sans-serif"}}}%%
 flowchart LR
-  API(["/api/v1"]):::root
-
   subgraph AUTH["Вход и компании"]
-    a1["auth: register, login, logout, me"]
-    a2["auth/oidc: login, callback"]
-    a3["companies: lookup, список, карточка"]
-    a4["companies/id: claim, members, extra, ai-settings"]
+    a1["register, login, logout<br/>companies, members<br/>claim, extra, ai-settings"]
   end
-
   subgraph FEED["Лента и новости"]
-    f1["GET feed"]
-    f2["GET news/id, POST news"]
-    f3["feedback"]
+    f1["GET /feed, /news/id<br/>POST /news, /feedback"]
   end
-
   subgraph INS["Разборы"]
-    i1["POST insights"]
-    i2["GET insights/stream"]:::sse
-    i3["GET insights/id"]
-    i4["insights/id/questions: вопросы чата"]
-    i5["insights/id/suggestions, offers"]
-    i6["POST leads"]
+    i1["POST /insights<br/>GET /insights/id<br/>questions, offers, leads"]
   end
-
+  subgraph SSE["Поток SSE"]
+    i2["GET /insights/stream"]:::stream
+  end
   subgraph BANK["Аналитика банка"]
-    b1["GET analytics"]
-    b2["GET analytics/doc/pdf"]
+    b1["GET /analytics<br/>GET /analytics/doc/pdf"]
   end
-
-  subgraph CP["Контрагенты и сценарии"]
-    c1["companies/id/counterparties"]
-    c2["POST scenarios: что если"]
+  API(["API<br/>/api/v1"]):::hub
+  subgraph CP["Контрагенты, что если"]
+    c1["companies/id/counterparties<br/>POST /scenarios"]
   end
-
   subgraph NOTI["Уведомления"]
-    n1["notifications: список, read, opened"]
-    n2["notifications/settings"]
-    n3["notifications/test-digest, unsubscribe"]
+    n1["notifications, read<br/>settings, test-digest<br/>unsubscribe"]
   end
-
-  subgraph OPS["Банк: качество и управление"]
-    o1["metrics, metrics/daily, metrics/overview"]:::role
-    o2["audit, ops/llm"]:::role
-    o3["admin/config, admin/kb, admin/labeling"]:::role
-    o4["admin/flags, admin/product, admin/managers"]:::role
-    o5["news/refresh"]:::role
-    o6["manager/clients, manager/leads"]:::role
+  subgraph OPS["Банк: только сотрудники"]
+    o1["metrics, audit, ops/llm<br/>news/refresh<br/>admin/*, manager/*"]:::gated
   end
-
   subgraph SYS["Система"]
-    s1["GET healthz"]
-    s2["GET meta"]
-    s3["GET flags, POST events"]
-    s4["GET /metrics: Prometheus"]
-    s5["GET /docs, /openapi.json"]
+    s1["healthz, meta, flags<br/>events, /metrics<br/>/docs, /openapi.json"]
   end
+  a1 --- API
+  f1 --- API
+  i1 --- API
+  i2 --- API
+  b1 --- API
+  API --- c1
+  API --- n1
+  API --- o1
+  API --- s1
 
-  API --> AUTH
-  API --> FEED
-  API --> INS
-  API --> BANK
-  API --> CP
-  API --> NOTI
-  API --> OPS
-  API --> SYS
-
-  classDef root fill:#ef3124,stroke:#ef3124,color:#ffffff,font-weight:bold
-  classDef sse fill:#ffffff,stroke:#ef3124,stroke-width:3px,color:#ef3124
-  classDef role fill:#f4f4f4,stroke:#8a8a8a,stroke-dasharray:4 3,color:#1a1a1a
+  classDef hub fill:#ef3124,stroke:#ef3124,color:#ffffff
+  classDef stream stroke:#ef3124,stroke-width:3px
+  classDef gated stroke-dasharray:5 4,stroke-width:2px
 ```
 
-**Главный сценарий «открыть разбор».** Страница получает разбор потоком: сначала проверенный вариант на правилах (доли секунды), затем ход работы модели и замена разделов проверенной AI-версией. Если SSE недоступен, интерфейс переходит на `POST /insights`.
+**Главный сценарий «открыть разбор».** Страница получает разбор потоком: сначала проверенный вариант на правилах (доли секунды), затем ход работы модели и замена разделов проверенной AI-версией. Если SSE недоступен, интерфейс переходит на `POST /insights`. «Агент» — этапы plan, collect, draft, verify_and_fix, finalize.
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#fff5f4", "primaryBorderColor": "#ef3124", "primaryTextColor": "#1a1a1a", "actorBorder": "#ef3124", "actorBkg": "#fff5f4", "signalColor": "#444444", "noteBkgColor": "#fff5f4", "noteBorderColor": "#ef3124", "fontFamily": "Arial, sans-serif"}}}%%
 sequenceDiagram
   autonumber
   actor U as Браузер
-  participant N as nginx
-  participant W as Next.js
-  participant A as FastAPI
-  participant R as Лента и ранжирование
+  participant S as nginx и API
   participant G as Агент
-  participant DB as PostgreSQL
-  participant K as База знаний банка
-  participant L as LLM-шлюз
+  participant D as БД и база банка
+  participant L as LLM
 
-  U->>N: открыть страницу разбора
-  N->>W: страница интерфейса
-  W-->>U: оболочка страницы
-  U->>N: GET /api/v1/insights/stream
-  N->>A: SSE без буферизации
-  A->>R: компания, роль, новость
-  R->>DB: профиль, новости, оценки
-  DB-->>R: данные
-  R-->>A: значимость и причины отбора
-  A->>G: запуск разбора
-  G->>DB: кэш разборов
-  G->>K: тезисы банка, BM25 и векторы
-  G-->>U: section по разделам, insight, sources (версия на правилах)
-  Note over U,G: Первый экран готов за доли секунды
-
-  rect rgba(239, 49, 36, 0.08)
-    G-->>U: progress collect
-    G->>DB: профиль и контрагенты, журнал инструментов
-    G-->>U: stage, progress draft
-    G->>L: черновик разбора
-    L-->>G: текст и выводы AI
-    G-->>U: progress check
-    G->>G: проверки чисел, ссылок, признаков
-    G-->>U: progress review
-    G->>L: смысловая проверка выводов
-    L-->>G: подтверждено или нет
-    G-->>U: review
-    G-->>U: progress finalize
-  end
-
-  G->>DB: сохранить разбор и трассу
-  G-->>U: section_replaced для разделов AI
-  G-->>U: done
-  Note over U,G: Без ключа LLM поток заканчивается на done с версией на правилах
+  U->>S: GET /insights/stream
+  S->>G: запуск разбора
+  G->>D: тезисы банка, профиль
+  G-->>U: section, insight, sources
+  G-->>U: progress collect
+  G-->>U: progress draft
+  G->>L: черновик
+  L-->>G: текст AI
+  G-->>U: progress check
+  G->>G: проверки фактов
+  G-->>U: progress review
+  G->>L: смысловая проверка
+  L-->>G: вердикт
+  G-->>U: review, progress finalize
+  G->>D: сохранить разбор
+  G-->>U: section_replaced, done
 ```
 
 События потока: `section` (раздел на правилах), `insight`, `sources`, `stage` (шаг трассы), `progress` (этап `collect`, `draft`, `check`, `review`, `finalize`), `review`, `section_replaced`, `done`, `error`; раз в 15 с отправляется служебный `heartbeat`-комментарий.
@@ -738,20 +686,3 @@ sudo systemctl start alfa-gitops.timer   # после защиты
 | Действия агента | Журнал вызовов инструментов | `/api/v1/audit` |
 
 Процесс: проверка CI падает, если качество на golden set ниже порога; ежедневная сводка показывает отклонения на реальном потоке; разборы с низкой оценкой пользователей и случаи с откатом к правилам разбираются экспертом и пополняют golden set — так новые ошибки закрепляются тестом до исправления.
-
-## Prometheus и Grafana
-
-В проекте есть готовый стек наблюдаемости: метрики собирает **Prometheus**, дашборды и алерты показывает **Grafana**, трассы этапов агента хранит Tempo, оповещения отправляет Alertmanager. Он не нужен для основного сценария и поднимается отдельным профилем Docker Compose:
-
-```bash
-make up-monitoring     # docker compose -f compose.yaml --profile monitoring up -d --build
-```
-
-| Что | Адрес / где | Что смотреть |
-|---|---|---|
-| Grafana | http://localhost:3001 | Дашборды «Сервис» (запросы, p95, 5xx), «Агент и LLM» (время этапов, вызовы и стоимость модели, откаты к правилам), «Воркер» (очередь, лаг новостей) |
-| Prometheus | http://localhost:9090 | Метрики API (`GET /metrics` у каждого экземпляра) и 5 правил алертов: бюджет LLM > 80%, p95 разбора > 30 с, 5xx > 1%, лаг новостей > 30 мин, бэкап старше 26 ч |
-| Tempo (в Grafana) | источник данных «Tempo» | Трассы этапов агента; `trace_id` разбора лежит в `Insight.trace[*].output` |
-| Alertmanager | внутри compose | Алерты уходят в Telegram-канал команды через backend (токен задается в `.env`) |
-
-Конфигурация лежит в репозитории: `infra/prometheus/`, `infra/grafana/` (дашборды и источники данных подключаются автоматически), `infra/alertmanager/`, `infra/tempo/`; что делать при каждом алерте — `docs/runbook.md`. На демо-сервере https://pointers-team.online стек мониторинга не развернут (ресурсы отданы приложению): посмотреть дашборды можно локально командой выше.
