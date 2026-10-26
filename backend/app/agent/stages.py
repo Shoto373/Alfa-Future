@@ -41,7 +41,25 @@ DISCLAIMER = ("Прототип для хакатона. Данные о ком�
 # Подписчик на ход разбора (SSE, SPR4-03): получает каждый шаг трассы по мере выполнения. Задается вызывающим
 # через contextvar — этапы агента о потоке не знают, синхронный путь работает как раньше.
 progress: ContextVar[Callable[[dict], None] | None] = ContextVar("agent_progress", default=None)
+# Вехи конвейера для индикатора хода (SSE-событие progress): id, номер, подпись. Номер и общее число — из этой таблицы,
+# событие отправляется в тот момент, когда этап реально начался или закончился. Данных компании и новости в нем нет.
+PHASES = (("collect", "Собираем данные компании и аналитику банка"), ("draft", "Составляем черновик"),
+          ("check", "Проверяем факты и источники"), ("review", "Проверяем выводы AI по смыслу"), ("finalize", "Оформляем карточку"))
+milestone: ContextVar[Callable[[dict], None] | None] = ContextVar("agent_milestone", default=None)
 TOOL_THREADS = 6
+
+
+def mark(phase: str, state: str, step: str | None = None) -> None:
+    """Веха хода разбора: state — start|done; step="fix" — внутри этапа проверки идет исправление черновика."""
+    listener = milestone.get()
+    if listener is None:
+        return
+    ids = [p for p, _ in PHASES]
+    event = {"stage": phase, "index": ids.index(phase) + 1, "total": len(PHASES), "state": state,
+             "label": dict(PHASES)[phase]}
+    if step:
+        event["step"] = step
+    listener(event)
 
 
 class Trace:
@@ -100,6 +118,7 @@ def start(company: dict, role: str, news: dict, request_id: str, use_llm: bool |
 
 def plan(run: Run) -> tuple[list[dict], asyncio.Task | None]:
     """Обязательные шаги сразу; модель-исследователь параллельно придумывает уточняющие запросы."""
+    mark("collect", "start")
     t0 = time.perf_counter()
     steps = context.rules_plan(run.news, run.company)
     planner = asyncio.create_task(asyncio.to_thread(context.llm_queries, run.news, run.company, run.role))         if run.use_llm and config.llm_extra_queries() else None
@@ -179,6 +198,13 @@ def _run_steps(run: Run, steps: list[dict]) -> None:
 
 async def collect(run: Run, steps: list[dict], planner: asyncio.Task | None) -> None:
     """Инструменты читают БД и векторное хранилище — в потоке, чтобы не блокировать другие запросы."""
+    try:
+        await _collect(run, steps, planner)
+    finally:
+        mark("collect", "done")
+
+
+async def _collect(run: Run, steps: list[dict], planner: asyncio.Task | None) -> None:
     await asyncio.to_thread(_run_steps, run, steps)
     if not planner:
         return
@@ -195,6 +221,7 @@ async def collect(run: Run, steps: list[dict], planner: asyncio.Task | None) -> 
 
 async def draft(run: Run) -> None:
     """Черновик правилами; с моделью — ее разделы поверх правил (при сбое модели остаются правила)."""
+    mark("draft", "start")
     t0 = time.perf_counter()
     run.draft = composer.compose(run.ctx)
     # Знак эффекта для метки — по правилу «чувствительность компании × направление события»: модель почти всегда
@@ -226,6 +253,7 @@ async def draft(run: Run) -> None:
     if run.mode == "rules":
         run.trace.add("compose", "rules_compose", "Быстрый разбор: эффект = чувствительность компании × направление события",
                       "ok", (time.perf_counter() - t0) * 1000)
+    mark("draft", "done")
 
 
 # 4–5. Самопроверка и коррекция -----------------------------------------------------------------------
@@ -295,6 +323,7 @@ async def _adapt(run: Run, round_no: int, failed: list[dict], source_ids: set[st
     """Одна коррекция по не пройденным проверкам. Возвращает, было ли уже исправление моделью."""
     run.attempts += 1
     actions: list[str] = []
+    mark("check", "start", "fix")
     if run.mode == "llm" and not repaired:
         repaired = True
         failed = await _repair(run, source_ids, failed, actions)
@@ -349,6 +378,7 @@ async def _semantic_review(run: Run) -> None:
 async def verify_and_fix(run: Run) -> None:
     """Проверки и до MAX_ADAPT_ROUNDS коррекций; затем безопасный откат к правилам и смысловая проверка."""
     repaired = False
+    mark("check", "start")
     for round_no in range(MAX_ADAPT_ROUNDS + 1):
         failed, source_ids = _check(run, round_no)
         if not failed or round_no == MAX_ADAPT_ROUNDS:
@@ -357,8 +387,11 @@ async def verify_and_fix(run: Run) -> None:
     if any(not r["passed"] for r in run.results):
         _safe_fallback(run)
     run.final_checks = list(run.results)
+    mark("check", "done")
     if run.mode == "llm":
+        mark("review", "start")
         await _semantic_review(run)
+        mark("review", "done")
 
 
 # 6. Итог ---------------------------------------------------------------------------------------------
@@ -390,6 +423,7 @@ def _offers(run: Run, effect: str) -> list[dict]:
 
 def finalize(run: Run) -> dict:
     """Карточка разбора по схеме Insight: разделы, признаки, релевантность, источники, проверки и трасса."""
+    mark("finalize", "start")
     draft, company = run.draft, run.company
     quality = {"passed": all(r["passed"] for r in run.final_checks), "attempts": run.attempts,
                "checks": [{"name": r["name"], "passed": r["passed"], "detail": r["detail"]} for r in run.final_checks]}

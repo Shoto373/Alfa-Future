@@ -91,3 +91,32 @@ def test_tools_run_in_parallel_but_trace_keeps_plan_order(monkeypatch):
     stages._run_steps(Run(), steps)
     assert time.perf_counter() - started < 0.13, "три инструмента по 50 мс — параллельно"
     assert [s["name"] for s in Run.trace.steps] == ["get_exposures", "get_story_history", "get_bank_products"]
+
+
+def test_llm_stream_emits_real_progress_milestones(client, company, monkeypatch):
+    monkeypatch.setattr(llm, "available", lambda: True)
+    monkeypatch.setattr(llm, "chat_json", recorded_model)
+    events, _ = _events(client, company_id=company["company_id"], news_id=_news_id(client, company))
+    names = [n for n, _ in events]
+    marks = [d for n, d in events if n == "progress"]
+    assert names.index("insight") < names.index("progress") < names.index("done"), "вехи — после разбора правил, до итога"
+    assert {m["total"] for m in marks} == {len(stages.PHASES)}
+    assert all(set(m) <= {"stage", "index", "total", "state", "label", "step"} for m in marks), "в событии нет данных компании"
+    # Номер этапа не убывает; у каждого начатого этапа есть завершение, collect — первый, finalize — последний.
+    assert [m["index"] for m in marks] == sorted(m["index"] for m in marks)
+    started = [m["stage"] for m in marks if m["state"] == "start" and not m.get("step")]
+    finished = [m["stage"] for m in marks if m["state"] == "done"]
+    assert started[0] == "collect" and finished[-1] == "finalize" and set(started) == set(finished)
+    assert {"collect", "draft", "check", "finalize"} <= set(finished)
+
+
+def test_progress_milestones_are_silent_without_listener():
+    assert stages.milestone.get() is None
+    stages.mark("collect", "start")  # без подписчика (обычный POST /insights) — ничего не происходит
+    got = []
+    token = stages.milestone.set(got.append)
+    try:
+        stages.mark("check", "start", "fix")
+    finally:
+        stages.milestone.reset(token)
+    assert got == [{"stage": "check", "index": 3, "total": 5, "state": "start", "label": "Проверяем факты и источники", "step": "fix"}]

@@ -5,6 +5,7 @@
   insight     — тот же разбор целиком (валидный Insight) для интерфейса;
   sources     — источники разбора;
   stage       — ход работы агента с моделью (план, инструменты, черновик, проверки) — индикатор этапа;
+  progress    — веха хода модели: {stage, index, total, state: start|done, label[, step: fix]} — индикатор прогресса;
   plan, review — план модели-исследователя и итог проверок;
   section_replaced — раздел версии модели, прошедший те же проверки, заменяет раздел правил;
   done        — итоговый разбор (валидный Insight); error — ошибка (разбор на правилах у пользователя остается).
@@ -52,6 +53,8 @@ def _sections(insight: dict, event: str = "section", previous: dict | None = Non
 async def _build(c: dict, role: str, n: dict, request_id: str, use_llm: bool | None) -> dict:
     async def save(insight: dict) -> None:
         await asyncio.to_thread(storage.save_insight, insight)
+        # Этап «Оформляем карточку» заканчивается, когда карточка сохранена: сразу после этого приходит итог.
+        stages.mark("finalize", "done")
     job = orchestrator.run_once(c, role, n, request_id, use_llm=use_llm, on_built=save)
     insight, _ = await asyncio.wait_for(job, timeout=config.analysis_timeout())
     return insight
@@ -64,11 +67,15 @@ async def _upgrade(c: dict, role: str, n: dict, request_id: str, queue: asyncio.
     def listener(step: dict) -> None:
         loop.call_soon_threadsafe(queue.put_nowait, ("stage", {k: step[k] for k in ("stage", "name", "detail", "status")}))
 
-    token = stages.progress.set(listener)
+    def on_milestone(event: dict) -> None:
+        loop.call_soon_threadsafe(queue.put_nowait, ("progress", event))
+
+    token, mtoken = stages.progress.set(listener), stages.milestone.set(on_milestone)
     try:
         return await _build(c, role, n, request_id, None)
     finally:
         stages.progress.reset(token)
+        stages.milestone.reset(mtoken)
 
 
 async def _events(c: dict, role: str, n: dict, request_id: str, request: Request) -> AsyncIterator[bytes]:

@@ -8,6 +8,7 @@ import FeedRail from "@/components/FeedRail";
 import InsightView from "@/components/InsightView";
 import Mentions from "@/components/insight/Mentions";
 import ScenarioPanel from "@/components/ScenarioPanel";
+import { emptyProgress, reduceProgress, type ProgressState } from "@/components/insight/progress";
 import { ErrorState, Icon, Skeleton } from "@/components/ui";
 import { AbortedError, ApiError, api } from "@/lib/api";
 import { markRead } from "@/lib/notifications";
@@ -62,6 +63,7 @@ function NewsInsight({ newsId }: { newsId: string }) {
   const [upgrading, setUpgrading] = useState(false);
   const [upgradeFailed, setUpgradeFailed] = useState(false);
   const [stage, setStage] = useState<string | undefined>(undefined);
+  const [progress, setProgress] = useState<ProgressState>(emptyProgress);
   const closeStream = useRef<(() => void) | null>(null);
   // Другой разрез: тот же разбор глазами другой роли компании; по умолчанию — своя роль.
   const [perspective, setPerspective] = useState<Role>(session!.role);
@@ -90,22 +92,26 @@ function NewsInsight({ newsId }: { newsId: string }) {
         insight: (ins) => {
           if (mine !== seq.current) return;
           shown = true;
+          setProgress(emptyProgress);  // новый поток начинает ход с нуля (в т.ч. при смене роли)
           setInsight(ins);
           setLoading(false);
           setUpgrading(ins.mode === "rules");
         },
         stage: (s) => { if (mine === seq.current) setStage(s); },
+        progress: (e) => { if (mine === seq.current) setProgress((p) => reduceProgress(p, e)); },
         done: (full) => {
           if (mine !== seq.current) return;
           setInsight(full);
           setLoading(false);
           setUpgrading(false);
           setStage(undefined);
+          setProgress(emptyProgress);
           if (full.mode === "rules") setUpgradeFailed(true);
         },
         failed: () => {
           if (mine !== seq.current) return;
           setStage(undefined);
+          setProgress(emptyProgress);
           if (shown) { setUpgrading(false); setUpgradeFailed(true); } else { requestPair(); }
         },
       });
@@ -148,6 +154,7 @@ function NewsInsight({ newsId }: { newsId: string }) {
     setError(null);
     setUpgrading(false);
     setUpgradeFailed(false);
+    setProgress(emptyProgress);
     setStep(0);
     if (!force) setInsight(null);
     run(force);
@@ -176,7 +183,7 @@ function NewsInsight({ newsId }: { newsId: string }) {
       )}
       {error && (error.code === "FORBIDDEN" ? <AccessDenied /> : <ErrorState error={error} onRetry={() => load()} />)}
       {insight && <InsightView insight={insight} onRefresh={() => load(true)} refreshing={loading}
-        upgrading={upgrading} upgradeFailed={upgradeFailed} upgradeStage={stage}
+        upgrading={upgrading} upgradeFailed={upgradeFailed} upgradeStage={stage} upgradeProgress={progress}
         perspective={perspective} ownRole={session!.role} onPerspective={setPerspective}
         mentions={<Mentions newsId={decodeURIComponent(newsId)} companyId={companyId} />} />}
       {insight && scenarioFor(insight) && <ScenarioPanel companyId={companyId} initial={scenarioFor(insight)!} />}

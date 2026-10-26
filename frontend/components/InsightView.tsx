@@ -9,6 +9,7 @@ import ClaimList, { OpenSource, RulesMode } from "./insight/ClaimList";
 import Feedback from "./insight/Feedback";
 import ImpactMap from "./insight/ImpactMap";
 import InsightHeader from "./insight/InsightHeader";
+import type { ProgressState } from "./insight/progress";
 import SourceList from "./insight/SourceList";
 import { groupSources } from "./insight/sources";
 import { chatSuggestions } from "./insight/suggestions";
@@ -29,9 +30,10 @@ const scrollToSource = (n: number) =>
   // Блок раскрывается в этом же кадре — прокрутка после отрисовки.
   requestAnimationFrame(() => document.getElementById(`src-${n}`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
 
-export default function InsightView({ insight: ins, onRefresh, refreshing, upgrading = false, upgradeFailed = false, upgradeStage,
+export default function InsightView({ insight: ins, onRefresh, refreshing, upgrading = false, upgradeFailed = false, upgradeStage, upgradeProgress,
   perspective, ownRole, onPerspective, mentions }: {
   insight: Insight; onRefresh: () => void; refreshing: boolean; upgrading?: boolean; upgradeFailed?: boolean; upgradeStage?: string;
+  upgradeProgress?: ProgressState;
   perspective?: Role; ownRole?: Role; onPerspective?: (role: Role) => void; mentions?: ReactNode;
 }) {
   const { groups, index } = groupSources(ins);
@@ -79,7 +81,7 @@ export default function InsightView({ insight: ins, onRefresh, refreshing, upgra
     <OpenSource.Provider value={openSource}>
     <div className={styles.insight}>
       <InsightHeader ins={ins} onRefresh={onRefresh} refreshing={refreshing} upgrading={upgrading} upgradeFailed={upgradeFailed}
-        upgradeStage={upgradeStage}
+        upgradeStage={upgradeStage} upgradeProgress={upgradeProgress}
         showTrace={showTrace} onToggleTrace={() => {
           if (!showTrace) { track("section_expand", { section: "trace" }); setTraceOpens((n) => n + 1); }
           setShowTrace((v) => !v);
