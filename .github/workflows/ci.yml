@@ -171,7 +171,7 @@ jobs:
           if-no-files-found: ignore
 
   images:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.repository == 'dvaJf/alfa' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: [backend, frontend]
     runs-on: ubuntu-latest
     permissions:

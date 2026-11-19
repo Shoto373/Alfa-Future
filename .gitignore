@@ -69,3 +69,4 @@ playwright-report/
 .idea/
 
 coverage/
+AGENTS.md
